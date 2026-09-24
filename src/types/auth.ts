@@ -1,6 +1,7 @@
 export type RedactorRole = 'ADMIN' | 'MODERADOR' | 'REDACTOR' | 'LECTOR';
 
 export interface UserPermissions {
+  canAccessInternalMedia: boolean;
   canManageLayout: boolean;
   canPublishDirectly: boolean;
   canManageUsers: boolean;
@@ -27,6 +28,7 @@ export interface RedactorProfile {
 
 export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
   ADMIN: {
+    canAccessInternalMedia: true,
     canManageLayout: true,
     canPublishDirectly: true,
     canManageUsers: true,
@@ -36,6 +38,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canEditOwnPosts: true,
   },
   MODERADOR: {
+    canAccessInternalMedia: true,
     canManageLayout: true,
     canPublishDirectly: true,
     canManageUsers: true,
@@ -45,6 +48,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canEditOwnPosts: true,
   },
   REDACTOR: {
+    canAccessInternalMedia: true,
     canManageLayout: false,
     canPublishDirectly: true,
     canManageUsers: false,
@@ -54,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canEditOwnPosts: true, // Solo sus propios artículos
   },
   LECTOR: {
+    canAccessInternalMedia: false,
     canManageLayout: false,
     canPublishDirectly: false,
     canManageUsers: false,

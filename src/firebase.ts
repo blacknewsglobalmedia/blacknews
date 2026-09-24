@@ -1,9 +1,9 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   initializeFirestore, 
+  setLogLevel,
   doc, 
   getDoc,
-  getDocFromServer,
   collection,
   onSnapshot,
   setDoc,
@@ -20,9 +20,14 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
+// Silence verbose internal connection warnings from Firestore during offline or initial connection negotiation
+try {
+  setLogLevel('silent');
+} catch {}
+
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Use initializeFirestore with experimentalForceLongPolling to prevent WebChannel connection drops in proxy/cloud environments
+// Use initializeFirestore with experimentalForceLongPolling to prevent WebChannel drops in proxy/iframe environments
 export const db = initializeFirestore(
   app,
   {
@@ -37,21 +42,14 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// Validate connection to Firestore as required by Firebase skill
-export async function testConnection() {
+// Non-blocking utility to verify Firestore status if explicitly invoked
+export async function testConnection(): Promise<boolean> {
   try {
-    await getDoc(doc(db, 'test', 'connection'));
-    console.log('[BLACKNEWS] Conexión establecida con Firestore Cloud.');
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('[BLACKNEWS] Firestore operando con persistencia local.');
-    }
+    const snap = await getDoc(doc(db, 'test', 'connection'));
+    return snap.exists();
+  } catch {
+    return false;
   }
 }
-
-// Call testConnection safely in the background
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    testConnection();
-  }, 500);
-}
+export { collection, doc, getDoc, onSnapshot, setDoc, getDocs, writeBatch, signInWithPopup, signOut, onAuthStateChanged };
+export type { FirebaseUser };

@@ -338,6 +338,30 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   const isBasicReader = currentUser.role === 'LECTOR';
 
+  if (isBasicReader) {
+    return (
+      <div className="min-h-[75vh] bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md p-8 border border-white/10 bg-neutral-950 space-y-4">
+          <div className="w-12 h-12 border border-white/20 flex items-center justify-center mx-auto text-white">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h2 className="text-sm font-medium uppercase tracking-wider text-white">
+            Acceso Restringido · Redacción Interna
+          </h2>
+          <p className="text-xs text-neutral-400 font-mono leading-relaxed">
+            Tu cuenta tiene perfil de usuario básico (Lector). No dispones de autorización para acceder a las herramientas internas del medio.
+          </p>
+          <button
+            onClick={onBackToNews}
+            className="w-full py-2.5 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
+          >
+            Volver a Portada
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white font-['Lexend',sans-serif] pb-20">
       {/* Studio Topbar: Ultra-minimalist */}
@@ -379,20 +403,23 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
           <div className="flex items-center gap-1 text-xs font-mono">
             <span className="text-neutral-600 hidden md:inline mr-1">PROBAR:</span>
-            {allRedactors.slice(0, 4).map((user) => (
-              <button
-                key={user.id}
-                onClick={() => onSwitchUser(user)}
-                className={`px-2 py-0.5 transition-colors cursor-pointer text-xs border ${
-                  currentUser.id === user.id
-                    ? 'border-white text-white font-bold'
-                    : 'border-white/10 text-neutral-500 hover:text-white'
-                }`}
-                title={`Cambiar a ${user.name} (${user.role})`}
-              >
-                {user.avatarInitials}
-              </button>
-            ))}
+            {allRedactors
+              .filter((u) => u.role !== 'LECTOR')
+              .slice(0, 3)
+              .map((user) => (
+                <button
+                  key={user.id}
+                  onClick={() => onSwitchUser(user)}
+                  className={`px-2 py-0.5 transition-colors cursor-pointer text-xs border ${
+                    currentUser.id === user.id
+                      ? 'border-white text-white font-bold'
+                      : 'border-white/10 text-neutral-500 hover:text-white'
+                  }`}
+                  title={`Cambiar a ${user.name} (${user.role})`}
+                >
+                  {user.avatarInitials}
+                </button>
+              ))}
           </div>
         </div>
       </div>

@@ -438,6 +438,24 @@ export default function App() {
     ? reportsList.filter((r) => r.id !== leadReport?.id)
     : filteredReports.slice(1);
 
+  // Check whether current user has editorial privileges to access internal media studio
+  const canAccessInternalMedia = Boolean(currentUser && currentUser.role !== 'LECTOR');
+
+  // Strict security guard: redirect away from redaccion immediately if user is LECTOR
+  useEffect(() => {
+    if (!canAccessInternalMedia && currentView === 'redaccion') {
+      setCurrentView('portada');
+    }
+  }, [canAccessInternalMedia, currentView]);
+
+  const handleToggleStudio = () => {
+    if (!canAccessInternalMedia) {
+      showToast('Acceso restringido a la sala interna de redacción.');
+      return;
+    }
+    setCurrentView(currentView === 'redaccion' ? 'portada' : 'redaccion');
+  };
+
   const savedReportsList = reportsList.filter((r) => bookmarkedIds.has(r.id));
 
   return (
@@ -463,8 +481,8 @@ export default function App() {
         onShareSite={() => handleOpenShare(null)}
         liveTickerActive={liveTickerActive}
         onToggleLiveTicker={() => setLiveTickerActive(!liveTickerActive)}
-        onOpenStudio={() => setCurrentView(currentView === 'redaccion' ? 'portada' : 'redaccion')}
-        isStudioOpen={currentView === 'redaccion'}
+        onOpenStudio={handleToggleStudio}
+        isStudioOpen={currentView === 'redaccion' && canAccessInternalMedia}
         currentUser={currentUser}
         onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
       />
@@ -484,7 +502,7 @@ export default function App() {
 
       {/* Main View Switcher */}
       <main className="flex-1">
-        {currentView === 'redaccion' ? (
+        {currentView === 'redaccion' && canAccessInternalMedia ? (
           <RedactionStudio
             onBackToNews={() => setCurrentView('portada')}
             onPublishReport={handlePublishReport}

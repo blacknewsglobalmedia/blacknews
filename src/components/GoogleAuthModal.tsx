@@ -255,76 +255,79 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           </p>
         </div>
 
-        {/* Cuentas de Acceso Rápido para Comprobación */}
-        <div className="space-y-2 mb-6 pt-4 border-t border-white/5">
-          <div className="text-[11px] font-mono uppercase tracking-wider text-neutral-500 mb-2">
-            O CAMBIAR A UN PERFIL DE PRUEBA:
+        {/* Fast profile switchers: ONLY visible to ADMIN for system testing and audits. Basic users must NEVER see privilege escalation controls. */}
+        {currentUser.role === 'ADMIN' && (
+          <div className="space-y-2 mb-6 pt-4 border-t border-white/5">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-neutral-500 mb-2 flex items-center justify-between">
+              <span>SIMULACIÓN DE ROLES (SOLO ADMIN):</span>
+              <span className="text-[10px] text-neutral-600">AUDITORÍA</span>
+            </div>
+
+            {/* Master Admin Button */}
+            <button
+              onClick={handleAdminQuickLogin}
+              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+            >
+              <div>
+                <div className="text-xs font-medium text-white">
+                  blacknewsglobalmedia@gmail.com
+                </div>
+                <div className="text-[11px] font-mono text-neutral-400">
+                  Rol: Administrador (gestión total)
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+
+            {/* Moderator Button */}
+            <button
+              onClick={handleModeratorQuickLogin}
+              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+            >
+              <div>
+                <div className="text-xs font-medium text-white">
+                  editor.portada@blacknews.media
+                </div>
+                <div className="text-[11px] font-mono text-neutral-400">
+                  Rol: Moderador (gestión de portada y roles)
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+
+            {/* Redactor Button */}
+            <button
+              onClick={handleRedactorQuickLogin}
+              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+            >
+              <div>
+                <div className="text-xs font-medium text-white">
+                  mateo.valenzuela@blacknews.media
+                </div>
+                <div className="text-[11px] font-mono text-neutral-400">
+                  Rol: Redactor (edita y publica solo sus propios artículos)
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+
+            {/* Reader Button */}
+            <button
+              onClick={handleReaderQuickLogin}
+              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+            >
+              <div>
+                <div className="text-xs font-medium text-white">
+                  lector.demo@gmail.com
+                </div>
+                <div className="text-[11px] font-mono text-neutral-500">
+                  Rol: Lector básico (sin permisos de edición ni acceso interno)
+                </div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
           </div>
-
-          {/* Master Admin Button */}
-          <button
-            onClick={handleAdminQuickLogin}
-            className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
-          >
-            <div>
-              <div className="text-xs font-medium text-white">
-                blacknewsglobalmedia@gmail.com
-              </div>
-              <div className="text-[11px] font-mono text-neutral-400">
-                Rol: Administrador (gestión total)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-
-          {/* Moderator Button */}
-          <button
-            onClick={handleModeratorQuickLogin}
-            className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
-          >
-            <div>
-              <div className="text-xs font-medium text-white">
-                editor.portada@blacknews.media
-              </div>
-              <div className="text-[11px] font-mono text-neutral-400">
-                Rol: Moderador (gestión de portada y roles)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-
-          {/* Redactor Button */}
-          <button
-            onClick={handleRedactorQuickLogin}
-            className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
-          >
-            <div>
-              <div className="text-xs font-medium text-white">
-                mateo.valenzuela@blacknews.media
-              </div>
-              <div className="text-[11px] font-mono text-neutral-400">
-                Rol: Redactor (edita y publica solo sus propios artículos)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-
-          {/* Reader Button */}
-          <button
-            onClick={handleReaderQuickLogin}
-            className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
-          >
-            <div>
-              <div className="text-xs font-medium text-white">
-                lector.demo@gmail.com
-              </div>
-              <div className="text-[11px] font-mono text-neutral-500">
-                Rol: Lector básico (sin permisos de edición)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-        </div>
+        )}
 
         {/* Custom Google Account Login / Register Toggle */}
         {!isCustomFormOpen ? (

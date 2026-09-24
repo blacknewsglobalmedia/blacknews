@@ -1,5 +1,15 @@
-import React from 'react';
-import { Search, Bookmark, Share2, Radio, PenTool, User, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  Search, 
+  Bookmark, 
+  Share2, 
+  Radio, 
+  PenTool, 
+  Menu, 
+  X, 
+  User, 
+  ChevronRight 
+} from 'lucide-react';
 import { CategoryId } from '../types/news';
 import { RedactorProfile } from '../types/auth';
 
@@ -32,6 +42,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   currentUser,
   onOpenGoogleAuth,
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const categories: { id: CategoryId; label: string }[] = [
     { id: 'TODAS', label: 'PORTADA' },
     { id: 'ECONOMÍA & MERCADOS', label: 'ECONOMÍA' },
@@ -41,6 +53,14 @@ export const TopBar: React.FC<TopBarProps> = ({
     { id: 'ENERGÍA & INDUSTRIA', label: 'ENERGÍA' },
     { id: 'DOSSIERS', label: 'DOSSIERS' },
   ];
+
+  const handleCategoryClick = (catId: CategoryId) => {
+    onSelectCategory(catId);
+    setIsMobileMenuOpen(false);
+  };
+
+  // Basic readers (LECTOR) and visitors must NOT see the redacción button or internal tools
+  const canAccessEditorialStudio = Boolean(currentUser && currentUser.role !== 'LECTOR');
 
   const googleIconSvg = (
     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
@@ -64,55 +84,61 @@ export const TopBar: React.FC<TopBarProps> = ({
   );
 
   return (
-    <header className="w-full bg-black border-b border-white/5 sticky top-0 z-40">
-      {/* Top utility sub-strip: minimal hairline */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-8 flex items-center justify-between text-xs font-normal tracking-wider text-neutral-400 border-b border-white/5 uppercase">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-2 text-white font-medium">
+    <header className="w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
+      {/* Top micro-strip: clean & uncrowded */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-mono tracking-wider text-neutral-400 border-b border-white/5 uppercase">
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1.5 text-white font-medium">
             <span className="w-1.5 h-1.5 bg-white animate-pulse"></span>
             EN DIRECTO
           </span>
-          <span className="text-neutral-700">/</span>
-          <span className="hidden sm:inline text-neutral-400">INFORMES & ANÁLISIS INDEPENDIENTES</span>
-          <span className="text-neutral-700 hidden sm:inline">/</span>
-          <span className="text-neutral-500">SUPER AMOLED</span>
+          <span className="text-neutral-800">/</span>
+          <span className="text-neutral-500">24 SEP 2026</span>
         </div>
-        <div className="flex items-center gap-4 text-neutral-400 text-xs font-mono">
+
+        <div className="flex items-center gap-3 text-neutral-400">
           <button
             onClick={onToggleLiveTicker}
-            className={`hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer ${
-              liveTickerActive ? 'text-white' : 'text-neutral-600'
+            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
+              liveTickerActive ? 'text-white font-medium' : 'text-neutral-600'
             }`}
-            title="Alternar teletipo de última hora"
+            title="Alternar teletipo"
           >
-            <Radio className="w-3.5 h-3.5" />
+            <Radio className="w-3 h-3" />
             <span className="hidden sm:inline">TELETIPO</span>
           </button>
-          <span>24 SEP 2026</span>
+          <span className="text-neutral-800">/</span>
+          <button
+            onClick={onShareSite}
+            className="hover:text-white transition-colors cursor-pointer hidden sm:inline"
+            title="Compartir medio"
+          >
+            COMPARTIR
+          </button>
         </div>
       </div>
 
-      {/* Main Header Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        {/* Brand wordmark */}
-        <div className="flex items-center">
+      {/* Main Bar: resilient single row with zero horizontal collapse */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+        {/* Left: Brand */}
+        <div className="flex items-center shrink-0">
           <button
-            onClick={() => onSelectCategory('TODAS')}
-            className="text-2xl sm:text-3xl font-medium tracking-tight text-white hover:text-neutral-300 transition-colors flex items-baseline cursor-pointer"
+            onClick={() => handleCategoryClick('TODAS')}
+            className="text-xl sm:text-2xl font-medium tracking-tight text-white hover:text-neutral-300 transition-colors flex items-baseline cursor-pointer"
           >
             BLACKNEWS
             <span className="w-1.5 h-1.5 bg-white ml-1 inline-block"></span>
           </button>
         </div>
 
-        {/* Text navigation links without boxes */}
-        <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-xs sm:text-sm font-medium tracking-wide">
+        {/* Center: Desktop Navigation Links (Only on larger screens) */}
+        <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 text-xs font-medium tracking-wide">
           {categories.map((cat) => {
             const isActive = selectedCategory === cat.id && !isStudioOpen;
             return (
               <button
                 key={cat.id}
-                onClick={() => onSelectCategory(cat.id)}
+                onClick={() => handleCategoryClick(cat.id)}
                 className={`transition-colors py-1 cursor-pointer relative whitespace-nowrap ${
                   isActive
                     ? 'text-white font-semibold'
@@ -128,84 +154,147 @@ export const TopBar: React.FC<TopBarProps> = ({
           })}
         </nav>
 
-        {/* Action icons & buttons: minimal, borderless */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Google Account Profile Trigger */}
+        {/* Right: Streamlined Action Cluster */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Studio Toggle (Compact) - Strictly hidden from basic LECTOR and unauthenticated users */}
+          {canAccessEditorialStudio && (
+            <button
+              onClick={onOpenStudio}
+              className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                isStudioOpen
+                  ? 'bg-white text-black border-white font-semibold'
+                  : 'border-white/15 text-neutral-300 hover:text-white hover:border-white'
+              }`}
+              title="Sala de Redacción y Constructor"
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">REDACCIÓN</span>
+            </button>
+          )}
+
+          {/* User Account / Google Chip (Compact) */}
           {onOpenGoogleAuth && (
             <button
               onClick={onOpenGoogleAuth}
-              className="flex items-center gap-2 py-1 px-2 border border-white/10 hover:border-white text-neutral-300 hover:text-white text-xs font-mono transition-colors cursor-pointer"
-              title="Autenticación con Google y Permisos"
+              className="flex items-center gap-1.5 py-1 px-2 border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-mono transition-colors cursor-pointer"
+              title={currentUser ? `Cuenta: ${currentUser.name} (${currentUser.role})` : 'Acceso de usuarios'}
             >
               {googleIconSvg}
               {currentUser ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="hidden md:inline max-w-[120px] truncate">{currentUser.name}</span>
-                  <span className={`text-[10px] px-1 py-0.2 border ${
-                    currentUser.role === 'ADMIN'
-                      ? 'border-white text-white font-semibold'
-                      : currentUser.role === 'MODERADOR'
-                      ? 'border-neutral-400 text-neutral-200'
-                      : currentUser.role === 'REDACTOR'
-                      ? 'border-neutral-600 text-neutral-300'
-                      : 'border-amber-500 text-amber-300'
-                  }`}>
-                    {currentUser.role}
-                  </span>
-                </div>
+                <span className="text-[10px] font-semibold text-neutral-300">
+                  [{currentUser.role}]
+                </span>
               ) : (
-                <span className="hidden sm:inline">ACCESO GOOGLE</span>
+                <span className="text-[10px]">ACCESO</span>
               )}
             </button>
           )}
 
-          {/* Constructor de Artículos & Redacción Button */}
-          <button
-            onClick={onOpenStudio}
-            className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer border ${
-              isStudioOpen
-                ? 'bg-white text-black border-white font-semibold'
-                : 'border-white/15 text-neutral-300 hover:text-white hover:border-white'
-            }`}
-            title="Constructor de Artículos & Sala de Redacción"
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">REDACCIÓN</span>
-          </button>
-
+          {/* Search Button */}
           <button
             onClick={onOpenSearch}
             className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-            aria-label="Buscar informes"
-            title="Buscar informes y titulares"
+            aria-label="Buscar"
+            title="Buscar informes"
           >
             <Search className="w-4 h-4" />
           </button>
 
+          {/* Bookmarks Button */}
           <button
             onClick={onOpenBookmarks}
             className="p-1.5 text-neutral-400 hover:text-white transition-colors relative cursor-pointer"
-            aria-label="Informes guardados"
-            title="Informes guardados"
+            aria-label="Guardados"
+            title="Lecturas guardadas"
           >
             <Bookmark className="w-4 h-4" />
             {bookmarksCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-white text-black font-mono text-[10px] font-semibold flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-white text-black font-mono text-[10px] font-bold flex items-center justify-center">
                 {bookmarksCount}
               </span>
             )}
           </button>
 
+          {/* Mobile Menu Hamburger Toggle (Visible on screens below xl) */}
           <button
-            onClick={onShareSite}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-            aria-label="Compartir BLACKNEWS"
-            title="Compartir BLACKNEWS"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="xl:hidden p-1.5 text-neutral-300 hover:text-white transition-colors cursor-pointer ml-1"
+            aria-label="Menú"
+            title="Menú de secciones"
           >
-            <Share2 className="w-4 h-4" />
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
+
+      {/* Slide-out / Dropdown Mobile & Tablet Menu */}
+      {isMobileMenuOpen && (
+        <div className="xl:hidden bg-black border-t border-white/10 px-4 sm:px-6 py-6 space-y-6 animate-in slide-in-from-top duration-150">
+          {/* Category Links List */}
+          <div>
+            <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mb-3">
+              SECCIONES EDITORIALES
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.id && !isStudioOpen;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryClick(cat.id)}
+                    className={`py-2 px-3 text-left text-xs font-medium uppercase tracking-wider transition-colors flex items-center justify-between cursor-pointer border ${
+                      isActive
+                        ? 'border-white bg-white text-black font-semibold'
+                        : 'border-white/5 text-neutral-300 hover:border-white/30 hover:text-white'
+                    }`}
+                  >
+                    <span>{cat.label}</span>
+                    <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* User Status & Direct Action Buttons */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
+              <span>USUARIO ACTIVO:</span>
+              <span className="text-white font-medium">
+                {currentUser ? `${currentUser.name} [${currentUser.role}]` : 'NO CONECTADO'}
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+              {canAccessEditorialStudio && (
+                <button
+                  onClick={() => {
+                    onOpenStudio();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex-1 py-2.5 px-3 border border-white/20 hover:border-white text-xs font-medium uppercase tracking-wider text-white flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>SALA DE REDACCIÓN</span>
+                </button>
+              )}
+
+              {onOpenGoogleAuth && (
+                <button
+                  onClick={() => {
+                    onOpenGoogleAuth();
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="flex-1 py-2.5 px-3 bg-white text-black text-xs font-medium uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer hover:bg-neutral-200 transition-colors"
+                >
+                  {googleIconSvg}
+                  <span>{currentUser ? 'MI CUENTA & PERMISOS' : 'ACCESO CON GOOGLE'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
