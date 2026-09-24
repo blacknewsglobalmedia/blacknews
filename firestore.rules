@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow testing connection
+    match /test/{document=**} {
+      allow read, write: if true;
+    }
+
+    // Reports are public to read for all readers of BLACKNEWS
+    match /reports/{reportId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Flash news / teletipo
+    match /flash_news/{flashId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Settings / Front page layout config
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // User profiles & permissions
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

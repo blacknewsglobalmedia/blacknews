@@ -1,0 +1,7 @@
+{
+  "name": "BLACKNEWS",
+  "description": "BLACKNEWS — Medio digital de periodismo independiente, análisis geopolítico, mercados y tecnología con estética ultra minimalista super AMOLED black.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

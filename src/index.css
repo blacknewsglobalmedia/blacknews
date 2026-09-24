@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-amoled: #000000;
+    --border-hairline: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Ultra minimalista: estricto cero bordes redondeados */
+  *, *::before, *::after {
+    border-radius: 0px !important;
+  }
+
+  html, body {
+    background-color: #000000;
+    color: #EDEDED;
+    font-family: 'Lexend', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.015em;
+    overflow-x: hidden;
+  }
+
+  /* Custom minimal monochrome scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #27272a;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+}
+
+/* Custom drop cap */
+.editorial-drop-cap::first-letter {
+  float: left;
+  font-size: 3.8rem;
+  line-height: 0.82;
+  padding-right: 0.65rem;
+  padding-top: 0.2rem;
+  font-weight: 500;
+  color: #FFFFFF;
+}

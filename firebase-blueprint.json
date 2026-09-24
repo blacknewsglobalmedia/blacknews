@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "BlackNews editorial team members and their roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "MODERADOR", "REDACTOR", "PENDIENTE"] },
+        "bureau": { "type": "string" },
+        "title": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "avatarInitials": { "type": "string" },
+        "requestedAt": { "type": "string" },
+        "approvedAt": { "type": "string" },
+        "bio": { "type": "string" },
+        "isGoogleAccount": { "type": "boolean" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Report": {
+      "title": "Editorial Report",
+      "description": "Published news reports and deep investigative articles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "category": { "type": "string" },
+        "dateline": { "type": "string" },
+        "publishedAt": { "type": "string" },
+        "readTime": { "type": "string" },
+        "author": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "image": { "type": "string" },
+        "imageCaption": { "type": "string" },
+        "paragraphs": { "type": "array" },
+        "keyTakeaways": { "type": "array" },
+        "isBreaking": { "type": "boolean" },
+        "isExclusive": { "type": "boolean" }
+      },
+      "required": ["id", "title", "subtitle", "category", "author", "paragraphs"]
+    },
+    "LayoutConfig": {
+      "title": "Front Page Layout Configuration",
+      "description": "Configuration for the homepage editorial positions and automation",
+      "type": "object",
+      "properties": {
+        "leadReportId": { "type": "string" },
+        "block1ReportIds": { "type": "array" },
+        "block2ReportIds": { "type": "array" },
+        "dossierReportId": { "type": "string" },
+        "automationPreset": { "type": "string" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["leadReportId", "block1ReportIds", "block2ReportIds", "dossierReportId", "automationPreset"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Editorial staff profiles and permissions"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "News reports and dossier articles"
+    },
+    "/settings/frontpage_layout": {
+      "schema": "LayoutConfig",
+      "description": "Frontpage editorial curation and slot mapping"
+    }
+  }
+}
