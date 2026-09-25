@@ -23,6 +23,33 @@ export interface ReportSection {
   label?: string;
 }
 
+export interface OptimizedImageVariant {
+  width: number;
+  height: number;
+  format: 'avif' | 'webp' | 'jpeg';
+  url: string;
+  sizeBytes: number;
+  filename: string;
+}
+
+export interface OptimizedImageSet {
+  slug: string;
+  originalName: string;
+  originalSize?: number;
+  width: number;
+  height: number;
+  aspectRatio?: number;
+  blurDataUrl?: string;
+  variants?: OptimizedImageVariant[];
+  srcsetAvif: string;
+  srcsetWebp: string;
+  srcsetJpeg: string;
+  fallbackUrl: string;
+  pictureSnippet?: string;
+  totalSavingsPercent?: number;
+  storage?: 'cloudflare-r2' | 'local-edge';
+}
+
 export interface Report {
   id: string;
   title: string;
@@ -34,6 +61,7 @@ export interface Report {
   publishedAt: string;
   readTime: string;
   image: string;
+  optimizedImage?: OptimizedImageSet;
   imageCaption: string;
   lead: string;
   sections: ReportSection[];
