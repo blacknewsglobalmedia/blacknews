@@ -151,19 +151,19 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
+      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto rounded-xl">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-6">
+        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
           <div className="flex items-center gap-2.5">
             {googleIconSvg}
-            <h2 className="text-xs sm:text-sm font-medium uppercase tracking-wider text-white">
+            <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-white">
               ACCESO DE USUARIOS · BLACKNEWS
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
             aria-label="Cerrar"
           >
             <X className="w-4 h-4" />
@@ -171,15 +171,15 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         </div>
 
         {/* Current Session Overview */}
-        <div className="mb-6 pb-5 border-b border-white/5">
-          <div className="text-xs font-mono uppercase tracking-wider text-neutral-500 mb-1">
+        <div className="mb-6 pb-5 border-b border-white/10">
+          <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-1.5 font-medium">
             SESIÓN ACTIVA
           </div>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <div className="text-sm font-medium text-white flex items-center gap-2">
                 <span>{currentUser.name}</span>
-                <span className={`text-xs font-mono px-2 py-0.5 border ${
+                <span className={`text-[11px] font-sans px-2.5 py-0.5 rounded border ${
                   currentUser.role === 'ADMIN'
                     ? 'border-white text-white font-semibold'
                     : currentUser.role === 'MODERADOR'
@@ -191,24 +191,24 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   {currentUser.role === 'LECTOR' ? 'LECTOR (BÁSICO)' : currentUser.role}
                 </span>
               </div>
-              <div className="text-xs font-mono text-neutral-400 mt-0.5">
+              <div className="text-xs font-sans text-neutral-400 mt-1 font-light">
                 {currentUser.email}
               </div>
             </div>
             {currentUser.isGoogleAccount && (
-              <span className="text-xs font-mono text-white flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs font-sans font-medium text-white flex items-center gap-1">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
                 GOOGLE
               </span>
             )}
           </div>
 
           {/* Permisos de la cuenta activa */}
-          <div className="mt-4 pt-3 border-t border-white/5 space-y-1 text-xs font-mono text-neutral-400">
+          <div className="mt-4 pt-3 border-t border-white/5 space-y-1 text-xs font-sans text-neutral-400">
             {currentUser.role === 'LECTOR' ? (
-              <div className="p-2.5 bg-neutral-950 border border-white/10 text-neutral-300">
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Cuenta de <strong>Usuario Básico</strong>: puedes guardar artículos y compartir sin restricciones. No posees permisos de redacción ni edición en el medio hasta que un administrador habilite tu cuenta específicamente.
+              <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
+                <p className="text-xs text-neutral-400 leading-relaxed font-light">
+                  Cuenta de <strong className="text-white font-medium">Usuario Básico</strong>: puedes guardar artículos y compartir sin restricciones. No posees permisos de redacción ni edición en el medio hasta que un administrador habilite tu cuenta específicamente.
                 </p>
               </div>
             ) : (
@@ -235,7 +235,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         </div>
 
         {authError && (
-          <div className="mb-4 p-3 bg-neutral-900 border border-neutral-700 text-neutral-300 text-xs font-mono">
+          <div className="mb-4 p-3 bg-red-950/40 border border-red-500/40 text-red-200 text-xs font-sans rounded-lg">
             {authError}
           </div>
         )}
@@ -245,34 +245,34 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           <button
             onClick={handleRealFirebaseGoogleSignIn}
             disabled={isConnecting}
-            className="w-full py-3.5 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer flex items-center justify-center gap-2.5 shadow-md"
+            className="w-full py-3.5 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer flex items-center justify-center gap-2.5 shadow-md rounded-md"
           >
             {googleIconSvg}
             <span>{isConnecting ? 'CONECTANDO...' : 'INICIAR SESIÓN CON GOOGLE'}</span>
           </button>
-          <p className="text-[11px] font-mono text-neutral-500 text-center mt-2">
+          <p className="text-xs font-sans text-neutral-400 text-center mt-2 font-light">
             Los nuevos registros ingresan como usuarios básicos sin capacidad de edición.
           </p>
         </div>
 
-        {/* Fast profile switchers: ONLY visible to ADMIN for system testing and audits. Basic users must NEVER see privilege escalation controls. */}
+        {/* Fast profile switchers: ONLY visible to ADMIN for system testing and audits. */}
         {currentUser.role === 'ADMIN' && (
           <div className="space-y-2 mb-6 pt-4 border-t border-white/5">
-            <div className="text-[11px] font-mono uppercase tracking-wider text-neutral-500 mb-2 flex items-center justify-between">
+            <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 flex items-center justify-between font-medium">
               <span>SIMULACIÓN DE ROLES (SOLO ADMIN):</span>
-              <span className="text-[10px] text-neutral-600">AUDITORÍA</span>
+              <span className="text-[10px] text-neutral-500">AUDITORÍA</span>
             </div>
 
             {/* Master Admin Button */}
             <button
               onClick={handleAdminQuickLogin}
-              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
             >
               <div>
-                <div className="text-xs font-medium text-white">
+                <div className="text-xs font-semibold text-white">
                   blacknewsglobalmedia@gmail.com
                 </div>
-                <div className="text-[11px] font-mono text-neutral-400">
+                <div className="text-xs font-sans text-neutral-400 mt-0.5">
                   Rol: Administrador (gestión total)
                 </div>
               </div>
@@ -282,13 +282,13 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {/* Moderator Button */}
             <button
               onClick={handleModeratorQuickLogin}
-              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
             >
               <div>
-                <div className="text-xs font-medium text-white">
+                <div className="text-xs font-semibold text-white">
                   editor.portada@blacknews.media
                 </div>
-                <div className="text-[11px] font-mono text-neutral-400">
+                <div className="text-xs font-sans text-neutral-400 mt-0.5">
                   Rol: Moderador (gestión de portada y roles)
                 </div>
               </div>
@@ -298,13 +298,13 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {/* Redactor Button */}
             <button
               onClick={handleRedactorQuickLogin}
-              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
             >
               <div>
-                <div className="text-xs font-medium text-white">
+                <div className="text-xs font-semibold text-white">
                   mateo.valenzuela@blacknews.media
                 </div>
-                <div className="text-[11px] font-mono text-neutral-400">
+                <div className="text-xs font-sans text-neutral-400 mt-0.5">
                   Rol: Redactor (edita y publica solo sus propios artículos)
                 </div>
               </div>
@@ -314,13 +314,13 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {/* Reader Button */}
             <button
               onClick={handleReaderQuickLogin}
-              className="w-full p-2.5 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white"
+              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
             >
               <div>
-                <div className="text-xs font-medium text-white">
+                <div className="text-xs font-semibold text-white">
                   lector.demo@gmail.com
                 </div>
-                <div className="text-[11px] font-mono text-neutral-500">
+                <div className="text-xs font-sans text-neutral-400 mt-0.5">
                   Rol: Lector básico (sin permisos de edición ni acceso interno)
                 </div>
               </div>
@@ -333,17 +333,17 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         {!isCustomFormOpen ? (
           <button
             onClick={() => setIsCustomFormOpen(true)}
-            className="w-full py-2 text-xs font-mono text-neutral-400 hover:text-white uppercase tracking-wider text-center transition-colors cursor-pointer border-t border-white/5 pt-3"
+            className="w-full py-2 text-xs font-sans font-medium text-neutral-400 hover:text-white uppercase tracking-wider text-center transition-colors cursor-pointer border-t border-white/5 pt-3"
           >
             + Registrar otra cuenta de correo o Gmail
           </button>
         ) : (
           <form onSubmit={handleCustomGoogleSubmit} className="pt-3 border-t border-white/5 space-y-3">
-            <div className="text-xs font-mono uppercase tracking-wider text-neutral-300">
+            <div className="text-xs font-sans font-semibold uppercase tracking-wider text-neutral-200">
               REGISTRO DE USUARIO BÁSICO
             </div>
             <div>
-              <label className="block text-[11px] font-mono text-neutral-400 mb-1">
+              <label className="block text-xs font-sans text-neutral-400 mb-1">
                 NOMBRE COMPLETO
               </label>
               <input
@@ -352,11 +352,11 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 placeholder="Nombre y apellido"
-                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white"
+                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white font-sans"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-mono text-neutral-400 mb-1">
+              <label className="block text-xs font-sans text-neutral-400 mb-1">
                 CORREO ELECTRÓNICO (GMAIL)
               </label>
               <input
@@ -365,23 +365,23 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 placeholder="correo@gmail.com"
-                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white"
+                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white font-sans"
               />
             </div>
-            <p className="text-[11px] font-mono text-neutral-500">
+            <p className="text-xs font-sans text-neutral-500 font-light">
               * La cuenta se creará con rol de LECTOR (sin permisos de edición). Un administrador podrá asignarte como redactor posteriormente.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 py-2 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
+                className="flex-1 py-2 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-md"
               >
                 REGISTRAR COMO LECTOR
               </button>
               <button
                 type="button"
                 onClick={() => setIsCustomFormOpen(false)}
-                className="px-3 py-2 text-xs font-mono text-neutral-500 hover:text-white"
+                className="px-3 py-2 text-xs font-sans text-neutral-400 hover:text-white cursor-pointer"
               >
                 CANCELAR
               </button>
@@ -390,20 +390,20 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         )}
 
         {/* Logout action */}
-        <div className="pt-5 border-t border-white/5 mt-5 flex items-center justify-between">
+        <div className="pt-5 border-t border-white/10 mt-5 flex items-center justify-between">
           <button
             onClick={() => {
               onLogout();
               onClose();
             }}
-            className="text-xs font-mono text-neutral-500 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>CERRAR SESIÓN</span>
           </button>
           <button
             onClick={onClose}
-            className="text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="text-xs font-sans text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium"
           >
             CERRAR
           </button>

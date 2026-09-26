@@ -86,28 +86,28 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
       {/* Top micro-strip: clean & uncrowded */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-mono tracking-wider text-neutral-400 border-b border-white/5 uppercase">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-sans tracking-wide text-neutral-400 border-b border-white/5 uppercase font-medium">
         <div className="flex items-center gap-2.5">
-          <span className="flex items-center gap-1.5 text-white font-medium">
-            <span className="w-1.5 h-1.5 bg-white animate-pulse"></span>
+          <span className="flex items-center gap-1.5 text-white font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
             EN DIRECTO
           </span>
-          <span className="text-neutral-800">/</span>
-          <span className="text-neutral-500">24 SEP 2026</span>
+          <span className="text-neutral-700">·</span>
+          <span className="text-neutral-400">25 SEP 2026</span>
         </div>
 
         <div className="flex items-center gap-3 text-neutral-400">
           <button
             onClick={onToggleLiveTicker}
             className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
-              liveTickerActive ? 'text-white font-medium' : 'text-neutral-600'
+              liveTickerActive ? 'text-white font-medium' : 'text-neutral-500'
             }`}
             title="Alternar teletipo"
           >
             <Radio className="w-3 h-3" />
             <span className="hidden sm:inline">TELETIPO</span>
           </button>
-          <span className="text-neutral-800">/</span>
+          <span className="text-neutral-700">·</span>
           <button
             onClick={onShareSite}
             className="hover:text-white transition-colors cursor-pointer hidden sm:inline"
@@ -120,19 +120,19 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Main Bar: resilient single row with zero horizontal collapse */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
-        {/* Left: Brand */}
+        {/* Left: Brand with Editorial Authority */}
         <div className="flex items-center shrink-0">
           <button
             onClick={() => handleCategoryClick('TODAS')}
-            className="text-xl sm:text-2xl font-medium tracking-tight text-white hover:text-neutral-300 transition-colors flex items-baseline cursor-pointer"
+            className="font-headline text-2xl sm:text-[1.85rem] font-semibold tracking-tight text-white hover:text-neutral-200 transition-colors flex items-baseline cursor-pointer"
           >
             BLACKNEWS
-            <span className="w-1.5 h-1.5 bg-white ml-1 inline-block"></span>
+            <span className="w-1.5 h-1.5 rounded-full bg-white ml-1 inline-block"></span>
           </button>
         </div>
 
         {/* Center: Desktop Navigation Links (Only on larger screens) */}
-        <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 text-xs font-medium tracking-wide">
+        <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 text-xs font-sans font-medium tracking-wide">
           {categories.map((cat) => {
             const isActive = selectedCategory === cat.id && !isStudioOpen;
             return (
@@ -147,7 +147,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               >
                 {cat.label}
                 {isActive && (
-                  <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white"></span>
+                  <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
                 )}
               </button>
             );
@@ -160,9 +160,9 @@ export const TopBar: React.FC<TopBarProps> = ({
           {canAccessEditorialStudio && (
             <button
               onClick={onOpenStudio}
-              className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer border ${
+              className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
                 isStudioOpen
-                  ? 'bg-white text-black border-white font-semibold'
+                  ? 'bg-white text-black border-white font-semibold shadow-sm'
                   : 'border-white/15 text-neutral-300 hover:text-white hover:border-white'
               }`}
               title="Sala de Redacción y Constructor"
@@ -176,16 +176,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           {onOpenGoogleAuth && (
             <button
               onClick={onOpenGoogleAuth}
-              className="flex items-center gap-1.5 py-1 px-2 border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-mono transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
               title={currentUser ? `Cuenta: ${currentUser.name} (${currentUser.role})` : 'Acceso de usuarios'}
             >
               {googleIconSvg}
               {currentUser ? (
-                <span className="text-[10px] font-semibold text-neutral-300">
-                  [{currentUser.role}]
+                <span className="text-[11px] font-semibold text-neutral-200">
+                  {currentUser.role}
                 </span>
               ) : (
-                <span className="text-[10px]">ACCESO</span>
+                <span className="text-[11px]">ACCESO</span>
               )}
             </button>
           )}
@@ -193,7 +193,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Search Button */}
           <button
             onClick={onOpenSearch}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
             aria-label="Buscar"
             title="Buscar informes"
           >
@@ -203,13 +203,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Bookmarks Button */}
           <button
             onClick={onOpenBookmarks}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors relative cursor-pointer"
+            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors relative cursor-pointer"
             aria-label="Guardados"
             title="Lecturas guardadas"
           >
             <Bookmark className="w-4 h-4" />
             {bookmarksCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-white text-black font-mono text-[10px] font-bold flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-white text-black font-mono text-[10px] font-bold flex items-center justify-center tabular-nums shadow-sm">
                 {bookmarksCount}
               </span>
             )}

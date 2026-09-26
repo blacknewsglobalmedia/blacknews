@@ -18,42 +18,42 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   return (
-    <footer className="w-full bg-black text-neutral-400 text-xs sm:text-sm pt-14 pb-12 border-t border-white/5">
+    <footer className="w-full bg-black text-neutral-400 text-xs sm:text-sm pt-14 pb-12 border-t border-white/10 font-['Lexend',sans-serif]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         
-        {/* Editorial Core Principles: Minimal, no gray boxes */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12 mb-12 border-b border-white/5">
+        {/* Editorial Core Principles */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12 mb-12 border-b border-white/10">
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-white font-medium mb-2.5 flex items-center gap-2">
-              <Scale className="w-4 h-4 text-white" />
+            <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
+              <Scale className="w-4 h-4 text-neutral-300" />
               LIBERTAD ECONÓMICA Y MERCADOS
             </div>
-            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
+            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed font-light">
               El libre mercado, la moneda sana, la libre competencia y la ausencia de privilegios corporativos son el catalizador insustituible de la prosperidad humana.
             </p>
           </div>
 
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-white font-medium mb-2.5 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-white" />
+            <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-neutral-300" />
               PROPIEDAD PRIVADA Y DERECHO A LA VIDA
             </div>
-            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
+            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed font-light">
               La inviolabilidad de la persona física, su vida y los frutos de su trabajo configuran el límite infranqueable frente a cualquier poder coactivo o arbitrario.
             </p>
           </div>
 
           <div>
-            <div className="text-xs font-mono uppercase tracking-wider text-white font-medium mb-2.5 flex items-center gap-2">
-              <Mail className="w-4 h-4 text-white" />
+            <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-neutral-300" />
               REDACCIÓN Y CANAL SEGURO
             </div>
-            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed mb-2">
+            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed mb-2 font-light">
               Buzón directo para envíos confidenciales y despachos contrastables:
             </p>
             <a
               href="mailto:blacknewsglobalmedia@gmail.com"
-              className="text-white hover:text-neutral-300 font-mono text-xs sm:text-sm block transition-colors"
+              className="text-white hover:text-neutral-300 text-xs sm:text-sm block transition-colors font-medium"
             >
               blacknewsglobalmedia@gmail.com
             </a>
@@ -64,16 +64,16 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-12">
           {/* Brand Column */}
           <div className="md:col-span-4">
-            <div className="text-2xl font-medium text-white tracking-tight mb-3 flex items-baseline">
+            <div className="font-headline text-2xl sm:text-3xl font-semibold text-white tracking-tight mb-3 flex items-baseline">
               BLACKNEWS
-              <span className="w-1.5 h-1.5 bg-white ml-1 inline-block"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-white ml-1 inline-block"></span>
             </div>
-            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed mb-5 max-w-sm">
+            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed mb-5 max-w-sm font-light">
               Medio digital de análisis económico, geopolítica monetaria, soberanía tecnológica y defensa del estado de derecho.
             </p>
             <button
               onClick={onShareSite}
-              className="px-4 py-2 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer"
+              className="px-4 py-2 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
             >
               <Share2 className="w-3.5 h-3.5" />
               <span>COMPARTIR MEDIO</span>
@@ -82,7 +82,7 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Categories Links */}
           <div className="md:col-span-5">
-            <div className="text-xs font-mono uppercase tracking-wider text-white font-medium mb-4">
+            <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-4">
               SECCIONES & CUADERNOS
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -90,7 +90,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   key={cat}
                   onClick={() => onSelectCategory(cat)}
-                  className="text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-1 font-mono"
+                  className="text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-1 font-sans"
                 >
                   → {cat}
                 </button>
@@ -101,17 +101,17 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Legal & Back to top */}
           <div className="md:col-span-3 flex flex-col justify-between">
             <div>
-              <div className="text-xs font-mono uppercase tracking-wider text-white font-medium mb-3">
+              <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-3">
                 DIFUSIÓN ABIERTA
               </div>
-              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed mb-3 font-mono">
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed mb-3 font-light">
                 Se autoriza la reproducción de extractos con cita a BLACKNEWS y enlace a la fuente original.
               </p>
             </div>
 
             <button
               onClick={scrollToTop}
-              className="self-start text-neutral-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-mono uppercase tracking-wider cursor-pointer mt-4"
+              className="self-start text-neutral-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider cursor-pointer mt-4 py-1"
             >
               <span>VOLVER ARRIBA</span>
               <ArrowUp className="w-3.5 h-3.5" />
@@ -120,16 +120,16 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Bottom copyright */}
-        <div className="pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-mono text-neutral-500">
+        <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-sans text-neutral-500">
           <div>
             © 2026 BLACKNEWS. TODOS LOS DERECHOS RESERVADOS.
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <span>SUPER AMOLED BLACK</span>
             <span>·</span>
-            <span>LEXEND MEDIUM</span>
+            <span>NEWSREADER EDITORIAL</span>
             <span>·</span>
-            <span>ULTRA MINIMALISTA</span>
+            <span>PLUS JAKARTA SANS</span>
           </div>
         </div>
 

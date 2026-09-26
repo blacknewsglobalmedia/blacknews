@@ -112,19 +112,19 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
+      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative rounded-xl">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-6">
+        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
           <div className="flex items-center gap-2">
             <Share2 className="w-4 h-4 text-white" />
-            <h2 className="text-xs sm:text-sm font-medium uppercase tracking-wider text-white">
+            <h2 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-white">
               COMPARTIR EN REDES SOCIALES
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
             aria-label="Cerrar ventana"
           >
             <X className="w-4 h-4" />
@@ -133,37 +133,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Report Preview Header */}
         {report ? (
-          <div className="mb-6 pb-4 border-b border-white/5">
-            <div className="text-xs font-mono tracking-wider text-neutral-400 uppercase mb-1.5">
+          <div className="mb-6 pb-4 border-b border-white/10">
+            <div className="text-xs font-sans tracking-wide text-neutral-400 uppercase mb-1.5 font-medium">
               {report.category} · {report.readTime}
             </div>
-            <h3 className="text-sm sm:text-base font-medium text-white line-clamp-2 leading-snug">
+            <h3 className="font-headline text-lg sm:text-xl font-normal text-white line-clamp-2 leading-snug">
               {report.title}
             </h3>
-            <p className="text-xs sm:text-sm text-neutral-400 mt-1 line-clamp-2">
+            <p className="text-xs sm:text-sm text-neutral-400 mt-1 line-clamp-2 font-light">
               {report.subtitle}
             </p>
           </div>
         ) : (
-          <div className="mb-6 pb-4 border-b border-white/5">
-            <h3 className="text-sm sm:text-base font-medium text-white leading-snug">
+          <div className="mb-6 pb-4 border-b border-white/10">
+            <h3 className="font-headline text-lg sm:text-xl font-normal text-white leading-snug">
               BLACKNEWS — Periodismo Independiente
             </h3>
-            <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+            <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-light">
               Análisis económico, derecho de propiedad y tecnología en Super AMOLED Black.
             </p>
           </div>
         )}
 
         {/* Social Networks Grid without bulky boxes */}
-        <div className="grid grid-cols-3 gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2.5 mb-6">
           {shareNetworks.map((net) => (
             <a
               key={net.name}
               href={net.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2.5 hover:bg-white hover:text-black transition-colors text-xs font-medium text-neutral-300 border border-white/5"
+              className="flex items-center gap-2 px-3 py-2.5 hover:bg-white hover:text-black transition-colors text-xs font-semibold text-neutral-300 border border-white/10 rounded-lg"
             >
               {net.icon}
               <span className="truncate">{net.name}</span>
@@ -173,7 +173,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Direct Link Copy Input */}
         <div className="mb-6">
-          <label className="block text-xs font-mono uppercase tracking-wider text-neutral-400 mb-2">
+          <label className="block text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 font-medium">
             ENLACE DIRECTO
           </label>
           <div className="flex items-center gap-2">
@@ -181,13 +181,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               type="text"
               readOnly
               value={shareUrl}
-              className="w-full bg-black border border-white/10 px-3 py-2 text-xs font-mono text-neutral-300 select-all focus:outline-none focus:border-white"
+              className="w-full bg-black border border-white/15 px-3 py-2 text-xs font-mono text-neutral-300 select-all focus:outline-none focus:border-white rounded-md"
             />
             <button
               onClick={handleCopyLink}
-              className={`px-4 py-2 text-xs font-medium tracking-wider uppercase transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              className={`px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer rounded-md ${
                 copied
-                  ? 'bg-white text-black'
+                  ? 'bg-emerald-400 text-black'
                   : 'bg-white text-black hover:bg-neutral-200'
               }`}
             >
@@ -201,7 +201,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         {typeof navigator !== 'undefined' && 'share' in navigator && (
           <button
             onClick={handleNativeShare}
-            className="w-full mb-6 py-2.5 px-4 border border-white/20 text-white hover:bg-white hover:text-black font-medium text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full mb-6 py-2.5 px-4 border border-white/20 text-white hover:bg-white hover:text-black font-semibold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer rounded-md"
           >
             <Globe className="w-4 h-4" />
             <span>COMPARTIR VÍA SISTEMA</span>
@@ -210,16 +210,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Quote Card */}
         {report && (
-          <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs font-mono">
-            <span className="text-neutral-500 uppercase flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-white" />
+          <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs font-sans">
+            <span className="text-neutral-400 uppercase flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
               FICHA DE TEXTO
             </span>
             <button
               onClick={handleCopyQuoteCard}
-              className="text-white hover:text-neutral-300 transition-colors cursor-pointer"
+              className="text-white hover:text-neutral-300 transition-colors cursor-pointer font-medium"
             >
-              {quoteCardCopied ? '¡COPIADO!' : 'COPIAR CITA PARA REDES'}
+              {quoteCardCopied ? '¡COPIADO!' : 'COPIAR CITA PARA REDES →'}
             </button>
           </div>
         )}

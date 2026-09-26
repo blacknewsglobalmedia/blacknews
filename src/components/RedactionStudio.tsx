@@ -19,13 +19,15 @@ import {
   ShieldCheck,
   Check,
   Lock,
-  Edit2
+  Edit2,
+  Zap
 } from 'lucide-react';
-import { Report, ReportSection, CategoryId } from '../types/news';
+import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { RedactorProfile, RedactorRole, ROLE_PERMISSIONS } from '../types/auth';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
 import { FrontPageManager } from './FrontPageManager';
+import { ImageOptimizationStudio } from './ImageOptimizationStudio';
 
 interface RedactionStudioProps {
   onBackToNews: () => void;
@@ -99,11 +101,12 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const permissions = ROLE_PERMISSIONS[currentUser.role];
 
   // Default tab based on role
-  const [activeTab, setActiveTab] = useState<'layout' | 'builder' | 'users' | 'my-articles' | 'register'>(
+  const [activeTab, setActiveTab] = useState<'layout' | 'builder' | 'images' | 'users' | 'my-articles' | 'register'>(
     permissions.canWritePosts ? 'builder' : 'my-articles'
   );
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [selectedOptimizedImage, setSelectedOptimizedImage] = useState<OptimizedImageSet | undefined>(undefined);
 
   // Registration Form State
   const [regName, setRegName] = useState('');
@@ -171,6 +174,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setSubtitle(report.subtitle);
     setCategory(report.category);
     setSelectedImage(report.image);
+    setSelectedOptimizedImage(report.optimizedImage);
     setImageCaption(report.imageCaption || '');
     setReadTime(report.readTime);
     setLead(report.lead);
@@ -184,9 +188,22 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   const handleCancelEdit = () => {
     setEditingReportId(null);
+    setSelectedOptimizedImage(undefined);
     setTitle('');
     setSubtitle('');
     setLead('');
+  };
+
+  const handleSelectOptimizedImageForArticle = (optSet: OptimizedImageSet) => {
+    setSelectedOptimizedImage(optSet);
+    const bestVariant = optSet.variants.find(v => v.format === 'avif' && v.width === 1200) ||
+                        optSet.variants.find(v => v.format === 'avif' && v.width === 800) ||
+                        optSet.variants[0];
+    if (bestVariant) {
+      setSelectedImage(bestVariant.url);
+      setCustomImageUrl(bestVariant.url);
+    }
+    setActiveTab('builder');
   };
 
   // Section Handlers
@@ -282,6 +299,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         subtitle: subtitle.trim(),
         category,
         image: finalImage,
+        optimizedImage: selectedOptimizedImage || original.optimizedImage,
         imageCaption: imageCaption.trim() || 'Archivo fotográfico.',
         lead: lead.trim(),
         sections: sections.filter((s) => (s.text && s.text.trim().length > 0) || s.value),
@@ -294,6 +312,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       onUpdateExistingReport(updated);
       setPublishSuccess(true);
       setEditingReportId(null);
+      setSelectedOptimizedImage(undefined);
       setTimeout(() => {
         setPublishSuccess(false);
         onBackToNews();
@@ -319,6 +338,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       publishedAt: '24 Sep 2026 · Despacho Reciente',
       readTime,
       image: finalImage,
+      optimizedImage: selectedOptimizedImage,
       imageCaption: imageCaption.trim() || 'Archivo fotográfico de la redacción.',
       lead: lead.trim(),
       sections: sections.filter((s) => (s.text && s.text.trim().length > 0) || s.value),
@@ -363,19 +383,19 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-['Lexend',sans-serif] pb-20">
+    <div className="min-h-screen bg-black text-white font-sans pb-20">
       {/* Studio Topbar: Ultra-minimalist */}
-      <div className="border-b border-white/5 bg-black px-4 sm:px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4">
+      <div className="border-b border-white/10 bg-black px-4 sm:px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToNews}
-            className="flex items-center gap-2 text-xs sm:text-sm font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer py-1 px-2.5 rounded-md hover:bg-white/5"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>PORTADA</span>
           </button>
           <span className="text-neutral-700">/</span>
-          <span className="text-xs font-mono uppercase tracking-wider text-white font-medium">
+          <span className="text-xs font-sans uppercase tracking-wider text-white font-semibold">
             SISTEMA EDITORIAL
           </span>
         </div>
@@ -384,10 +404,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={onOpenGoogleAuth}
-            className="flex items-center gap-2 text-xs font-mono py-1 px-2.5 border border-white/15 hover:border-white transition-colors cursor-pointer"
+            className="flex items-center gap-2 text-xs font-sans py-1.5 px-3 border border-white/15 hover:border-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
           >
             <span
-              className={`w-2 h-2 ${
+              className={`w-2 h-2 rounded-full ${
                 currentUser.role === 'ADMIN'
                   ? 'bg-white'
                   : currentUser.role === 'MODERADOR'
@@ -397,12 +417,12 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   : 'bg-neutral-700'
               }`}
             ></span>
-            <span className="text-white font-medium">{currentUser.name}</span>
+            <span className="text-white font-semibold">{currentUser.name}</span>
             <span className="text-neutral-400">[{currentUser.role}]</span>
           </button>
 
-          <div className="flex items-center gap-1 text-xs font-mono">
-            <span className="text-neutral-600 hidden md:inline mr-1">PROBAR:</span>
+          <div className="flex items-center gap-1 text-xs font-sans">
+            <span className="text-neutral-500 hidden md:inline mr-1 text-[11px] font-medium uppercase">PROBAR:</span>
             {allRedactors
               .filter((u) => u.role !== 'LECTOR')
               .slice(0, 3)
@@ -410,10 +430,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <button
                   key={user.id}
                   onClick={() => onSwitchUser(user)}
-                  className={`px-2 py-0.5 transition-colors cursor-pointer text-xs border ${
+                  className={`px-2.5 py-1 transition-colors cursor-pointer text-xs rounded-md border ${
                     currentUser.id === user.id
-                      ? 'border-white text-white font-bold'
-                      : 'border-white/10 text-neutral-500 hover:text-white'
+                      ? 'border-white text-white font-semibold bg-white/10'
+                      : 'border-white/10 text-neutral-400 hover:text-white hover:border-white/30'
                   }`}
                   title={`Cambiar a ${user.name} (${user.role})`}
                 >
@@ -425,16 +445,16 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       </div>
 
       {/* Main Studio Navigation Tabs: Purely typographical */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm font-medium uppercase tracking-wider overflow-x-auto no-scrollbar">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm font-semibold uppercase tracking-wider overflow-x-auto no-scrollbar">
           {/* TAB 1: GESTIÓN DE PORTADA (Admin/Moderator only) */}
           {permissions.canManageLayout && (
             <button
               onClick={() => setActiveTab('layout')}
               className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
                 activeTab === 'layout'
-                  ? 'text-white border-b border-white font-semibold'
-                  : 'text-neutral-500 hover:text-white'
+                  ? 'text-white border-b-2 border-white font-bold'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -447,12 +467,25 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             onClick={() => setActiveTab('builder')}
             className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
               activeTab === 'builder'
-                ? 'text-white border-b border-white font-semibold'
-                : 'text-neutral-500 hover:text-white'
+                ? 'text-white border-b-2 border-white font-bold'
+                : 'text-neutral-400 hover:text-white'
             }`}
           >
             <Edit3 className="w-3.5 h-3.5" />
             <span>{editingReportId ? 'EDITANDO INFORME' : 'CONSTRUCTOR DE ARTÍCULOS'}</span>
+          </button>
+
+          {/* TAB: OPTIMIZADOR DE IMÁGENES & R2 */}
+          <button
+            onClick={() => setActiveTab('images')}
+            className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
+              activeTab === 'images'
+                ? 'text-white border-b-2 border-white font-bold'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>OPTIMIZADOR AVIF & R2</span>
           </button>
 
           {/* TAB 3: GESTIÓN DE EQUIPO & ROLES (Admin/Moderator only) */}
@@ -461,8 +494,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               onClick={() => setActiveTab('users')}
               className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
                 activeTab === 'users'
-                  ? 'text-white border-b border-white font-semibold'
-                  : 'text-neutral-500 hover:text-white'
+                  ? 'text-white border-b-2 border-white font-bold'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -475,8 +508,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             onClick={() => setActiveTab('my-articles')}
             className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
               activeTab === 'my-articles'
-                ? 'text-white border-b border-white font-semibold'
-                : 'text-neutral-500 hover:text-white'
+                ? 'text-white border-b-2 border-white font-bold'
+                : 'text-neutral-400 hover:text-white'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -489,8 +522,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               onClick={() => setActiveTab('register')}
               className={`transition-colors cursor-pointer flex items-center gap-1.5 pb-1 whitespace-nowrap ${
                 activeTab === 'register'
-                  ? 'text-white border-b border-white font-semibold'
-                  : 'text-neutral-500 hover:text-white'
+                  ? 'text-white border-b-2 border-white font-bold'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
@@ -504,21 +537,21 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             {editingReportId && (
               <button
                 onClick={handleCancelEdit}
-                className="text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="text-xs font-sans font-medium text-neutral-400 hover:text-white transition-colors cursor-pointer"
               >
                 CANCELAR EDICIÓN
               </button>
             )}
             <button
               onClick={() => setPreviewMode(!previewMode)}
-              className="text-xs font-medium uppercase tracking-wider text-neutral-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="text-xs font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 px-3 rounded-md hover:bg-white/5"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>{previewMode ? 'VOLVER AL EDITOR' : 'VISTA PREVIA'}</span>
             </button>
             <button
               onClick={handleSaveOrPublish}
-              className="px-4 py-2 bg-white text-black hover:bg-neutral-200 font-medium text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-4 py-2 bg-white text-black hover:bg-neutral-200 font-semibold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer rounded-md shadow-sm"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{editingReportId ? 'GUARDAR CAMBIOS' : 'PUBLICAR EN PORTADA'}</span>
@@ -865,10 +898,34 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-mono uppercase tracking-wider text-neutral-400 mb-2 font-medium flex items-center gap-1.5">
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        FOTOGRAFÍA EDITORIAL (EN COLOR)
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-sans uppercase tracking-wider text-neutral-400 font-semibold flex items-center gap-1.5">
+                          <ImageIcon className="w-3.5 h-3.5 text-white" />
+                          <span>FOTOGRAFÍA EDITORIAL (EN COLOR)</span>
+                        </label>
+                      </div>
+
+                      {/* Button to open Optimizer */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('images')}
+                        className="w-full py-2.5 px-3 bg-neutral-900 border border-white/20 hover:border-white text-white text-xs font-sans font-semibold uppercase tracking-wider rounded-md flex items-center justify-center gap-2 transition-colors cursor-pointer mb-3"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Subir y optimizar con AVIF / WebP / R2</span>
+                      </button>
+
+                      {selectedOptimizedImage && (
+                        <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-lg mb-3 flex items-center justify-between text-xs font-sans">
+                          <div>
+                            <span className="text-emerald-300 font-semibold block">✓ AVIF/WebP Optimizado Activo</span>
+                            <span className="text-[11px] text-emerald-400/80 font-light">{selectedOptimizedImage.variants.length} variantes generadas</span>
+                          </div>
+                          <span className="text-xs text-white font-mono bg-emerald-900/60 px-2 py-0.5 rounded tabular-nums">
+                            -{selectedOptimizedImage.totalSavingsPercent}%
+                          </span>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         {PRESET_IMAGES.map((img) => (
@@ -879,17 +936,18 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                               setSelectedImage(img.url);
                               setImageCaption(img.defaultCaption);
                               setCustomImageUrl('');
+                              setSelectedOptimizedImage(undefined);
                             }}
-                            className={`p-1 text-left transition-colors cursor-pointer border ${
+                            className={`p-1.5 text-left transition-colors cursor-pointer border rounded-md ${
                               selectedImage === img.url && !customImageUrl
-                                ? 'border-white'
-                                : 'border-white/10 opacity-60 hover:opacity-100'
+                                ? 'border-white bg-white/5'
+                                : 'border-white/10 opacity-60 hover:opacity-100 hover:border-white/30'
                             }`}
                           >
-                            <div className="aspect-[16/9] w-full overflow-hidden mb-1">
+                            <div className="aspect-[16/9] w-full overflow-hidden mb-1 rounded">
                               <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
                             </div>
-                            <div className="text-[10px] font-mono truncate text-neutral-300">{img.label}</div>
+                            <div className="text-[11px] font-sans truncate text-neutral-300 font-medium">{img.label}</div>
                           </button>
                         ))}
                       </div>
@@ -897,9 +955,12 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                       <input
                         type="url"
                         value={customImageUrl}
-                        onChange={(e) => setCustomImageUrl(e.target.value)}
+                        onChange={(e) => {
+                          setCustomImageUrl(e.target.value);
+                          setSelectedOptimizedImage(undefined);
+                        }}
                         placeholder="O URL de imagen..."
-                        className="w-full bg-black border-b border-white/15 pb-1 text-xs text-white focus:outline-none focus:border-white mb-2"
+                        className="w-full bg-black border-b border-white/15 pb-1 text-xs text-white focus:outline-none focus:border-white mb-2 font-sans"
                       />
 
                       <input
@@ -907,7 +968,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                         value={imageCaption}
                         onChange={(e) => setImageCaption(e.target.value)}
                         placeholder="Pie de foto descriptivo..."
-                        className="w-full bg-black border-b border-white/15 pb-1 text-xs text-neutral-400 focus:outline-none focus:border-white"
+                        className="w-full bg-black border-b border-white/15 pb-1 text-xs text-neutral-400 focus:outline-none focus:border-white font-sans"
                       />
                     </div>
 
@@ -963,6 +1024,16 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* TAB CONTENT: OPTIMIZADOR AVIF & CLOUDFLARE R2 */}
+      {activeTab === 'images' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
+          <ImageOptimizationStudio
+            onSelectForArticle={handleSelectOptimizedImageForArticle}
+            currentArticleTitle={title || undefined}
+          />
         </div>
       )}
 

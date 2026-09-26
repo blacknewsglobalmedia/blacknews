@@ -3,45 +3,55 @@
 @layer base {
   :root {
     --bg-amoled: #000000;
-    --border-hairline: rgba(255, 255, 255, 0.12);
-  }
-
-  /* Ultra minimalista: estricto cero bordes redondeados */
-  *, *::before, *::after {
-    border-radius: 0px !important;
+    --border-hairline: rgba(255, 255, 255, 0.08);
   }
 
   html, body {
     background-color: #000000;
     color: #EDEDED;
-    font-family: 'Lexend', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: -0.015em;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   /* Custom minimal monochrome scrollbar */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: #000000;
   }
   ::-webkit-scrollbar-thumb {
     background: #27272a;
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
     background: #52525b;
   }
 }
 
-/* Custom drop cap */
+/* Primary Brand Headline Typography with Lexend */
+.font-headline {
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: -0.03em;
+}
+
+/* Primary Sans Font Utility */
+.font-sans {
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Drop Cap with Lexend */
 .editorial-drop-cap::first-letter {
   float: left;
+  font-family: 'Lexend', sans-serif;
   font-size: 3.8rem;
   line-height: 0.82;
-  padding-right: 0.65rem;
-  padding-top: 0.2rem;
-  font-weight: 500;
+  padding-right: 0.6rem;
+  padding-top: 0.15rem;
+  font-weight: 600;
   color: #FFFFFF;
 }
