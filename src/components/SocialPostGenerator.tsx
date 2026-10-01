@@ -206,9 +206,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
+  const [recordingPaused, setRecordingPaused] = useState(false);
   const [videoQuality, setVideoQuality] = useState<'social' | 'compact' | 'hq'>('social');
   const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm'>('mp4');
-  const [maxVideoDuration, setMaxVideoDuration] = useState<number>(10); // 5s, 10s, 15s or 0 (full)
+  const [maxVideoDuration, setMaxVideoDuration] = useState<number>(0); // 5s, 10s, 15s, 30s, 60s or 0 (full)
   const [exportedVideoSize, setExportedVideoSize] = useState<string | null>(null);
   const [videoSpeed, setVideoSpeed] = useState<number>(1.0);
   const [videoDuration, setVideoDuration] = useState<number>(0);
@@ -247,6 +248,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  // Segundos reales que saldrán en la exportación de video (trim + duración
+  // máxima + velocidad). Se muestra antes y durante la grabación para que
+  // nunca sorprenda un clip más corto que el original.
+  const exportClipSeconds = (() => {
+    if (mediaType !== 'video' || !(videoDuration > 0)) return null;
+    const duration = videoDuration;
+    const s = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
+    let e = trimEnd > s && duration > 0 ? Math.min(trimEnd, duration) : duration;
+    if (maxVideoDuration > 0) e = Math.min(e, s + maxVideoDuration * videoSpeed);
+    if (!(e > s)) return null;
+    return Math.round(((e - s) / videoSpeed) * 10) / 10;
+  })();
 
   // Toggle country selection
   const handleToggleCountry = (country: CountryItem) => {
@@ -634,16 +648,43 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   ): Promise<void> => {
     const W = 1080;
     const H = 1350;
-    targetCanvas.width = W;
-    targetCanvas.height = H;
-    const ctx = targetCanvas.getContext('2d');
-    if (!ctx) return;
 
+    // 1) Todo el trabajo asíncrono ANTES de tocar el lienzo: si esperamos fuentes
+    //    o banderas despejándolo, el capturador del grabador de video puede leer un
+    //    fotograma a medio pintar (parpadeos, "rayas" y macrobloques en el archivo).
     if (document.fonts) {
       await document.fonts.ready;
     }
+    const flagsData = cachedFlags || await Promise.all(
+      selectedCountries.map(async (c) => {
+        const img = countryFormat !== 'names' ? await loadFlagImage(c.code) : null;
+        const text = countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase();
+        return { code: c.code, img, text };
+      })
+    );
 
-    // 1. Background
+    // 2) Lienzo y estado de forma síncrona: solo redimensionar si hace falta
+    //    (reasignar el tamaño reinicia el bitmap y rearmada la capa capturada)
+    //    y de ahí en adelante no se vuelve a esperar nada antes de dibujar.
+    if (targetCanvas.width !== W) targetCanvas.width = W;
+    if (targetCanvas.height !== H) targetCanvas.height = H;
+    const ctx = targetCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+    ctx.letterSpacing = '0px';
+
+    // 3. Background
     if (isOverlayOnly) {
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = '#000000';
@@ -663,14 +704,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.textBaseline = 'top';
     const catUpper = category.trim().toUpperCase();
     const maxTextWidth = contentWidth - 65; // Leaves space for at least 45px line
-
-    const flagsData = cachedFlags || await Promise.all(
-      selectedCountries.map(async (c) => {
-        const img = countryFormat !== 'names' ? await loadFlagImage(c.code) : null;
-        const text = countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase();
-        return { code: c.code, img, text };
-      })
-    );
 
     let curHeaderSize = autoFitHeader ? 20 : headerSize;
     let curLetterSpacing = 2.0;
@@ -825,12 +858,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     curY += 40;
 
     // 5. Draw Media (Image or Video Frame)
-    const mediaTopY = Math.max(curY, 520);
+    // Entero a propósito: una y fraccional deja una costura antialias de 1 px
+    // entre el fondo negro y el video (la "raya" del borde superior).
+    const mediaTopY = Math.round(Math.max(curY, 520));
     const mediaHeight = H - mediaTopY;
 
     if (mediaElement && !isOverlayOnly) {
       ctx.save();
-      ctx.filter = getCanvasFilterString();
+      const canvasFilter = getCanvasFilterString();
+      // Identidad (brillo/contraste al 100%): saltarnos ctx.filter acelera mucho
+      // el dibujo por fotograma y evita el filo que el filtro deja en los bordes.
+      if (canvasFilter !== 'brightness(1.00) contrast(1.00)') {
+        ctx.filter = canvasFilter;
+      }
 
       const elW = (mediaElement as HTMLVideoElement).videoWidth || (mediaElement as HTMLImageElement).naturalWidth || 1280;
       const elH = (mediaElement as HTMLVideoElement).videoHeight || (mediaElement as HTMLImageElement).naturalHeight || 720;
@@ -1084,6 +1124,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return { mimeType: '', ext: 'webm' };
     };
 
+    // PREFLIGHT de cadencia: cuando Chrome deja de componer la ventana (pestaña
+    // en segundo plano, ventana tapada o minimizada) rAF cae a ~1 Hz y la
+    // grabación saldría congelada a 1 fotograma por segundo. Medimos antes de
+    // empezar y nos negamos a grabar en ese estado.
+    const preFps = await new Promise<number>((resolve) => {
+      let frames = 0;
+      let alive = true;
+      const loop = () => {
+        frames += 1;
+        if (alive) requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      window.setTimeout(() => {
+        alive = false;
+        resolve((frames * 1000) / 700);
+      }, 700);
+    });
+    if (preFps < 12) {
+      showToast(
+        'La pestaña del navegador está en segundo plano y el vídeo saldría congelado. Vuelve a la pestaña de BlackNews y pulsa Exportar de nuevo.'
+      );
+      return;
+    }
+
+    // Pista viva del capturador: se libera en `finally` aunque falle a mitad
+    // de grabación (si no, el canvas seguiría capturando en segundo plano).
+    let liveStream: MediaStream | null = null;
+    let removeVisibilityListener: (() => void) | null = null;
+
     try {
       setIsRecordingVideo(true);
       setRecordingProgress(2);
@@ -1121,15 +1190,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       video.loop = false;
       video.playbackRate = videoSpeed;
       video.muted = isMuted;
-      video.currentTime = start;
-      await new Promise<void>((resolve) => {
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
-          resolve();
-        };
-        video.addEventListener('seeked', onSeeked);
-        window.setTimeout(onSeeked, 1500);
-      });
+      // Solo buscar si hace falta: si ya está en `start`, el evento 'seeked'
+      // nunca llega y estaríamos esperando el timeout entero antes de grabar.
+      if (Math.abs(video.currentTime - start) > 0.05) {
+        video.currentTime = start;
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const onSeeked = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener('seeked', onSeeked);
+            resolve();
+          };
+          video.addEventListener('seeked', onSeeked);
+          // En archivos grandes el seek puede tardar: si no llega en 3 s, no
+          // bloqueamos la grabación (el tick ignora saltos durante el arranque).
+          window.setTimeout(onSeeked, 3000);
+        });
+      }
 
       // Audio: el elemento se enruta por WebAudio una sola vez y se reutiliza
       let audioTrack: MediaStreamTrack | null = null;
@@ -1154,12 +1232,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingProgress(14);
 
       const stream = canvas.captureStream(30);
+      liveStream = stream;
       if (audioTrack) stream.addTrack(audioTrack);
       const videoBitsPerSecond =
-        videoQuality === 'hq' ? 12_000_000 : videoQuality === 'compact' ? 3_000_000 : 7_000_000;
+        videoQuality === 'hq' ? 6_000_000 : videoQuality === 'compact' ? 1_500_000 : 3_000_000;
       const recorder = new MediaRecorder(stream, {
         ...(mimeType ? { mimeType } : {}),
         videoBitsPerSecond,
+        audioBitsPerSecond: 96_000,
       });
 
       const chunks: BlobPart[] = [];
@@ -1181,7 +1261,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let rafId = 0;
       let stopped = false;
       let lastPct = 14;
-      const hardDeadline = performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
+      let lastProgressAt = 0;
+      let hardDeadline = performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
       const stopRecording = () => {
         if (stopped) return;
         stopped = true;
@@ -1189,13 +1270,56 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           if (recorder.state !== 'inactive') recorder.stop();
         } catch {}
-        stream.getVideoTracks().forEach((track) => track.stop());
+        // ATENCIÓN: las pistas NO se cortan aquí. Hacerlo justo después de
+        // recorder.stop() truncaba el último chunk (fin del vídeo roto/cortado);
+        // se liberan cuando ya tenemos el blob y en `finally`.
         try {
           video.pause();
           video.loop = true;
         } catch {}
         setIsVideoPlaying(false);
       };
+
+      // PROTECCIÓN DE SEGUNDO PLANO: si la ventana deja de componer (rAF cae a
+      // ~1 Hz o se detiene al ocultar la pestaña) pausamos el vídeo —el tiempo
+      // de contenido deja de avanzar, así que no se pierde nada— y reanudamos
+      // cuando la pestaña vuelve. Sin esto la exportación sale a 1 fps y rota.
+      let lastTickAt = performance.now();
+      let slowTicks = 0;
+      let fastTicks = 0;
+      let pausedForBg = false;
+      let pausedAt = 0;
+      const pauseForBackground = () => {
+        if (pausedForBg || stopped) return;
+        pausedForBg = true;
+        pausedAt = performance.now();
+        try {
+          video.pause();
+        } catch {}
+        setIsVideoPlaying(false);
+        setRecordingPaused(true);
+      };
+      const resumeFromBackground = () => {
+        if (!pausedForBg || stopped) return;
+        pausedForBg = false;
+        fastTicks = 0;
+        slowTicks = 0;
+        // El tiempo pausado no cuenta para el tope de seguridad
+        hardDeadline += performance.now() - pausedAt;
+        lastTickAt = performance.now();
+        void video
+          .play()
+          .then(() => {
+            if (!stopped) setIsVideoPlaying(true);
+          })
+          .catch(() => {});
+        setRecordingPaused(false);
+      };
+      const onVisibility = () => {
+        if (document.visibilityState === 'hidden') pauseForBackground();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      removeVisibilityListener = () => document.removeEventListener('visibilitychange', onVisibility);
 
       isRecordingRef.current = true;
       recorder.start(250);
@@ -1205,16 +1329,43 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let maxT = start;
       const tick = () => {
         void renderToCanvas(canvas, video, cachedFlags);
+        const now = performance.now();
+        const dt = now - lastTickAt;
+        lastTickAt = now;
+
+        // Recuperación tras estar en segundo plano: exigen dos ticks rápidos
+        // segundos para no flapping con ráfagas aisladas.
+        if (pausedForBg) {
+          fastTicks = dt < 250 ? fastTicks + 1 : 0;
+          if (fastTicks >= 2) resumeFromBackground();
+          rafId = requestAnimationFrame(tick);
+          return;
+        }
+
+        // Cadencia insostenible (>500 ms entre ticks) = ventana sin componer
+        slowTicks = dt > 500 ? slowTicks + 1 : 0;
+        if (slowTicks >= 2 || dt > 1500) {
+          pauseForBackground();
+          rafId = requestAnimationFrame(tick);
+          return;
+        }
+        slowTicks = 0;
+
         const t = video.currentTime;
         if (t > maxT) maxT = t;
         const pct = Math.min(99, Math.round(((t - start) / Math.max(0.1, end - start)) * 100));
-        if (pct > lastPct) {
+        // Progreso limitado a ~4/s: re-renderizar este componente 10 veces por
+        // segundo mientras graba era una causa directa de tirones en el archivo.
+        if (pct > lastPct && now - lastProgressAt > 250) {
           lastPct = pct;
+          lastProgressAt = now;
           setRecordingProgress(pct);
         }
         // Fin natural, clip terminado o rebobinado (si el preview volviera a
-        // iniciar el bucle). El reinicio por trimEnd queda desactivado arriba.
-        if (t >= end - 0.02 || video.ended || t < maxT - 0.3 || performance.now() > hardDeadline) {
+        // iniciar el bucle). El reinicio por trimEnd queda desactivado arriba;
+        // la gracia de 0,5 s evita cortar por un seek de arranque tardío.
+        const rebobinado = t < maxT - 0.3 && maxT > start + 0.5;
+        if (t >= end - 0.02 || video.ended || rebobinado || now > hardDeadline) {
           setRecordingProgress(99);
           stopRecording();
           return;
@@ -1224,6 +1375,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       rafId = requestAnimationFrame(tick);
 
       const blob = await finished;
+      // El grabador ya entregó su último chunk: ahora sí se sueltan las pistas.
+      stream.getVideoTracks().forEach((track) => track.stop());
       const url = URL.createObjectURL(blob);
       const sizeFormatted =
         blob.size < 1024 * 1024
@@ -1241,6 +1394,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       isRecordingRef.current = false;
       setIsRecordingVideo(false);
       setRecordingProgress(0);
+      setRecordingPaused(false);
+      removeVisibilityListener?.();
+      liveStream?.getVideoTracks().forEach((track) => track.stop());
     }
   };
 
@@ -2175,7 +2331,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>Optimización para X, Instagram & Meta</span>
                     </label>
                     <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-                      {videoQuality === 'social' ? '2.2 Mbps · ~2 MB' : videoQuality === 'compact' ? '1.2 Mbps · ~1 MB' : '3.8 Mbps · ~4 MB'}
+                      {videoQuality === 'social' ? '3 Mbps · ~4 MB / 10 s' : videoQuality === 'compact' ? '1.5 Mbps · ~2 MB / 10 s' : '6 Mbps · ~7.5 MB / 10 s'}
                     </span>
                   </div>
 
@@ -2221,7 +2377,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     >
                       <div className="text-[11px] font-bold uppercase tracking-wider">Master HQ</div>
                       <div className={`text-[10px] ${videoQuality === 'hq' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
-                        Bitrate alto (3.8M)
+                        Bitrate alto (6M)
                       </div>
                     </button>
                   </div>
@@ -2803,6 +2959,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
+              {mediaType === 'video' && exportClipSeconds !== null && (
+                <>
+                  Se exportarán <strong className="text-white font-semibold">{exportClipSeconds} s</strong> de
+                  video{maxVideoDuration > 0 ? ` (duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»)` : ''}.
+                  <br />
+                </>
+              )}
               Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp.
               {mediaType === 'video' && ' El video se compone en tu navegador: no se sube a ningún servidor.'}
             </p>
@@ -2813,7 +2976,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       {/* Video Export in Progress Dialog */}
       {isRecordingVideo && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-neutral-950 border border-white/20 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <Film className="w-6 h-6 animate-pulse" />
@@ -2824,10 +2987,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 Exportando Video BlackNews 4:5
               </h3>
               <p className="text-xs text-neutral-400">
-                {recordingProgress < 30 && 'Preparando overlay tipográfico 1080×1350...'}
-                {recordingProgress >= 30 && recordingProgress < 65 && 'Componiendo fotogramas en tu navegador...'}
-                {recordingProgress >= 65 && recordingProgress < 90 && 'Grabando video y audio en tiempo real...'}
-                {recordingProgress >= 90 && 'Finalizando archivo y descargando...'}
+                {recordingPaused
+                  ? '⏸ Pausada: vuelve a la pestaña de BlackNews para continuar.'
+                  : (
+                  <>
+                    {recordingProgress < 30 && 'Preparando overlay tipográfico 1080×1350...'}
+                    {recordingProgress >= 30 && recordingProgress < 65 && 'Componiendo fotogramas en tu navegador...'}
+                    {recordingProgress >= 65 && recordingProgress < 90 && 'Grabando video y audio en tiempo real...'}
+                    {recordingProgress >= 90 && 'Finalizando archivo y descargando...'}
+                  </>
+                  )}
               </p>
             </div>
 
@@ -2840,7 +3009,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 />
               </div>
               <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
-                <span>1080 × 1350 px · grabación local</span>
+                <span>
+                  1080 × 1350 px{exportClipSeconds !== null ? ` · ${exportClipSeconds} s` : ''} · grabación local
+                </span>
                 <span className="font-bold text-white">{recordingProgress}%</span>
               </div>
             </div>
