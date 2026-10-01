@@ -11,7 +11,7 @@ import {
   ChevronRight 
 } from 'lucide-react';
 import { CategoryId } from '../types/news';
-import { RedactorProfile } from '../types/auth';
+import { RedactorProfile, GUEST_USER_ID } from '../types/auth';
 
 interface TopBarProps {
   categories?: string[];
@@ -71,6 +71,17 @@ export const TopBar: React.FC<TopBarProps> = ({
   // Basic readers (LECTOR) and visitors must NOT see the redacción button or internal tools
   const canAccessEditorialStudio = Boolean(currentUser && currentUser.role !== 'LECTOR');
 
+  // Account chip: never shows role jargon to readers — guests see "ACCEDER"
+  const isSignedIn = Boolean(currentUser && currentUser.id !== GUEST_USER_ID);
+  const accountLabel = !isSignedIn
+    ? 'ACCEDER'
+    : currentUser && currentUser.role !== 'LECTOR'
+      ? currentUser.role
+      : 'MI CUENTA';
+  const accountTitle = isSignedIn && currentUser
+    ? `Cuenta: ${currentUser.name} (${currentUser.role})`
+    : 'Acceder con tu cuenta de Google';
+
   const googleIconSvg = (
     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
       <path
@@ -127,7 +138,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Main Bar: resilient single row with zero horizontal collapse */}
+      {/* Main Bar: brand + actions. Both sides are shrink-0 and the row matches
+          the content container width, so nothing can spill past the side margins */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
         {/* Left: Brand with Editorial Authority */}
         <div className="flex items-center shrink-0">
@@ -139,29 +151,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-white ml-1 inline-block"></span>
           </button>
         </div>
-
-        {/* Center: Desktop Navigation Links (Only on larger screens) */}
-        <nav className="hidden xl:flex items-center gap-5 2xl:gap-7 text-xs font-sans font-medium tracking-wide">
-          {categories.map((cat) => {
-            const isActive = selectedCategory === cat.id && !isStudioOpen;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryClick(cat.id)}
-                className={`transition-colors py-1 cursor-pointer relative whitespace-nowrap ${
-                  isActive
-                    ? 'text-white font-semibold'
-                    : 'text-neutral-400 hover:text-white'
-                }`}
-              >
-                {cat.label}
-                {isActive && (
-                  <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
 
         {/* Right: Streamlined Action Cluster */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
@@ -187,16 +176,10 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               onClick={onOpenGoogleAuth}
               className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
-              title={currentUser ? `Cuenta: ${currentUser.name} (${currentUser.role})` : 'Acceso de usuarios'}
+              title={accountTitle}
             >
               {googleIconSvg}
-              {currentUser ? (
-                <span className="text-[11px] font-semibold text-neutral-200">
-                  {currentUser.role}
-                </span>
-              ) : (
-                <span className="text-[11px]">ACCESO</span>
-              )}
+              <span className="text-[11px] font-semibold text-neutral-200">{accountLabel}</span>
             </button>
           )}
 
@@ -236,6 +219,37 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Desktop category strip: its own row, spanning exactly the same width as
+          the page content (max-w-7xl + px-4/6). Centred when it fits, horizontally
+          scrollable when there are many categories — it can never overflow. */}
+      <nav className="hidden xl:block border-t border-white/5" aria-label="Secciones editoriales">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="no-scrollbar overflow-x-auto">
+            <div className="flex items-center gap-5 2xl:gap-7 w-max mx-auto h-10 text-xs font-sans font-medium tracking-wide">
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.id && !isStudioOpen;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryClick(cat.id)}
+                    className={`h-full flex items-center transition-colors cursor-pointer relative whitespace-nowrap ${
+                      isActive
+                        ? 'text-white font-semibold'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    {cat.label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </nav>
 
       {/* Slide-out / Dropdown Mobile & Tablet Menu */}
       {isMobileMenuOpen && (

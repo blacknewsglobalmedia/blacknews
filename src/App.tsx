@@ -19,7 +19,7 @@ import { GoogleAuthModal } from './components/GoogleAuthModal';
 import { Footer } from './components/Footer';
 import { REPORTS, CATEGORIES, FLASH_NEWS } from './data/newsData';
 import { Report, CategoryId, FlashNews } from './types/news';
-import { RedactorProfile, RedactorRole } from './types/auth';
+import { RedactorProfile, RedactorRole, GUEST_USER_ID } from './types/auth';
 import { FrontPageLayoutConfig, AutomationPreset } from './types/layout';
 import { AdCampaign, INITIAL_AD_CAMPAIGNS } from './types/ads';
 import { DEFAULT_LAYOUT_CONFIG, computeLayoutPreset } from './utils/layoutUtils';
@@ -56,7 +56,7 @@ const enforceOwnerOnlyAdmin = (user: RedactorProfile): RedactorProfile => {
 
 // Unauthenticated visitor: basic reader, no access to the internal panel
 const GUEST_USER: RedactorProfile = {
-  id: 'usr-guest',
+  id: GUEST_USER_ID,
   name: 'Lector Invitado',
   email: 'lector.invitado@blacknews.media',
   role: 'LECTOR',

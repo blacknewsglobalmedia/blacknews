@@ -39,6 +39,15 @@
   letter-spacing: -0.03em;
 }
 
+/* Horizontal category strip: scrollable on overflow, without a visible scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Primary Sans Font Utility */
 .font-sans {
   font-family: 'Lexend', -apple-system, BlinkMacSystemFont, sans-serif;

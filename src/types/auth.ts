@@ -1,5 +1,8 @@
 export type RedactorRole = 'ADMIN' | 'MODERADOR' | 'REDACTOR' | 'LECTOR';
 
+/** Sentinel id of the unauthenticated visitor session ("Lector Invitado"). */
+export const GUEST_USER_ID = 'usr-guest';
+
 export interface UserPermissions {
   canAccessInternalMedia: boolean;
   canManageLayout: boolean;
