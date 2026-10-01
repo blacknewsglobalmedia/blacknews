@@ -234,6 +234,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hiddenCanvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // WebAudio graph for the preview video (created on first export with sound and
+  // reused afterwards: a media element can only be routed through one source node)
+  const audioGraphRef = useRef<{ ctx: AudioContext; dest: MediaStreamAudioDestinationNode } | null>(null);
+  // true mientras el grabador de video controla el clip (desactiva el rebobinado
+  // del preview, que si no reinicia en trimStart justo al llegar a trimEnd)
+  const isRecordingRef = useRef(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const uploadedVideoFileRef = useRef<File | null>(null);
 
@@ -1041,110 +1047,200 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Helper to generate transparent 1080x1350 overlay PNG (Top text block, branding, footer, gradients)
-  const generateOverlayPngBlob = async (): Promise<Blob> => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1350;
-    await renderToCanvas(canvas, undefined, undefined, true);
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => resolve(blob!), 'image/png');
-    });
-  };
-
-  // Record and Export Video with Server-side FFmpeg (High-speed, 100% audio sync, zero frame drops)
+  // ─── Exportación de video 4:5 100% en el navegador ─────────────────────────
+  // El post (frame del video + overlay tipográfico) se graba directamente desde
+  // el canvas compositor con MediaRecorder. Nada se sube a un servidor: el video
+  // original no sale del equipo del usuario y el proceso no consume recursos
+  // serverless (el antiguo endpoint FFmpeg /api/video/* sigue retirado → 410).
   const handleExportVideo = async () => {
     if (mediaType !== 'video') return;
+    const video = videoRef.current;
+    const canvas = hiddenCanvasRef.current;
+    if (!video || !canvas) {
+      showToast('Carga un video antes de exportar.');
+      return;
+    }
+    if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+      showToast('Tu navegador no admite exportación de video. Prueba con Chrome o Edge.');
+      return;
+    }
+
+    // Prefiere el formato elegido por el usuario y cae a cualquier otro soportado
+    const pickCodec = (): { mimeType: string; ext: 'mp4' | 'webm' } => {
+      const mp4 = [
+        'video/mp4;codecs=avc1.640028,mp4a.40.2',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
+      ];
+      const webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+      const groups = videoFormat === 'mp4' ? [mp4, webm] : [webm, mp4];
+      for (const group of groups) {
+        for (const mime of group) {
+          if (MediaRecorder.isTypeSupported(mime)) {
+            return { mimeType: mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' };
+          }
+        }
+      }
+      return { mimeType: '', ext: 'webm' };
+    };
 
     try {
       setIsRecordingVideo(true);
+      setRecordingProgress(2);
+
+      const { mimeType, ext } = pickCodec();
+      const formatNote =
+        videoFormat === 'mp4' && ext !== 'mp4'
+          ? ' Este navegador no graba MP4: se exportó en WebM.'
+          : '';
+
+      // Ventana de recorte en tiempo de origen (trim + duración máxima + velocidad)
+      const duration =
+        Number.isFinite(video.duration) && video.duration > 0 ? video.duration : videoDuration;
+      const start = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
+      let end = trimEnd > start && duration > 0 ? Math.min(trimEnd, duration) : duration;
+      if (maxVideoDuration > 0) end = Math.min(end, start + maxVideoDuration * videoSpeed);
+      if (!(end > start)) {
+        showToast('El recorte de video no es válido: revisa inicio y fin.');
+        return;
+      }
+
+      // Calentamiento: tipografías y banderas una sola vez, para que cada fotograma
+      // grabado sea solo trabajo de canvas (sin red)
+      const cachedFlags = await Promise.all(
+        selectedCountries.map(async (c) => ({
+          code: c.code,
+          img: countryFormat !== 'names' ? await loadFlagImage(c.code) : null,
+          text: countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase(),
+        }))
+      );
+      await renderToCanvas(canvas, video, cachedFlags);
       setRecordingProgress(10);
 
-      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const filename = `blacknews-video-${slug || '4x5'}-${Date.now()}.mp4`;
-      setExportVideoFileName(filename);
-
-      // 1. Resolve video source blob or URL
-      let videoBlob: Blob | null = null;
-      if (uploadedVideoFileRef.current) {
-        videoBlob = uploadedVideoFileRef.current;
-      } else if (mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:')) {
-        try {
-          const resp = await fetch(mediaSrc);
-          if (resp.ok) videoBlob = await resp.blob();
-        } catch (e) {
-          console.warn('Could not fetch local blob URL directly', e);
-        }
-      }
-
-      // If remote HTTP/HTTPS, attempt to fetch blob; if CORS blocked, the backend downloads it via videoUrl
-      if (!videoBlob && (mediaSrc.startsWith('http://') || mediaSrc.startsWith('https://') || mediaSrc.startsWith('/'))) {
-        try {
-          const resp = await fetch(mediaSrc);
-          if (resp.ok) videoBlob = await resp.blob();
-        } catch {
-          // Will pass videoUrl to server
-        }
-      }
-
-      setRecordingProgress(25);
-
-      // 2. Generate pristine 1080x1350 transparent overlay PNG
-      const overlayBlob = await generateOverlayPngBlob();
-      setRecordingProgress(45);
-
-      // 3. Assemble multipart payload
-      const formData = new FormData();
-      if (videoBlob) {
-        formData.append('video', videoBlob, 'source-video.mp4');
-      } else {
-        formData.append('videoUrl', mediaSrc);
-      }
-      formData.append('overlay', overlayBlob, 'overlay.png');
-      formData.append('trimStart', String(trimStart));
-      formData.append('trimEnd', String(trimEnd));
-      formData.append('maxDuration', String(maxVideoDuration));
-      formData.append('videoSpeed', String(videoSpeed));
-      formData.append('isMuted', String(isMuted));
-      formData.append('filter', filter);
-      formData.append('brightness', String(brightness));
-      formData.append('contrast', String(contrast));
-      formData.append('filename', filename);
-
-      setRecordingProgress(65);
-      showToast('⚡ Procesando video en servidor con FFmpeg...');
-
-      const response = await fetch('/api/video/compose-post', {
-        method: 'POST',
-        body: formData,
+      video.pause();
+      video.loop = false;
+      video.playbackRate = videoSpeed;
+      video.muted = isMuted;
+      video.currentTime = start;
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        video.addEventListener('seeked', onSeeked);
+        window.setTimeout(onSeeked, 1500);
       });
 
-      setRecordingProgress(90);
-
-      if (response.ok) {
-        const finalBlob = await response.blob();
-        const url = URL.createObjectURL(finalBlob);
-        const sizeInMb = (finalBlob.size / (1024 * 1024)).toFixed(1);
-        const sizeFormatted = finalBlob.size < 1024 * 1024
-          ? `${Math.round(finalBlob.size / 1024)} KB`
-          : `${sizeInMb} MB`;
-        setExportedVideoSize(sizeFormatted);
-        setExportVideoFileName(filename);
-        setExportedVideoUrl(url);
-        setIsRecordingVideo(false);
-        setRecordingProgress(100);
-        triggerDownload(url, filename);
-        showToast(`¡Video MP4 4:5 exportado con éxito (${sizeFormatted})!`);
-        return;
-      } else {
-        const errJson = await response.json().catch(() => null);
-        throw new Error(errJson?.error || `Error en servidor: ${response.statusText}`);
+      // Audio: el elemento se enruta por WebAudio una sola vez y se reutiliza
+      let audioTrack: MediaStreamTrack | null = null;
+      if (!isMuted) {
+        try {
+          let graph = audioGraphRef.current;
+          if (!graph) {
+            const audioCtx = new AudioContext();
+            const source = audioCtx.createMediaElementSource(video);
+            const dest = audioCtx.createMediaStreamDestination();
+            source.connect(dest);
+            source.connect(audioCtx.destination);
+            graph = { ctx: audioCtx, dest };
+            audioGraphRef.current = graph;
+          }
+          if (graph.ctx.state === 'suspended') await graph.ctx.resume();
+          audioTrack = graph.dest.stream.getAudioTracks()[0] ?? null;
+        } catch (audioErr) {
+          console.warn('Audio no disponible en la grabación:', audioErr);
+        }
       }
+      setRecordingProgress(14);
+
+      const stream = canvas.captureStream(30);
+      if (audioTrack) stream.addTrack(audioTrack);
+      const videoBitsPerSecond =
+        videoQuality === 'hq' ? 12_000_000 : videoQuality === 'compact' ? 3_000_000 : 7_000_000;
+      const recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond,
+      });
+
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      const finished = new Promise<Blob>((resolve, reject) => {
+        recorder.onstop = () =>
+          resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || 'video/webm' }));
+        recorder.addEventListener('error', (e) =>
+          reject((e as unknown as { error?: Error }).error ?? new Error('Error de grabación'))
+        );
+      });
+
+      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const filename = `blacknews-video-${slug || '4x5'}-${Date.now()}.${ext}`;
+      setExportVideoFileName(filename);
+
+      let rafId = 0;
+      let stopped = false;
+      let lastPct = 14;
+      const hardDeadline = performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
+      const stopRecording = () => {
+        if (stopped) return;
+        stopped = true;
+        cancelAnimationFrame(rafId);
+        try {
+          if (recorder.state !== 'inactive') recorder.stop();
+        } catch {}
+        stream.getVideoTracks().forEach((track) => track.stop());
+        try {
+          video.pause();
+          video.loop = true;
+        } catch {}
+        setIsVideoPlaying(false);
+      };
+
+      isRecordingRef.current = true;
+      recorder.start(250);
+      await video.play();
+      setIsVideoPlaying(true);
+
+      let maxT = start;
+      const tick = () => {
+        void renderToCanvas(canvas, video, cachedFlags);
+        const t = video.currentTime;
+        if (t > maxT) maxT = t;
+        const pct = Math.min(99, Math.round(((t - start) / Math.max(0.1, end - start)) * 100));
+        if (pct > lastPct) {
+          lastPct = pct;
+          setRecordingProgress(pct);
+        }
+        // Fin natural, clip terminado o rebobinado (si el preview volviera a
+        // iniciar el bucle). El reinicio por trimEnd queda desactivado arriba.
+        if (t >= end - 0.02 || video.ended || t < maxT - 0.3 || performance.now() > hardDeadline) {
+          setRecordingProgress(99);
+          stopRecording();
+          return;
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+
+      const blob = await finished;
+      const url = URL.createObjectURL(blob);
+      const sizeFormatted =
+        blob.size < 1024 * 1024
+          ? `${Math.round(blob.size / 1024)} KB`
+          : `${(blob.size / (1024 * 1024)).toFixed(1)} MB`;
+      setExportedVideoSize(sizeFormatted);
+      setExportedVideoUrl(url);
+      setRecordingProgress(100);
+      triggerDownload(url, filename);
+      showToast(`¡Video 4:5 exportado en tu navegador (${sizeFormatted})!${formatNote}`);
     } catch (err: any) {
       console.error('Error exportando video:', err);
+      showToast(err?.message || 'No se pudo exportar el video en el navegador.');
+    } finally {
+      isRecordingRef.current = false;
       setIsRecordingVideo(false);
       setRecordingProgress(0);
-      showToast(err.message || 'Error exportando video. Verifica el archivo o usa Capturar PNG.');
     }
   };
 
@@ -2541,6 +2637,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     }
                   }}
                   onTimeUpdate={(e) => {
+                    // Durante la exportación no se recorta: el límite lo marca el grabador
+                    if (isRecordingRef.current) return;
                     if (trimEnd > trimStart) {
                       if (e.currentTarget.currentTime >= trimEnd) {
                         e.currentTarget.currentTime = trimStart;
@@ -2618,15 +2716,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             
             {/* Primary: Export Video or Export PNG depending on mediaType */}
             {mediaType === 'video' ? (
-              // Exportación de video retirada: el endpoint /api/video/* devuelve 410
-              // (el material audiovisual se publica directamente en YouTube).
-              <div
-                className="w-full py-3.5 bg-neutral-900/70 border border-white/10 text-neutral-400 rounded-xl flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wider text-center"
-                title="La exportación de video en servidor fue retirada: sube el video a YouTube."
+              // La exportación se compone íntegramente en el navegador (MediaRecorder
+              // sobre el canvas compositor): sin servidor, sin subir el archivo.
+              <button
+                type="button"
+                disabled={isRecordingVideo}
+                onClick={handleExportVideo}
+                className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+                title="Se procesa en tu navegador: el video no se sube a ningún servidor"
               >
-                <Film className="w-4 h-4 text-neutral-500 shrink-0" />
-                <span>Exportación de video retirada · sube el video a YouTube</span>
-              </div>
+                <Film className="w-4 h-4" />
+                <span>
+                  {isRecordingVideo
+                    ? `Exportando video… ${recordingProgress}%`
+                    : 'Exportar Video 4:5 (en tu navegador)'}
+                </span>
+              </button>
             ) : (
               <button
                 type="button"
@@ -2699,6 +2804,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
               Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp.
+              {mediaType === 'video' && ' El video se compone en tu navegador: no se sube a ningún servidor.'}
             </p>
           </div>
 
@@ -2719,9 +2825,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </h3>
               <p className="text-xs text-neutral-400">
                 {recordingProgress < 30 && 'Preparando overlay tipográfico 1080×1350...'}
-                {recordingProgress >= 30 && recordingProgress < 65 && 'Componiendo capas de video con FFmpeg...'}
-                {recordingProgress >= 65 && recordingProgress < 90 && 'Sincronizando audio estéreo y optimizando fotogramas...'}
-                {recordingProgress >= 90 && 'Finalizando archivo MP4 y descargando...'}
+                {recordingProgress >= 30 && recordingProgress < 65 && 'Componiendo fotogramas en tu navegador...'}
+                {recordingProgress >= 65 && recordingProgress < 90 && 'Grabando video y audio en tiempo real...'}
+                {recordingProgress >= 90 && 'Finalizando archivo y descargando...'}
               </p>
             </div>
 
@@ -2734,13 +2840,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 />
               </div>
               <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
-                <span>1080 × 1350 px · H.264</span>
+                <span>1080 × 1350 px · grabación local</span>
                 <span className="font-bold text-white">{recordingProgress}%</span>
               </div>
             </div>
 
             <p className="text-[11px] text-neutral-500 leading-snug">
-              Procesamiento nativo acelerado en servidor sin pérdida de calidad ni desfase de audio.
+              Se compone y graba en tu equipo: el video no se sube a ningún servidor y no consume recursos de la web. La duración es la real del clip.
             </p>
           </div>
         </div>
