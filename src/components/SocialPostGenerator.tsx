@@ -234,6 +234,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hiddenCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Progreso de grabación escrito directo en el DOM: re-renderizar este
+  // componente durante la exportación provocaba picos de >100 ms (tirones).
+  const recBarRef = useRef<HTMLDivElement>(null);
+  const recPctRef = useRef<HTMLSpanElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   // WebAudio graph for the preview video (created on first export with sound and
   // reused afterwards: a media element can only be routed through one source node)
@@ -1327,8 +1331,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setIsVideoPlaying(true);
 
       let maxT = start;
+      let lastDrawVt = -1;
+      let lastPhase = 0;
       const tick = () => {
-        void renderToCanvas(canvas, video, cachedFlags);
         const now = performance.now();
         const dt = now - lastTickAt;
         lastTickAt = now;
@@ -1352,14 +1357,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         slowTicks = 0;
 
         const t = video.currentTime;
+        // Dibujar SOLO cuando el vídeo avanza: los renders redundantes a 60 Hz
+        // saturaban la CPU principal y dejaban menos margen al codificador.
+        if (t !== lastDrawVt) {
+          lastDrawVt = t;
+          void renderToCanvas(canvas, video, cachedFlags);
+        }
         if (t > maxT) maxT = t;
         const pct = Math.min(99, Math.round(((t - start) / Math.max(0.1, end - start)) * 100));
-        // Progreso limitado a ~4/s: re-renderizar este componente 10 veces por
-        // segundo mientras graba era una causa directa de tirones en el archivo.
+        // Progreso: escritura directa en el DOM (~4/s). React solo se entera al
+        // cruzar de tramo de mensaje (≤4 veces por exportación).
         if (pct > lastPct && now - lastProgressAt > 250) {
           lastPct = pct;
           lastProgressAt = now;
-          setRecordingProgress(pct);
+          if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
+          if (recBarRef.current) recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+          const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
+          if (phase !== lastPhase) {
+            lastPhase = phase;
+            setRecordingProgress(pct);
+          }
         }
         // Fin natural, clip terminado o rebobinado (si el preview volviera a
         // iniciar el bucle). El reinicio por trimEnd queda desactivado arriba;
@@ -3004,6 +3021,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <div className="space-y-1.5">
               <div className="w-full bg-neutral-900 rounded-full h-2.5 overflow-hidden border border-white/10">
                 <div 
+                  ref={recBarRef}
                   className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-300 rounded-full"
                   style={{ width: `${Math.max(5, recordingProgress)}%` }}
                 />
@@ -3012,7 +3030,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span>
                   1080 × 1350 px{exportClipSeconds !== null ? ` · ${exportClipSeconds} s` : ''} · grabación local
                 </span>
-                <span className="font-bold text-white">{recordingProgress}%</span>
+                <span ref={recPctRef} className="font-bold text-white">{recordingProgress}%</span>
               </div>
             </div>
 
