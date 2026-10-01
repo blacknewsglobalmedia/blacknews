@@ -1,5 +1,8 @@
 {
-  "firestore": {
-    "rules": "firestore.rules"
-  }
+  "firestore": [
+    {
+      "database": "ai-studio-blacknews-3c9a8fba-e1a8-45fb-a85e-e02cc98425ea",
+      "rules": "firestore.rules"
+    }
+  ]
 }
