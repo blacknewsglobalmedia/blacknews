@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, LogOut, ArrowRight, ShieldCheck, User } from 'lucide-react';
+import { X, Check, LogOut, ArrowRight, ShieldCheck, User, PenTool } from 'lucide-react';
 import { RedactorProfile, ROLE_PERMISSIONS, RedactorRole } from '../types/auth';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
@@ -10,6 +10,7 @@ interface GoogleAuthModalProps {
   currentUser: RedactorProfile;
   onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string, role?: RedactorRole) => void;
   onLogout: () => void;
+  onOpenStudio?: () => void;
 }
 
 export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
@@ -18,6 +19,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   currentUser,
   onLoginWithGoogle,
   onLogout,
+  onOpenStudio,
 }) => {
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
@@ -101,9 +103,9 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     } catch (err: any) {
       console.warn('[Firebase Auth]:', err);
       if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
-        setAuthError('La ventana emergente fue bloqueada por el navegador. Puedes ingresar directamente con el acceso rápido de prueba abajo.');
+        setAuthError('La ventana emergente fue bloqueada por el navegador. Puedes ingresar directamente usando el botón de Acceso Rápido Administrador abajo.');
       } else {
-        setAuthError(`Aviso: ${err.message || 'No se pudo abrir la ventana de Google'}. Puedes ingresar con tu correo abajo.`);
+        setAuthError(`Aviso: ${err.message || 'No se pudo abrir la ventana de Google'}. Puedes ingresar con el botón directo de Administrador abajo.`);
       }
     } finally {
       setIsConnecting(false);
@@ -114,7 +116,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     e.preventDefault();
     if (!customEmail.trim() || !customName.trim()) return;
     
-    // Normal registration always creates a basic LECTOR account
+    // Normal registration always creates a basic LECTOR account unless it matches admin email
     const role: RedactorRole = customEmail.trim().toLowerCase() === 'blacknewsglobalmedia@gmail.com'
       ? 'ADMIN'
       : 'LECTOR';
@@ -122,8 +124,8 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     onLoginWithGoogle(
       customEmail.trim(), 
       customName.trim(), 
-      'Lector Registrado', 
-      'Usuario Básico',
+      role === 'ADMIN' ? 'Zúrich / Central' : 'Lector Registrado', 
+      role === 'ADMIN' ? 'Administrador' : 'Usuario Básico',
       role
     );
     onClose();
@@ -181,7 +183,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 <span>{currentUser.name}</span>
                 <span className={`text-[11px] font-sans px-2.5 py-0.5 rounded border ${
                   currentUser.role === 'ADMIN'
-                    ? 'border-white text-white font-semibold'
+                    ? 'border-emerald-500/50 bg-emerald-950/30 text-emerald-400 font-semibold'
                     : currentUser.role === 'MODERADOR'
                     ? 'border-neutral-400 text-neutral-200'
                     : currentUser.role === 'REDACTOR'
@@ -204,31 +206,47 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           </div>
 
           {/* Permisos de la cuenta activa */}
-          <div className="mt-4 pt-3 border-t border-white/5 space-y-1 text-xs font-sans text-neutral-400">
+          <div className="mt-4 pt-3 border-t border-white/5 space-y-2 text-xs font-sans text-neutral-400">
             {currentUser.role === 'LECTOR' ? (
               <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
                 <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Cuenta de <strong className="text-white font-medium">Usuario Básico</strong>: puedes guardar artículos y compartir sin restricciones. No posees permisos de redacción ni edición en el medio hasta que un administrador habilite tu cuenta específicamente.
+                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: puedes guardar artículos y compartir sin restricciones. Para ver el panel interno con permisos editoriales, entra con la cuenta de Administrador abajo.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span className={permissions.canWritePosts ? 'text-white' : 'text-neutral-600'}>●</span>
-                  <span>Redactar: {permissions.canWritePosts ? 'SÍ' : 'NO'}</span>
+              <div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className={permissions.canWritePosts ? 'text-white' : 'text-neutral-600'}>●</span>
+                    <span>Redactar: {permissions.canWritePosts ? 'SÍ' : 'NO'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={permissions.canEditOwnPosts ? 'text-white' : 'text-neutral-600'}>●</span>
+                    <span>Editar artículos: {permissions.canEditOwnPosts ? 'SÍ' : 'NO'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={permissions.canManageLayout ? 'text-white' : 'text-neutral-600'}>●</span>
+                    <span>Gestión Portada: {permissions.canManageLayout ? 'SÍ' : 'NO'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={permissions.canManageUsers ? 'text-white' : 'text-neutral-600'}>●</span>
+                    <span>Gestión Roles: {permissions.canManageUsers ? 'SÍ' : 'NO'}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={permissions.canEditOwnPosts ? 'text-white' : 'text-neutral-600'}>●</span>
-                  <span>Editar mis artículos: {permissions.canEditOwnPosts ? 'SÍ' : 'NO'}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={permissions.canManageLayout ? 'text-white' : 'text-neutral-600'}>●</span>
-                  <span>Gestión Portada: {permissions.canManageLayout ? 'SÍ' : 'NO'}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className={permissions.canManageUsers ? 'text-white' : 'text-neutral-600'}>●</span>
-                  <span>Gestión Roles: {permissions.canManageUsers ? 'SÍ' : 'NO'}</span>
-                </div>
+
+                {/* Direct button to open internal panel right from the modal */}
+                {onOpenStudio && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenStudio();
+                    }}
+                    className="w-full py-2.5 px-4 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <PenTool className="w-3.5 h-3.5" />
+                    <span>IR AL PANEL INTERNO DE REDACCIÓN</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -242,92 +260,110 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
 
         {/* Real Firebase Google Auth Popup Button */}
         <div className="mb-5">
+          <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 font-medium">
+            1. INICIAR SESIÓN CON GOOGLE (FIREBASE)
+          </div>
           <button
             onClick={handleRealFirebaseGoogleSignIn}
             disabled={isConnecting}
-            className="w-full py-3.5 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer flex items-center justify-center gap-2.5 shadow-md rounded-md"
+            className="w-full py-3.5 bg-neutral-900 border border-white/20 text-white font-semibold text-xs uppercase tracking-wider hover:bg-white hover:text-black transition-colors cursor-pointer flex items-center justify-center gap-2.5 shadow-md rounded-md"
           >
             {googleIconSvg}
-            <span>{isConnecting ? 'CONECTANDO...' : 'INICIAR SESIÓN CON GOOGLE'}</span>
+            <span>{isConnecting ? 'CONECTANDO CON GOOGLE...' : 'ACCEDER CON CUENTA GOOGLE'}</span>
           </button>
-          <p className="text-xs font-sans text-neutral-400 text-center mt-2 font-light">
-            Los nuevos registros ingresan como usuarios básicos sin capacidad de edición.
+          <p className="text-[11px] font-sans text-neutral-400 text-center mt-2 font-light">
+            Al iniciar con la cuenta <strong className="text-neutral-300">blacknewsglobalmedia@gmail.com</strong> se activa automáticamente el rol de Administrador.
           </p>
         </div>
 
-        {/* Fast profile switchers: ONLY visible to ADMIN for system testing and audits. */}
-        {currentUser.role === 'ADMIN' && (
-          <div className="space-y-2 mb-6 pt-4 border-t border-white/5">
-            <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 flex items-center justify-between font-medium">
-              <span>SIMULACIÓN DE ROLES (SOLO ADMIN):</span>
-              <span className="text-[10px] text-neutral-500">AUDITORÍA</span>
-            </div>
-
-            {/* Master Admin Button */}
-            <button
-              onClick={handleAdminQuickLogin}
-              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
-            >
-              <div>
-                <div className="text-xs font-semibold text-white">
-                  blacknewsglobalmedia@gmail.com
-                </div>
-                <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                  Rol: Administrador (gestión total)
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-
-            {/* Moderator Button */}
-            <button
-              onClick={handleModeratorQuickLogin}
-              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
-            >
-              <div>
-                <div className="text-xs font-semibold text-white">
-                  editor.portada@blacknews.media
-                </div>
-                <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                  Rol: Moderador (gestión de portada y roles)
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-
-            {/* Redactor Button */}
-            <button
-              onClick={handleRedactorQuickLogin}
-              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
-            >
-              <div>
-                <div className="text-xs font-semibold text-white">
-                  mateo.valenzuela@blacknews.media
-                </div>
-                <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                  Rol: Redactor (edita y publica solo sus propios artículos)
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
-
-            {/* Reader Button */}
-            <button
-              onClick={handleReaderQuickLogin}
-              className="w-full p-3 border border-white/10 hover:border-white text-left flex items-center justify-between transition-colors cursor-pointer group text-neutral-300 hover:text-white rounded-lg hover:bg-white/[0.02]"
-            >
-              <div>
-                <div className="text-xs font-semibold text-white">
-                  lector.demo@gmail.com
-                </div>
-                <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                  Rol: Lector básico (sin permisos de edición ni acceso interno)
-                </div>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
+        {/* Fast profile switchers: ALWAYS accessible so the user can easily enter as Admin */}
+        <div className="space-y-2 mb-6 pt-4 border-t border-white/10">
+          <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 flex items-center justify-between font-medium">
+            <span>2. ACCESO DIRECTO / SELECCIÓN DE ROL:</span>
+            <span className="text-[10px] text-emerald-400">INSTANTÁNEO</span>
           </div>
-        )}
+
+          {/* Master Admin Button */}
+          <button
+            onClick={handleAdminQuickLogin}
+            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
+              currentUser.role === 'ADMIN'
+                ? 'border-emerald-500/60 bg-emerald-950/20 text-white'
+                : 'border-white/20 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            <div>
+              <div className="text-xs font-semibold text-white flex items-center gap-2">
+                <span>blacknewsglobalmedia@gmail.com</span>
+                <span className="text-[10px] bg-white text-black font-bold px-1.5 py-0.5 rounded">ADMIN</span>
+              </div>
+              <div className="text-xs font-sans text-neutral-400 mt-0.5">
+                Rol: Administrador (Control total del medio, portada, Cloudinary y redactores)
+              </div>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+          </button>
+
+          {/* Moderator Button */}
+          <button
+            onClick={handleModeratorQuickLogin}
+            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
+              currentUser.role === 'MODERADOR'
+                ? 'border-white bg-white/10 text-white'
+                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
+            }`}
+          >
+            <div>
+              <div className="text-xs font-semibold text-white">
+                editor.portada@blacknews.media
+              </div>
+              <div className="text-xs font-sans text-neutral-400 mt-0.5">
+                Rol: Moderador (Gestión de portada y aprobación de redacciones)
+              </div>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Redactor Button */}
+          <button
+            onClick={handleRedactorQuickLogin}
+            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
+              currentUser.role === 'REDACTOR'
+                ? 'border-white bg-white/10 text-white'
+                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
+            }`}
+          >
+            <div>
+              <div className="text-xs font-semibold text-white">
+                mateo.valenzuela@blacknews.media
+              </div>
+              <div className="text-xs font-sans text-neutral-400 mt-0.5">
+                Rol: Redactor (Edita y publica sus propios artículos)
+              </div>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Reader Button */}
+          <button
+            onClick={handleReaderQuickLogin}
+            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
+              currentUser.role === 'LECTOR'
+                ? 'border-white bg-white/10 text-white'
+                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
+            }`}
+          >
+            <div>
+              <div className="text-xs font-semibold text-white">
+                lector.demo@gmail.com
+              </div>
+              <div className="text-xs font-sans text-neutral-400 mt-0.5">
+                Rol: Lector básico (Vista de visitante sin panel interno)
+              </div>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        </div>
 
         {/* Custom Google Account Login / Register Toggle */}
         {!isCustomFormOpen ? (
@@ -340,7 +376,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         ) : (
           <form onSubmit={handleCustomGoogleSubmit} className="pt-3 border-t border-white/5 space-y-3">
             <div className="text-xs font-sans font-semibold uppercase tracking-wider text-neutral-200">
-              REGISTRO DE USUARIO BÁSICO
+              REGISTRO DE USUARIO
             </div>
             <div>
               <label className="block text-xs font-sans text-neutral-400 mb-1">
@@ -369,14 +405,14 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
               />
             </div>
             <p className="text-xs font-sans text-neutral-500 font-light">
-              * La cuenta se creará con rol de LECTOR (sin permisos de edición). Un administrador podrá asignarte como redactor posteriormente.
+              * Si ingresas con <strong className="text-neutral-400">blacknewsglobalmedia@gmail.com</strong> se te asignará rol Administrador. Otras cuentas ingresan como LECTOR.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
                 className="flex-1 py-2 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-md"
               >
-                REGISTRAR COMO LECTOR
+                INGRESAR / REGISTRAR
               </button>
               <button
                 type="button"
@@ -399,7 +435,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>CERRAR SESIÓN</span>
+            <span>CERRAR SESIÓN (MODO LECTOR)</span>
           </button>
           <button
             onClick={onClose}
@@ -412,3 +448,4 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     </div>
   );
 };
+

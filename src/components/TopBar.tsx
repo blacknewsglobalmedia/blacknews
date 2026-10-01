@@ -14,6 +14,7 @@ import { CategoryId } from '../types/news';
 import { RedactorProfile } from '../types/auth';
 
 interface TopBarProps {
+  categories?: string[];
   selectedCategory: CategoryId;
   onSelectCategory: (category: CategoryId) => void;
   onOpenSearch: () => void;
@@ -29,6 +30,7 @@ interface TopBarProps {
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
+  categories: propCategories,
   selectedCategory,
   onSelectCategory,
   onOpenSearch,
@@ -44,15 +46,22 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const categories: { id: CategoryId; label: string }[] = [
-    { id: 'TODAS', label: 'PORTADA' },
-    { id: 'ECONOMÍA & MERCADOS', label: 'ECONOMÍA' },
-    { id: 'GEOPOLÍTICA', label: 'GEOPOLÍTICA' },
-    { id: 'TECNOLOGÍA & INNOVACIÓN', label: 'TECNOLOGÍA' },
-    { id: 'DERECHO & PROPIEDAD', label: 'PROPIEDAD' },
-    { id: 'ENERGÍA & INDUSTRIA', label: 'ENERGÍA' },
-    { id: 'DOSSIERS', label: 'DOSSIERS' },
-  ];
+  const rawList = propCategories && propCategories.length > 0
+    ? propCategories
+    : [
+        'TODAS',
+        'ECONOMÍA & MERCADOS',
+        'GEOPOLÍTICA',
+        'TECNOLOGÍA & INNOVACIÓN',
+        'DERECHO & PROPIEDAD',
+        'ENERGÍA & INDUSTRIA',
+        'DOSSIERS',
+      ];
+
+  const categories: { id: CategoryId; label: string }[] = rawList.map((cat) => ({
+    id: cat,
+    label: cat === 'TODAS' ? 'PORTADA' : cat,
+  }));
 
   const handleCategoryClick = (catId: CategoryId) => {
     onSelectCategory(catId);
@@ -156,19 +165,20 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Right: Streamlined Action Cluster */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Studio Toggle (Compact) - Strictly hidden from basic LECTOR and unauthenticated users */}
+          {/* Studio / Internal Panel Toggle - Strictly hidden from basic LECTOR and unauthenticated users */}
           {canAccessEditorialStudio && (
             <button
               onClick={onOpenStudio}
               className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
                 isStudioOpen
                   ? 'bg-white text-black border-white font-semibold shadow-sm'
-                  : 'border-white/15 text-neutral-300 hover:text-white hover:border-white'
+                  : 'border-white/20 text-white bg-white/5 hover:bg-white hover:text-black hover:border-white'
               }`}
-              title="Sala de Redacción y Constructor"
+              title="Panel Interno: Redacción, Portada, Imágenes y Gestión"
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">REDACCIÓN</span>
+              <span className="hidden sm:inline">{isStudioOpen ? 'VER PORTADA' : 'PANEL INTERNO'}</span>
+              <span className="sm:hidden">PANEL</span>
             </button>
           )}
 
@@ -272,10 +282,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                     onOpenStudio();
                     setIsMobileMenuOpen(false);
                   }}
-                  className="flex-1 py-2.5 px-3 border border-white/20 hover:border-white text-xs font-medium uppercase tracking-wider text-white flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 px-3 border border-white/30 bg-white/5 hover:border-white text-xs font-semibold uppercase tracking-wider text-white flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <PenTool className="w-3.5 h-3.5" />
-                  <span>SALA DE REDACCIÓN</span>
+                  <span>{isStudioOpen ? 'VER PORTADA' : 'PANEL INTERNO (REDACCIÓN)'}</span>
                 </button>
               )}
 

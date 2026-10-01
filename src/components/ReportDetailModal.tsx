@@ -11,6 +11,8 @@ import {
   Check
 } from 'lucide-react';
 import { Report } from '../types/news';
+import { AdCampaign } from '../types/ads';
+import { AdBanner } from './AdBanner';
 import { OptimizedPicture } from './OptimizedPicture';
 
 interface ReportDetailModalProps {
@@ -22,6 +24,9 @@ interface ReportDetailModalProps {
   onToggleBookmark: (report: Report) => void;
   onSelectReport: (report: Report) => void;
   allReports: Report[];
+  adCampaigns?: AdCampaign[];
+  onTrackImpression?: (campaignId: string) => void;
+  onTrackClick?: (campaignId: string) => void;
 }
 
 export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
@@ -33,6 +38,9 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   onToggleBookmark,
   onSelectReport,
   allReports,
+  adCampaigns = [],
+  onTrackImpression,
+  onTrackClick,
 }) => {
   const [fontSizeScale, setFontSizeScale] = useState<'normal' | 'large' | 'huge'>('normal');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -294,6 +302,16 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
           </div>
         )}
 
+        {/* In-Article Sponsor Banner */}
+        <AdBanner
+          placement="ARTICLE_SIDEBAR"
+          campaigns={adCampaigns}
+          selectedCategory={report.category}
+          onTrackImpression={onTrackImpression}
+          onTrackClick={onTrackClick}
+          className="my-10"
+        />
+
         {/* Dynamic Sections */}
         <div className="space-y-8 my-10 text-neutral-300 font-sans">
           {report.sections.map((sec, idx) => {
@@ -361,6 +379,15 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Sponsor Banner at Article Conclusion */}
+        <AdBanner
+          placement="ARTICLE_FOOTER"
+          campaigns={adCampaigns}
+          selectedCategory={report.category}
+          onTrackImpression={onTrackImpression}
+          onTrackClick={onTrackClick}
+        />
 
         {/* Share CTA Footer Ribbon */}
         <div className="my-14 py-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans">

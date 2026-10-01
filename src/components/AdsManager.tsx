@@ -1,0 +1,832 @@
+import React, { useState } from 'react';
+import { 
+  Plus, 
+  Trash2, 
+  Edit2, 
+  Eye, 
+  ExternalLink, 
+  DollarSign, 
+  BarChart3, 
+  Calendar, 
+  Megaphone, 
+  Layers, 
+  CheckCircle, 
+  PauseCircle, 
+  PlayCircle, 
+  HelpCircle, 
+  Sparkles, 
+  Search,
+  Filter,
+  ArrowUpRight,
+  TrendingUp,
+  MousePointerClick,
+  Info,
+  Clock,
+  Check,
+  X
+} from 'lucide-react';
+import { 
+  AdCampaign, 
+  AdPlacement, 
+  AdStatus, 
+  AD_PLACEMENTS_INFO 
+} from '../types/ads';
+import { CategoryId } from '../types/news';
+
+interface AdsManagerProps {
+  campaigns: AdCampaign[];
+  onSaveCampaign: (campaign: AdCampaign) => void;
+  onDeleteCampaign: (campaignId: string) => void;
+  categories: readonly CategoryId[];
+}
+
+const PRESET_AD_IMAGES = [
+  {
+    name: 'Bóveda Suiza / Oro & Metales',
+    url: 'https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?auto=format&fit=crop&w=1200&q=80',
+    bestFor: 'Finanzas, Banca Privada, Custodia',
+  },
+  {
+    name: 'Clusters Criogénicos / Cómputo IA',
+    url: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
+    bestFor: 'Tecnología, Infraestructura, Nube',
+  },
+  {
+    name: 'Rascacielos Corporativo / Wealth',
+    url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
+    bestFor: 'Gestión Patrimonial, Fondos, Mercados',
+  },
+  {
+    name: 'Tribunal Mercantil / Arbitraje',
+    url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=1200&q=80',
+    bestFor: 'Derecho, Propiedad, Arbitraje Jurídico',
+  },
+];
+
+export const AdsManager: React.FC<AdsManagerProps> = ({
+  campaigns,
+  onSaveCampaign,
+  onDeleteCampaign,
+  categories,
+}) => {
+  const [filterPlacement, setFilterPlacement] = useState<string>('TODAS');
+  const [filterStatus, setFilterStatus] = useState<string>('TODAS');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modal state
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isRateCardOpen, setIsRateCardOpen] = useState(false);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+
+  // Form State
+  const [formTitle, setFormTitle] = useState('');
+  const [formAdvertiser, setFormAdvertiser] = useState('');
+  const [formUrl, setFormUrl] = useState('');
+  const [formPlacement, setFormPlacement] = useState<AdPlacement>('TOP_BILLBOARD');
+  const [formImageUrl, setFormImageUrl] = useState(PRESET_AD_IMAGES[0].url);
+  const [formBadgeText, setFormBadgeText] = useState('PATROCINIO EXCLUSIVO');
+  const [formCategory, setFormCategory] = useState<CategoryId | 'TODAS'>('TODAS');
+  const [formStartDate, setFormStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [formEndDate, setFormEndDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [formStatus, setFormStatus] = useState<AdStatus>('ACTIVE');
+  const [formPrice, setFormPrice] = useState(1200);
+  const [formCurrency, setFormCurrency] = useState<'USD' | 'CHF' | 'EUR'>('USD');
+  const [formPricingModel, setFormPricingModel] = useState<'FIXED_PERIOD' | 'CPM' | 'CPC'>('FIXED_PERIOD');
+  const [formNotes, setFormNotes] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Stats calculation
+  const totalCampaigns = campaigns.length;
+  const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
+  const totalRevenue = campaigns
+    .filter((c) => c.status === 'ACTIVE')
+    .reduce((acc, curr) => acc + (curr.price || 0), 0);
+  const totalImpressions = campaigns.reduce((acc, curr) => acc + (curr.impressions || 0), 0);
+  const totalClicks = campaigns.reduce((acc, curr) => acc + (curr.clicks || 0), 0);
+  const averageCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : '0.00';
+
+  // Filtered List
+  const filteredCampaigns = campaigns.filter((c) => {
+    if (filterPlacement !== 'TODAS' && c.placement !== filterPlacement) return false;
+    if (filterStatus !== 'TODAS' && c.status !== filterStatus) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const match = c.title.toLowerCase().includes(q) || c.advertiser.toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  const handleOpenCreate = () => {
+    setEditingCampaignId(null);
+    setFormTitle('');
+    setFormAdvertiser('');
+    setFormUrl('https://');
+    setFormPlacement('TOP_BILLBOARD');
+    setFormImageUrl(PRESET_AD_IMAGES[0].url);
+    setFormBadgeText('PATROCINIO EXCLUSIVO');
+    setFormCategory('TODAS');
+    setFormStartDate(new Date().toISOString().slice(0, 10));
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    setFormEndDate(d.toISOString().slice(0, 10));
+    setFormStatus('ACTIVE');
+    setFormPrice(1200);
+    setFormCurrency('USD');
+    setFormPricingModel('FIXED_PERIOD');
+    setFormNotes('');
+    setFormError(null);
+    setIsEditorOpen(true);
+  };
+
+  const handleOpenEdit = (campaign: AdCampaign) => {
+    setEditingCampaignId(campaign.id);
+    setFormTitle(campaign.title);
+    setFormAdvertiser(campaign.advertiser);
+    setFormUrl(campaign.advertiserUrl);
+    setFormPlacement(campaign.placement);
+    setFormImageUrl(campaign.imageUrl);
+    setFormBadgeText(campaign.badgeText || 'PATROCINIO');
+    setFormCategory(campaign.targetCategory || 'TODAS');
+    setFormStartDate(campaign.startDate);
+    setFormEndDate(campaign.endDate);
+    setFormStatus(campaign.status);
+    setFormPrice(campaign.price);
+    setFormCurrency(campaign.currency);
+    setFormPricingModel(campaign.pricingModel);
+    setFormNotes(campaign.notes || '');
+    setFormError(null);
+    setIsEditorOpen(true);
+  };
+
+  const handleToggleStatus = (campaign: AdCampaign) => {
+    const updated: AdCampaign = {
+      ...campaign,
+      status: campaign.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE',
+    };
+    onSaveCampaign(updated);
+  };
+
+  const handleSubmitForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formTitle.trim()) {
+      setFormError('El titular de la campaña es obligatorio.');
+      return;
+    }
+    if (!formAdvertiser.trim()) {
+      setFormError('El nombre del anunciante es obligatorio.');
+      return;
+    }
+    if (!formUrl.trim() || !formUrl.startsWith('http')) {
+      setFormError('Proporciona una URL de destino válida (comenzando por https://).');
+      return;
+    }
+    if (!formImageUrl.trim()) {
+      setFormError('La URL de la imagen del banner es obligatoria.');
+      return;
+    }
+
+    const campaignData: AdCampaign = {
+      id: editingCampaignId || `ad-camp-${Date.now()}`,
+      title: formTitle.trim(),
+      advertiser: formAdvertiser.trim(),
+      advertiserUrl: formUrl.trim(),
+      placement: formPlacement,
+      imageUrl: formImageUrl.trim(),
+      badgeText: formBadgeText.trim() || 'PATROCINIO',
+      targetCategory: formCategory,
+      startDate: formStartDate,
+      endDate: formEndDate,
+      status: formStatus,
+      price: Number(formPrice) || 0,
+      currency: formCurrency,
+      pricingModel: formPricingModel,
+      impressions: editingCampaignId ? (campaigns.find((c) => c.id === editingCampaignId)?.impressions || 0) : 0,
+      clicks: editingCampaignId ? (campaigns.find((c) => c.id === editingCampaignId)?.clicks || 0) : 0,
+      createdAt: editingCampaignId ? (campaigns.find((c) => c.id === editingCampaignId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+      notes: formNotes.trim(),
+    };
+
+    onSaveCampaign(campaignData);
+    setIsEditorOpen(false);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 w-full font-sans">
+      
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-neutral-400 font-semibold mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            <span>SISTEMA DE PUBLICIDAD & SPONSORS</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight font-['Lexend']">
+            Gestión de Anuncios y Patrocinios
+          </h2>
+          <p className="text-xs sm:text-sm text-neutral-400 font-light mt-0.5 max-w-2xl">
+            Control integral de espacios publicitarios, banners verticales y horizontales, vigencia de campañas, métricas de clics e ingresos.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsRateCardOpen(true)}
+            className="px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-white/10 cursor-pointer"
+          >
+            <Info className="w-3.5 h-3.5 text-neutral-400" />
+            <span>Tarifario & Espacios</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="px-4 py-2 bg-white text-black hover:bg-neutral-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Nueva Campaña</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* KPI 1: Active Campaigns */}
+        <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 shadow-lg">
+          <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Campañas Activas</span>
+            <Megaphone className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            {activeCampaigns} <span className="text-xs text-neutral-500 font-normal">/ {totalCampaigns}</span>
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-1">
+            En emisión en la plataforma
+          </p>
+        </div>
+
+        {/* KPI 2: Revenue */}
+        <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 shadow-lg">
+          <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Ingresos Activos</span>
+            <DollarSign className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            ${totalRevenue.toLocaleString()} <span className="text-xs text-neutral-500 font-normal">USD</span>
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-1">
+            Facturación en cartera
+          </p>
+        </div>
+
+        {/* KPI 3: Impressions */}
+        <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 shadow-lg">
+          <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Impresiones Reales</span>
+            <Eye className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            {totalImpressions.toLocaleString()}
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-1">
+            Visualizaciones de banners
+          </p>
+        </div>
+
+        {/* KPI 4: CTR */}
+        <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 shadow-lg">
+          <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
+            <span className="font-semibold uppercase tracking-wider text-[10px]">Rendimiento CTR</span>
+            <MousePointerClick className="w-4 h-4 text-purple-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            {averageCtr}% <span className="text-xs text-neutral-500 font-normal">({totalClicks} clics)</span>
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-1">
+            Tasa media de interacción
+          </p>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Search */}
+          <div className="relative min-w-[200px] sm:min-w-[260px]">
+            <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por campaña o anunciante..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-neutral-900 border border-white/10 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+            />
+          </div>
+
+          {/* Placement Filter */}
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-neutral-500 font-mono uppercase text-[10px] mr-1">Espacio:</span>
+            <select
+              value={filterPlacement}
+              onChange={(e) => setFilterPlacement(e.target.value)}
+              className="bg-neutral-900 border border-white/10 text-neutral-300 text-xs py-1.5 px-2.5 rounded-lg focus:outline-none focus:border-white/30"
+            >
+              <option value="TODAS">Todos los espacios</option>
+              <option value="TOP_BILLBOARD">Top Billboard Portada</option>
+              <option value="IN_FEED_LEADERBOARD">Leaderboard In-Feed</option>
+              <option value="ARTICLE_SIDEBAR">Skyscraper Lateral</option>
+              <option value="ARTICLE_FOOTER">Banner Pie Artículo</option>
+              <option value="GRID_CARD">Card Patrocinada 4:5</option>
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-neutral-500 font-mono uppercase text-[10px] mr-1">Estado:</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-neutral-900 border border-white/10 text-neutral-300 text-xs py-1.5 px-2.5 rounded-lg focus:outline-none focus:border-white/30"
+            >
+              <option value="TODAS">Todos los estados</option>
+              <option value="ACTIVE">Activas</option>
+              <option value="PAUSED">Pausadas</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="text-xs text-neutral-400 font-mono">
+          Mostrando {filteredCampaigns.length} de {campaigns.length} campañas
+        </div>
+      </div>
+
+      {/* Campaigns Table / Cards */}
+      {filteredCampaigns.length > 0 ? (
+        <div className="space-y-3">
+          {filteredCampaigns.map((camp) => {
+            const placementDetails = AD_PLACEMENTS_INFO[camp.placement];
+            const ctr = camp.impressions > 0 ? ((camp.clicks / camp.impressions) * 100).toFixed(2) : '0.00';
+
+            return (
+              <div
+                key={camp.id}
+                className="p-4 rounded-xl bg-neutral-950 border border-white/10 hover:border-white/25 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg group"
+              >
+                {/* Left: Thumbnail & Core info */}
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+                  <div className="relative w-24 h-16 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-neutral-900">
+                    <img
+                      src={camp.imageUrl}
+                      alt={camp.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <span className="absolute top-1 left-1 text-[8px] font-mono font-bold uppercase tracking-wider text-black bg-white px-1 rounded-[1px]">
+                      {camp.placement.split('_')[0]}
+                    </span>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono uppercase mb-0.5">
+                      <span className="font-bold text-white bg-white/10 px-1.5 py-0.2 rounded">
+                        {camp.advertiser}
+                      </span>
+                      <span className="text-neutral-500">·</span>
+                      <span className="text-neutral-400 font-semibold">
+                        {placementDetails?.name || camp.placement}
+                      </span>
+                      <span className="text-neutral-500">·</span>
+                      <span className="text-neutral-400">
+                        Cat: {camp.targetCategory || 'TODAS'}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-white truncate max-w-xl group-hover:text-neutral-200">
+                      {camp.title}
+                    </h4>
+
+                    <div className="flex items-center gap-3 text-[11px] text-neutral-400 mt-1 font-mono">
+                      <span>Vigencia: {camp.startDate} al {camp.endDate}</span>
+                      <span>·</span>
+                      <span className="text-neutral-300 font-bold">${camp.price} {camp.currency}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Metrics & Actions */}
+                <div className="flex flex-wrap items-center gap-4 lg:gap-6 self-end lg:self-center shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/5 w-full lg:w-auto justify-between lg:justify-end">
+                  {/* Metrics Badge */}
+                  <div className="flex items-center gap-4 text-xs font-mono">
+                    <div className="text-right">
+                      <div className="text-neutral-400 text-[10px] uppercase">Impresiones</div>
+                      <div className="font-bold text-white">{camp.impressions.toLocaleString()}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-neutral-400 text-[10px] uppercase">Clics</div>
+                      <div className="font-bold text-white">{camp.clicks}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-neutral-400 text-[10px] uppercase">CTR</div>
+                      <div className="font-bold text-emerald-400">{ctr}%</div>
+                    </div>
+                  </div>
+
+                  {/* Status & Action Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(camp)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border ${
+                        camp.status === 'ACTIVE'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                          : 'bg-neutral-900 text-neutral-400 border-white/10 hover:text-white'
+                      }`}
+                      title={camp.status === 'ACTIVE' ? 'Pausar campaña' : 'Activar campaña'}
+                    >
+                      {camp.status === 'ACTIVE' ? (
+                        <>
+                          <PauseCircle className="w-3.5 h-3.5" />
+                          <span>Activa</span>
+                        </>
+                      ) : (
+                        <>
+                          <PlayCircle className="w-3.5 h-3.5" />
+                          <span>Pausada</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(camp)}
+                      className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer border border-white/10"
+                      title="Editar campaña"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <a
+                      href={camp.advertiserUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer border border-white/10"
+                      title="Ver enlace de destino"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`¿Retirar permanentemente la campaña "${camp.title}"?`)) {
+                          onDeleteCampaign(camp.id);
+                        }
+                      }}
+                      className="p-1.5 text-neutral-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Eliminar campaña"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="p-12 text-center rounded-2xl bg-neutral-950 border border-white/10 space-y-3">
+          <Megaphone className="w-8 h-8 text-neutral-500 mx-auto" />
+          <h3 className="text-base font-bold text-white">No hay campañas que coincidan</h3>
+          <p className="text-xs text-neutral-400 max-w-sm mx-auto font-light">
+            Ajusta los filtros o crea una nueva campaña publicitaria para monetizar los espacios de la portada.
+          </p>
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="px-4 py-2 bg-white text-black font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-neutral-200 transition-colors"
+          >
+            Crear Primera Campaña
+          </button>
+        </div>
+      )}
+
+      {/* MODAL: CAMPAIGN EDITOR */}
+      {isEditorOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-neutral-950 border border-white/15 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-5 my-8">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white font-['Lexend']">
+                  {editingCampaignId ? 'Editar Campaña Publicitaria' : 'Nueva Campaña Publicitaria'}
+                </h3>
+                <p className="text-xs text-neutral-400 font-light mt-0.5">
+                  Configure el espacio, fechas de emisión, presupuesto pactado y banner visual.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditorOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitForm} className="p-5 space-y-4 pt-0">
+              {formError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-300 text-xs rounded-xl">
+                  {formError}
+                </div>
+              )}
+
+              {/* Title & Advertiser */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    Titular del Anuncio / Campaña *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="Ej: Custodia Segura de Metales en Zúrich"
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    Anunciante / Marca Comercial *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formAdvertiser}
+                    onChange={(e) => setFormAdvertiser(e.target.value)}
+                    placeholder="Ej: Zurich Vault SA"
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30"
+                  />
+                </div>
+              </div>
+
+              {/* URL & Badge Text */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    URL de Destino al Clic *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={formUrl}
+                    onChange={(e) => setFormUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    Rótulo / Badge Patrocinado
+                  </label>
+                  <input
+                    type="text"
+                    value={formBadgeText}
+                    onChange={(e) => setFormBadgeText(e.target.value)}
+                    placeholder="PATROCINIO EXCLUSIVO"
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30 uppercase font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Placement & Target Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    Ubicación / Formato de Banner *
+                  </label>
+                  <select
+                    value={formPlacement}
+                    onChange={(e) => setFormPlacement(e.target.value as AdPlacement)}
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30"
+                  >
+                    <option value="TOP_BILLBOARD">Top Billboard Portada (970×250 / 728×90)</option>
+                    <option value="IN_FEED_LEADERBOARD">Leaderboard In-Feed (1200×180 / 970×120)</option>
+                    <option value="ARTICLE_SIDEBAR">Skyscraper Lateral en Lector (300×600)</option>
+                    <option value="ARTICLE_FOOTER">Banner Pie de Artículo (728×90)</option>
+                    <option value="GRID_CARD">Card Patrocinada 4:5 (Post visual)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                    Segmentación por Categoría
+                  </label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30"
+                  >
+                    <option value="TODAS">TODAS (Rotación general)</option>
+                    {categories.filter((c) => c !== 'TODAS').map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Image URL & Preset selector */}
+              <div>
+                <label className="block text-xs font-mono uppercase text-neutral-400 mb-1">
+                  URL de Imagen del Banner *
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={formImageUrl}
+                  onChange={(e) => setFormImageUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full bg-neutral-900 border border-white/10 p-2.5 text-xs text-white rounded-xl focus:outline-none focus:border-white/30 font-mono mb-2"
+                />
+
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  <span className="text-[10px] font-mono text-neutral-500 uppercase mr-1">Presets:</span>
+                  {PRESET_AD_IMAGES.map((p) => (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => setFormImageUrl(p.url)}
+                      className={`px-2 py-1 rounded text-[10px] font-mono transition-colors whitespace-nowrap cursor-pointer border ${
+                        formImageUrl === p.url
+                          ? 'bg-white text-black font-bold border-white'
+                          : 'bg-neutral-900 text-neutral-400 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dates & Commercial Terms */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
+                    Fecha Inicio
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formStartDate}
+                    onChange={(e) => setFormStartDate(e.target.value)}
+                    className="w-full bg-neutral-900 border border-white/10 p-2 text-xs text-white rounded-xl focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
+                    Fecha Fin
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={formEndDate}
+                    onChange={(e) => setFormEndDate(e.target.value)}
+                    className="w-full bg-neutral-900 border border-white/10 p-2 text-xs text-white rounded-xl focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-mono uppercase text-neutral-400 mb-1">
+                    Precio ($ USD)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={formPrice}
+                    onChange={(e) => setFormPrice(Number(e.target.value))}
+                    className="w-full bg-neutral-900 border border-white/10 p-2 text-xs text-white rounded-xl focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Status Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-neutral-900/60 border border-white/10">
+                <div>
+                  <div className="text-xs font-bold text-white">Estado de la Campaña</div>
+                  <div className="text-[11px] text-neutral-400 font-light">
+                    {formStatus === 'ACTIVE' ? 'En emisión inmediata en la web' : 'En pausa (no visible)'}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setFormStatus(formStatus === 'ACTIVE' ? 'PAUSED' : 'ACTIVE')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-colors ${
+                    formStatus === 'ACTIVE'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-neutral-800 text-neutral-400 border-white/10'
+                  }`}
+                >
+                  {formStatus === 'ACTIVE' ? 'Activa' : 'Pausada'}
+                </button>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditorOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-neutral-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-white text-black hover:bg-neutral-200 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-colors"
+                >
+                  {editingCampaignId ? 'Guardar Cambios' : 'Lanzar Campaña'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RATE CARD & SPECS (Tarifario) */}
+      {isRateCardOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-neutral-950 border border-white/15 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-5 my-8">
+            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white font-['Lexend']">
+                  Tarifario Oficial & Especificaciones Técnicas
+                </h3>
+                <p className="text-xs text-neutral-400 font-light mt-0.5">
+                  Espacios de patrocinio institucional disponibles en BlackNews.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRateCardOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 pt-0">
+              <div className="divide-y divide-white/10">
+                {Object.values(AD_PLACEMENTS_INFO).map((info) => (
+                  <div key={info.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>{info.name}</span>
+                        <span className="text-[10px] font-mono uppercase text-neutral-500">
+                          [{info.orientation}]
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-0.5 font-light">
+                        {info.description}
+                      </p>
+                      <div className="text-[10px] font-mono text-neutral-500 mt-1">
+                        Tamaño recomendado: <span className="text-neutral-300">{info.recommendedSize}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-bold text-emerald-400 font-mono">
+                        {info.suggestedRate}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 text-xs text-neutral-300 space-y-1.5 font-light">
+                <div className="font-bold text-white text-xs uppercase tracking-wider font-mono">
+                  Contacto para Anunciantes Corporativos
+                </div>
+                <p>
+                  Para contrataciones personalizadas, patrocinios anuales o convenios institucionales, comuníquese con la gerencia editorial en:
+                </p>
+                <div className="font-mono text-white font-semibold">
+                  blacknewsglobalmedia@gmail.com
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

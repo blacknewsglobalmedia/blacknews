@@ -1,11 +1,11 @@
-export type CategoryId = 
-  | 'TODAS'
-  | 'ECONOMÍA & MERCADOS'
-  | 'GEOPOLÍTICA'
-  | 'TECNOLOGÍA & INNOVACIÓN'
-  | 'DERECHO & PROPIEDAD'
-  | 'ENERGÍA & INDUSTRIA'
-  | 'DOSSIERS';
+export type CategoryId = string;
+
+export interface CategoryItem {
+  id: string;
+  name: string;
+  description?: string;
+  order?: number;
+}
 
 export interface Author {
   name: string;
@@ -47,7 +47,7 @@ export interface OptimizedImageSet {
   fallbackUrl: string;
   pictureSnippet?: string;
   totalSavingsPercent?: number;
-  storage?: 'cloudflare-r2' | 'local-edge';
+  storage?: 'cloudinary' | 'cloudflare-r2' | 'local-edge';
 }
 
 export interface Report {

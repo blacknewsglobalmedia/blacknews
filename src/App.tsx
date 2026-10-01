@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { TopBar } from './components/TopBar';
 import { BreakingTicker } from './components/BreakingTicker';
 import { LeadStory } from './components/LeadStory';
+import { VisualPostsSection } from './components/VisualPostsSection';
+import { AdBanner } from './components/AdBanner';
 import { ReportsGrid } from './components/ReportsGrid';
 import { ReportDetailModal } from './components/ReportDetailModal';
 import { ShareModal } from './components/ShareModal';
@@ -19,6 +21,7 @@ import { REPORTS, CATEGORIES, FLASH_NEWS } from './data/newsData';
 import { Report, CategoryId, FlashNews } from './types/news';
 import { RedactorProfile, RedactorRole } from './types/auth';
 import { FrontPageLayoutConfig, AutomationPreset } from './types/layout';
+import { AdCampaign, INITIAL_AD_CAMPAIGNS } from './types/ads';
 import { DEFAULT_LAYOUT_CONFIG, computeLayoutPreset } from './utils/layoutUtils';
 import { db, auth } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -126,6 +129,75 @@ export default function App() {
     return DEFAULT_LAYOUT_CONFIG;
   });
 
+  // Persistent categories catalog
+  const [categoriesList, setCategoriesList] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('blacknews_categories');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [...CATEGORIES];
+  });
+
+  // Persistent Advertising Campaigns
+  const [adsList, setAdsList] = useState<AdCampaign[]>(() => {
+    try {
+      const saved = localStorage.getItem('blacknews_ads');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_AD_CAMPAIGNS;
+  });
+
+  const handleSaveCampaign = (campaign: AdCampaign) => {
+    setAdsList((prev) => {
+      const exists = prev.some((c) => c.id === campaign.id);
+      const updated = exists 
+        ? prev.map((c) => (c.id === campaign.id ? campaign : c))
+        : [campaign, ...prev];
+      try {
+        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    showToast(`Campaña "${campaign.title.slice(0, 20)}..." guardada con éxito.`);
+  };
+
+  const handleDeleteCampaign = (campaignId: string) => {
+    setAdsList((prev) => {
+      const updated = prev.filter((c) => c.id !== campaignId);
+      try {
+        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    showToast('Campaña publicitaria retirada.');
+  };
+
+  const handleTrackImpression = (campaignId: string) => {
+    setAdsList((prev) => {
+      const updated = prev.map((c) => c.id === campaignId ? { ...c, impressions: (c.impressions || 0) + 1 } : c);
+      try {
+        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const handleTrackClick = (campaignId: string) => {
+    setAdsList((prev) => {
+      const updated = prev.map((c) => c.id === campaignId ? { ...c, clicks: (c.clicks || 0) + 1 } : c);
+      try {
+        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
   // Persistent redactors and registered users management
   const [redactorsList, setRedactorsList] = useState<RedactorProfile[]>(() => {
     try {
@@ -160,21 +232,57 @@ export default function App() {
 
   // Sync Layout Config
   const handleUpdateLayoutConfig = async (newConfig: FrontPageLayoutConfig) => {
-    setLayoutConfig(newConfig);
+    const finalizedConfig: FrontPageLayoutConfig = {
+      ...newConfig,
+      lastModifiedTimestamp: newConfig.lastModifiedTimestamp ?? Date.now(),
+      autoRefreshHours: newConfig.autoRefreshHours ?? 24,
+      autoRefreshPolicy: newConfig.autoRefreshPolicy ?? 'auto-latest',
+      autoRefreshEnabled: newConfig.autoRefreshEnabled !== false,
+    };
+    setLayoutConfig(finalizedConfig);
     try {
-      localStorage.setItem('blacknews_layout_config', JSON.stringify(newConfig));
-      await setDoc(doc(db, 'settings', 'frontpage_layout'), newConfig);
+      localStorage.setItem('blacknews_layout_config', JSON.stringify(finalizedConfig));
+      await setDoc(doc(db, 'settings', 'frontpage_layout'), finalizedConfig);
     } catch (err) {
       console.warn('[BLACKNEWS] Local storage backup saved for layout config');
     }
-    showToast(`Distribución de portada: [${newConfig.automationPreset.toUpperCase()}]`);
+    showToast(`Distribución de portada: [${finalizedConfig.automationPreset.toUpperCase()}]`);
   };
 
   // Apply automation preset with 1 click
   const handleAutomationApply = (preset: AutomationPreset) => {
-    const computed = computeLayoutPreset(preset, reportsList);
+    const computed = computeLayoutPreset(preset, reportsList, layoutConfig);
     handleUpdateLayoutConfig(computed);
   };
+
+  // Auto-expiration & rotation timer check (e.g. 24h cycle)
+  useEffect(() => {
+    const checkAutoRotation = () => {
+      if (layoutConfig.autoRefreshEnabled === false) return;
+      const intervalHours = layoutConfig.autoRefreshHours || 24;
+      const intervalMs = intervalHours * 60 * 60 * 1000;
+      const lastTimestamp = layoutConfig.lastModifiedTimestamp || Date.now();
+      const elapsed = Date.now() - lastTimestamp;
+
+      if (elapsed >= intervalMs) {
+        // Expiration threshold exceeded without manual edit!
+        const policy = layoutConfig.autoRefreshPolicy || 'auto-latest';
+        const refreshed = computeLayoutPreset(policy, reportsList, layoutConfig);
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        refreshed.lastUpdated = `${dateStr} · Rotación Automática (${intervalHours}h)`;
+        refreshed.lastModifiedTimestamp = Date.now();
+        refreshed.automationPreset = policy;
+        handleUpdateLayoutConfig(refreshed);
+        showToast(`Portada rotada automáticamente con nuevas publicaciones (Ciclo de ${intervalHours}h cumplido)`);
+      }
+    };
+
+    // Run check once and schedule periodic check
+    checkAutoRotation();
+    const intervalId = setInterval(checkAutoRotation, 60000);
+    return () => clearInterval(intervalId);
+  }, [layoutConfig, reportsList]);
 
   // Update breaking ticker news
   const handleUpdateFlashNews = async (updatedFlash: FlashNews[]) => {
@@ -186,6 +294,18 @@ export default function App() {
       console.warn('[BLACKNEWS] Local storage backup saved for flash news');
     }
     showToast('Teletipo de última hora actualizado');
+  };
+
+  // Update categories catalog
+  const handleUpdateCategories = async (newCategories: string[]) => {
+    setCategoriesList(newCategories);
+    try {
+      localStorage.setItem('blacknews_categories', JSON.stringify(newCategories));
+      await setDoc(doc(db, 'settings', 'categories'), { categories: newCategories });
+    } catch (err) {
+      console.warn('[BLACKNEWS] Local storage backup saved for categories');
+    }
+    showToast('Catálogo de categorías actualizado');
   };
 
   // URL Deeplinking: detect ?informe=id on mount
@@ -400,7 +520,21 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    showToast('Sesión cerrada');
+    const readerUser = redactorsList.find((u) => u.role === 'LECTOR') || {
+      id: 'usr-guest',
+      name: 'Lector Invitado',
+      email: 'lector.invitado@blacknews.media',
+      role: 'LECTOR' as const,
+      bureau: 'Lector',
+      title: 'Invitado',
+      requestedAt: '24 Sep 2026',
+      avatarInitials: 'LI',
+      bio: 'Lector no autenticado.',
+      isGoogleAccount: false,
+    };
+    setCurrentUser(readerUser);
+    setCurrentView('portada');
+    showToast('Sesión cerrada. Modo Lector activado.');
   };
 
   const handleSwitchUser = (user: RedactorProfile) => {
@@ -470,6 +604,7 @@ export default function App() {
 
       {/* Top Navigation */}
       <TopBar
+        categories={categoriesList}
         selectedCategory={selectedCategory}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
@@ -522,9 +657,23 @@ export default function App() {
             onUpdateFlashNews={handleUpdateFlashNews}
             onAutomationApply={handleAutomationApply}
             onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
+            categories={categoriesList}
+            onUpdateCategories={handleUpdateCategories}
+            adCampaigns={adsList}
+            onSaveAdCampaign={handleSaveCampaign}
+            onDeleteAdCampaign={handleDeleteCampaign}
           />
         ) : (
           <>
+            {/* Top Billboard Sponsor Banner */}
+            <AdBanner
+              placement="TOP_BILLBOARD"
+              campaigns={adsList}
+              selectedCategory={selectedCategory}
+              onTrackImpression={handleTrackImpression}
+              onTrackClick={handleTrackClick}
+            />
+
             {leadReport && (
               <LeadStory
                 report={leadReport}
@@ -535,9 +684,32 @@ export default function App() {
               />
             )}
 
+            {/* Visual Posts Section: News cards in 4:5 post format */}
+            <VisualPostsSection
+              reports={reportsList}
+              categories={categoriesList}
+              onReadReport={handleOpenReport}
+              onShareReport={handleOpenShare}
+              bookmarkedIds={bookmarkedIds}
+              onToggleBookmark={handleToggleBookmark}
+              onOpenInStudio={canAccessInternalMedia ? (report) => {
+                setCurrentView('redaccion');
+                showToast(`Despacho "${report.title.slice(0, 25)}..." cargado para edición`);
+              } : undefined}
+            />
+
+            {/* In-Feed Leaderboard Horizontal Banner */}
+            <AdBanner
+              placement="IN_FEED_LEADERBOARD"
+              campaigns={adsList}
+              selectedCategory={selectedCategory}
+              onTrackImpression={handleTrackImpression}
+              onTrackClick={handleTrackClick}
+            />
+
             <ReportsGrid
               reports={secondaryReports}
-              categories={CATEGORIES}
+              categories={categoriesList}
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
               onReadReport={handleOpenReport}
@@ -554,7 +726,7 @@ export default function App() {
 
       {/* Footer */}
       <Footer
-        categories={CATEGORIES}
+        categories={categoriesList}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
           setCurrentView('portada');
@@ -572,6 +744,9 @@ export default function App() {
         onToggleBookmark={handleToggleBookmark}
         onSelectReport={handleOpenReport}
         allReports={reportsList}
+        adCampaigns={adsList}
+        onTrackImpression={handleTrackImpression}
+        onTrackClick={handleTrackClick}
       />
 
       {/* Social Media Sharing Modal */}
@@ -606,6 +781,7 @@ export default function App() {
         currentUser={currentUser}
         onLoginWithGoogle={handleLoginWithGoogle}
         onLogout={handleLogout}
+        onOpenStudio={handleToggleStudio}
       />
     </div>
   );

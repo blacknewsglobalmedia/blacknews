@@ -8,15 +8,25 @@ export const DEFAULT_LAYOUT_CONFIG: FrontPageLayoutConfig = {
   dossierReportId: 'rep-007',
   automationPreset: 'manual',
   lastUpdated: '24 Sep 2026 · Edición Central',
+  lastModifiedTimestamp: Date.now(),
+  autoRefreshHours: 24,
+  autoRefreshPolicy: 'auto-latest',
+  autoRefreshEnabled: true,
 };
 
 export function computeLayoutPreset(
   preset: AutomationPreset,
-  reports: Report[]
+  reports: Report[],
+  prevConfig?: FrontPageLayoutConfig
 ): FrontPageLayoutConfig {
   if (reports.length === 0) return DEFAULT_LAYOUT_CONFIG;
 
-  const nowStr = `24 Sep 2026 · Auto (${preset.replace('auto-', '')})`;
+  const now = new Date();
+  const nowStr = `${now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} · Auto (${preset.replace('auto-', '')})`;
+  const baseTimestamp = Date.now();
+  const autoHours = prevConfig?.autoRefreshHours ?? 24;
+  const autoPolicy = prevConfig?.autoRefreshPolicy ?? (preset === 'manual' ? 'auto-latest' : preset);
+  const autoEnabled = prevConfig?.autoRefreshEnabled ?? true;
 
   if (preset === 'auto-latest') {
     // Top 7 most recent
@@ -35,6 +45,10 @@ export function computeLayoutPreset(
       dossierReportId: dossier,
       automationPreset: 'auto-latest',
       lastUpdated: nowStr,
+      lastModifiedTimestamp: baseTimestamp,
+      autoRefreshHours: autoHours,
+      autoRefreshPolicy: autoPolicy,
+      autoRefreshEnabled: autoEnabled,
     };
   }
 
@@ -61,6 +75,10 @@ export function computeLayoutPreset(
       dossierReportId: dossier,
       automationPreset: 'auto-impact',
       lastUpdated: nowStr,
+      lastModifiedTimestamp: baseTimestamp,
+      autoRefreshHours: autoHours,
+      autoRefreshPolicy: autoPolicy,
+      autoRefreshEnabled: autoEnabled,
     };
   }
 
@@ -103,8 +121,18 @@ export function computeLayoutPreset(
       dossierReportId: dossier,
       automationPreset: 'auto-diversity',
       lastUpdated: nowStr,
+      lastModifiedTimestamp: baseTimestamp,
+      autoRefreshHours: autoHours,
+      autoRefreshPolicy: autoPolicy,
+      autoRefreshEnabled: autoEnabled,
     };
   }
 
-  return DEFAULT_LAYOUT_CONFIG;
+  return {
+    ...DEFAULT_LAYOUT_CONFIG,
+    lastModifiedTimestamp: baseTimestamp,
+    autoRefreshHours: autoHours,
+    autoRefreshPolicy: autoPolicy,
+    autoRefreshEnabled: autoEnabled,
+  };
 }

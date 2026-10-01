@@ -5,6 +5,7 @@ export interface UserPermissions {
   canManageLayout: boolean;
   canPublishDirectly: boolean;
   canManageUsers: boolean;
+  canManageCategories: boolean;
   canDeleteAnyReport: boolean;
   canManageBreakingTicker: boolean;
   canWritePosts: boolean;
@@ -32,6 +33,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageLayout: true,
     canPublishDirectly: true,
     canManageUsers: true,
+    canManageCategories: true,
     canDeleteAnyReport: true,
     canManageBreakingTicker: true,
     canWritePosts: true,
@@ -42,6 +44,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageLayout: true,
     canPublishDirectly: true,
     canManageUsers: true,
+    canManageCategories: false,
     canDeleteAnyReport: false,
     canManageBreakingTicker: true,
     canWritePosts: true,
@@ -52,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageLayout: false,
     canPublishDirectly: true,
     canManageUsers: false,
+    canManageCategories: false,
     canDeleteAnyReport: false,
     canManageBreakingTicker: false,
     canWritePosts: true,
@@ -62,6 +66,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageLayout: false,
     canPublishDirectly: false,
     canManageUsers: false,
+    canManageCategories: false,
     canDeleteAnyReport: false,
     canManageBreakingTicker: false,
     canWritePosts: false,

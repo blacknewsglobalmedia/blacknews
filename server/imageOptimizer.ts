@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { uploadAvifToCloudinary, getCloudinaryConfig } from './cloudinaryService.ts';
 
 export interface ImageVariantInfo {
   width: number;
@@ -27,7 +28,7 @@ export interface OptimizationResult {
   fallbackUrl: string;
   pictureSnippet: string;
   totalSavingsPercent: number;
-  storage: 'cloudflare-r2' | 'local-edge';
+  storage: 'cloudinary' | 'cloudflare-r2' | 'local-edge';
 }
 
 export interface ProcessImageOptions {
@@ -106,15 +107,34 @@ export function sanitizeSlug(input: string): string {
 }
 
 /**
- * Upload buffer to Cloudflare R2 or local directory
+ * Upload buffer to Cloudinary, Cloudflare R2 or local directory
  */
 async function saveVariant(
   filename: string,
   buffer: Buffer,
   contentType: string,
+  format: 'avif' | 'webp' | 'jpeg',
   r2Config: ReturnType<typeof getR2Client>
-): Promise<string> {
-  // If R2 credentials are valid, upload to Cloudflare R2
+): Promise<{ url: string; usedStorage: 'cloudinary' | 'cloudflare-r2' | 'local-edge' }> {
+  // 1. Always write local file to public/uploads/ for high-performance edge serving / fallback
+  const localFilePath = path.join(PUBLIC_UPLOADS_DIR, filename);
+  await fs.promises.writeFile(localFilePath, buffer);
+  const localUrl = `/uploads/${filename}`;
+
+  // 2. Upload AVIF to Cloudinary
+  if (format === 'avif') {
+    const publicId = filename.replace(/\.[^/.]+$/, '');
+    try {
+      const cldRes = await uploadAvifToCloudinary(buffer, publicId);
+      if (cldRes.success && cldRes.url) {
+        return { url: cldRes.url, usedStorage: 'cloudinary' };
+      }
+    } catch (cldErr) {
+      console.warn(`[IMAGE OPTIMIZER] Cloudinary notice for ${filename}:`, cldErr);
+    }
+  }
+
+  // 3. Fallback to Cloudflare R2 if configured
   if (r2Config) {
     try {
       const command = new PutObjectCommand({
@@ -128,19 +148,18 @@ async function saveVariant(
 
       if (r2Config.publicDomain) {
         const base = r2Config.publicDomain.replace(/\/$/, '');
-        return `${base}/${filename}`;
+        return { url: `${base}/${filename}`, usedStorage: 'cloudflare-r2' };
       }
-      // Fallback Cloudflare R2 endpoint URL
-      return `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${r2Config.bucketName}/${filename}`;
+      return {
+        url: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${r2Config.bucketName}/${filename}`,
+        usedStorage: 'cloudflare-r2'
+      };
     } catch (err) {
       console.warn(`Cloudflare R2 upload failed for ${filename}, falling back to local edge storage:`, err);
     }
   }
 
-  // Local storage fallback (saved in public/uploads/ so it is immediately served statically)
-  const filePath = path.join(PUBLIC_UPLOADS_DIR, filename);
-  await fs.promises.writeFile(filePath, buffer);
-  return `/uploads/${filename}`;
+  return { url: localUrl, usedStorage: 'local-edge' };
 }
 
 /**
@@ -150,7 +169,7 @@ async function saveVariant(
  * 3. Stripping of all EXIF metadata for privacy and size reduction
  * 4. Tiny 20px blur placeholder generation
  * 5. Naming: {slug}-{ancho}.{formato}
- * 6. Storage in Cloudflare R2 / local edge
+ * 6. Cloudinary .AVIF upload & storage
  */
 export async function processNewsImage(options: ProcessImageOptions): Promise<OptimizationResult> {
   const {
@@ -191,29 +210,35 @@ export async function processNewsImage(options: ProcessImageOptions): Promise<Op
     .toBuffer();
   const blurDataUrl = `data:image/webp;base64,${blurBuffer.toString('base64')}`;
 
-  // 2. Prepare Cloudflare R2 connection
+  // 2. Prepare Cloudflare R2 connection fallback
   const r2Config = getR2Client();
-  const storage: 'cloudflare-r2' | 'local-edge' = r2Config ? 'cloudflare-r2' : 'local-edge';
 
   const variants: ImageVariantInfo[] = [];
+  let detectedStorage: 'cloudinary' | 'cloudflare-r2' | 'local-edge' = 'local-edge';
 
   // 3. Process each size for AVIF, WebP, and JPEG
   for (const width of targetSizes) {
     const height = Math.round(width / aspectRatio);
 
-    // AVIF Variant (Default - quality 55)
+    // AVIF Variant (Default & Primary - quality 55)
     const avifBuffer = await sharp(buffer)
       .rotate()
       .resize(width, height, { fit: 'inside', withoutEnlargement: true })
       .avif(FORMAT_CONFIG.avif)
       .toBuffer();
     const avifFilename = `${slug}-${width}.avif`;
-    const avifUrl = await saveVariant(avifFilename, avifBuffer, 'image/avif', r2Config);
+    const avifSave = await saveVariant(avifFilename, avifBuffer, 'image/avif', 'avif', r2Config);
+    if (avifSave.usedStorage === 'cloudinary') {
+      detectedStorage = 'cloudinary';
+    } else if (avifSave.usedStorage === 'cloudflare-r2' && detectedStorage !== 'cloudinary') {
+      detectedStorage = 'cloudflare-r2';
+    }
+
     variants.push({
       width,
       height,
       format: 'avif',
-      url: avifUrl,
+      url: avifSave.url,
       sizeBytes: avifBuffer.length,
       filename: avifFilename
     });
@@ -225,12 +250,12 @@ export async function processNewsImage(options: ProcessImageOptions): Promise<Op
       .webp(FORMAT_CONFIG.webp)
       .toBuffer();
     const webpFilename = `${slug}-${width}.webp`;
-    const webpUrl = await saveVariant(webpFilename, webpBuffer, 'image/webp', r2Config);
+    const webpSave = await saveVariant(webpFilename, webpBuffer, 'image/webp', 'webp', r2Config);
     variants.push({
       width,
       height,
       format: 'webp',
-      url: webpUrl,
+      url: webpSave.url,
       sizeBytes: webpBuffer.length,
       filename: webpFilename
     });
@@ -242,12 +267,12 @@ export async function processNewsImage(options: ProcessImageOptions): Promise<Op
       .jpeg(FORMAT_CONFIG.jpeg)
       .toBuffer();
     const jpegFilename = `${slug}-${width}.jpg`;
-    const jpegUrl = await saveVariant(jpegFilename, jpegBuffer, 'image/jpeg', r2Config);
+    const jpegSave = await saveVariant(jpegFilename, jpegBuffer, 'image/jpeg', 'jpeg', r2Config);
     variants.push({
       width,
       height,
       format: 'jpeg',
-      url: jpegUrl,
+      url: jpegSave.url,
       sizeBytes: jpegBuffer.length,
       filename: jpegFilename
     });
@@ -294,28 +319,16 @@ export async function processNewsImage(options: ProcessImageOptions): Promise<Op
     fallbackUrl,
     pictureSnippet,
     totalSavingsPercent,
-    storage
+    storage: detectedStorage
   };
 }
 
 /**
- * Returns configuration and connectivity status of Cloudflare R2
+ * Returns basic format and dimension capabilities without exposing infrastructure secrets
  */
 export function getR2Status() {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const bucketName = process.env.R2_BUCKET_NAME || 'news-media-images';
-  const publicDomain = process.env.R2_PUBLIC_DOMAIN;
-
-  const isConfigured = Boolean(accountId && accessKeyId && process.env.R2_SECRET_ACCESS_KEY);
-
   return {
-    isConfigured,
-    provider: isConfigured ? 'Cloudflare R2 Storage' : 'Local Edge Storage (Dev / Preview)',
-    bucketName,
-    publicDomain: publicDomain || (isConfigured ? `https://${accountId}.r2.cloudflarestorage.com/${bucketName}` : '/uploads'),
-    accountMasked: accountId ? `${accountId.slice(0, 4)}...${accountId.slice(-4)}` : null,
-    formats: ['AVIF (55)', 'WebP (68)', 'JPEG (72)'],
+    formats: ['AVIF (calidad 55)', 'WebP (calidad 68)', 'JPEG (calidad 72 fallback)'],
     sizes: [150, 400, 800, 1200, 1920]
   };
 }
