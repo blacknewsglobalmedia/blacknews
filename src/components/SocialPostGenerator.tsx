@@ -2618,17 +2618,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             
             {/* Primary: Export Video or Export PNG depending on mediaType */}
             {mediaType === 'video' ? (
-              <button
-                type="button"
-                disabled={isRecordingVideo}
-                onClick={handleExportVideo}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 hover:from-amber-300 hover:to-amber-200 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+              // Exportación de video retirada: el endpoint /api/video/* devuelve 410
+              // (el material audiovisual se publica directamente en YouTube).
+              <div
+                className="w-full py-3.5 bg-neutral-900/70 border border-white/10 text-neutral-400 rounded-xl flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wider text-center"
+                title="La exportación de video en servidor fue retirada: sube el video a YouTube."
               >
-                <Film className="w-4 h-4 text-black" />
-                <span>
-                  {isRecordingVideo ? `Exportando Video (${recordingProgress}%)...` : 'Exportar Video MP4 4:5 (1080×1350)'}
-                </span>
-              </button>
+                <Film className="w-4 h-4 text-neutral-500 shrink-0" />
+                <span>Exportación de video retirada · sube el video a YouTube</span>
+              </div>
             ) : (
               <button
                 type="button"

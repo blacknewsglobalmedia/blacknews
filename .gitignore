@@ -6,6 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+.dev.vars*
+.wrangler/
+server/cloudinaryConfig.json
 bun.lock
 bun.lockb
 package-lock.json

@@ -69,7 +69,6 @@ interface RedactionStudioProps {
   onPublishReport: (newReport: Report) => void;
   onUpdateExistingReport: (updatedReport: Report) => void;
   currentUser: RedactorProfile;
-  onSwitchUser: (user: RedactorProfile) => void;
   allRedactors: RedactorProfile[];
   onApproveRedactor: (id: string) => void;
   onRejectRedactor: (id: string) => void;
@@ -123,7 +122,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onPublishReport,
   onUpdateExistingReport,
   currentUser,
-  onSwitchUser,
   allRedactors,
   onApproveRedactor,
   onRejectRedactor,
@@ -780,29 +778,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               </div>
             </div>
 
-            {/* Quick Switcher for Testing Team Roles */}
-            <div className="pt-1.5 border-t border-white/5 flex items-center justify-between text-[10px] font-mono">
-              <span className="text-neutral-500">PROBAR:</span>
-              <div className="flex items-center gap-1">
-                {allRedactors
-                  .filter((u) => u.role !== 'LECTOR')
-                  .slice(0, 3)
-                  .map((user) => (
-                    <button
-                      key={user.id}
-                      onClick={() => onSwitchUser(user)}
-                      className={`px-1.5 py-0.5 rounded transition-colors cursor-pointer border ${
-                        currentUser.id === user.id
-                          ? 'border-white text-white font-bold bg-white/20'
-                          : 'border-white/10 text-neutral-400 hover:text-white hover:border-white/30'
-                      }`}
-                      title={`Cambiar a ${user.name} (${user.role})`}
-                    >
-                      {user.avatarInitials}
-                    </button>
-                  ))}
-              </div>
-            </div>
+            {/* Session capsule: no role switcher here anymore (roles change only via verified Google login) */}
           </div>
 
           {/* Nav Categories */}

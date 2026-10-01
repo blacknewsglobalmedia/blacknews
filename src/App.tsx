@@ -26,12 +26,54 @@ import { DEFAULT_LAYOUT_CONFIG, computeLayoutPreset } from './utils/layoutUtils'
 import { db, auth } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
-// Initial team: only the owner is Admin, others are moderator, redactor, and basic lector
+/**
+ * SECURITY: single-admin rule. Only this account may hold the ADMIN role, and only
+ * through a verified Google sign-in (see handleLoginWithGoogle). No quick-access or
+ * test accounts are shipped to the public anymore.
+ */
+const OWNER_EMAIL = 'blacknewsglobalmedia@gmail.com';
+
+// Test accounts created during development: removed from the team and purged from any
+// stored roster so they can never show up (or be signed in) again.
+const LEGACY_TEST_EMAILS = [
+  'editor.portada@blacknews.media',
+  'mateo.valenzuela@blacknews.media',
+  'carlos.velez@prensa-economica.com',
+];
+
+const isOwnerEmail = (email: string): boolean => email.trim().toLowerCase() === OWNER_EMAIL;
+
+// Demotes any stored profile that holds ADMIN without being the owner (legacy test data)
+const enforceOwnerOnlyAdmin = (user: RedactorProfile): RedactorProfile => {
+  if (user.role !== 'ADMIN' || isOwnerEmail(user.email)) return user;
+  return {
+    ...user,
+    role: 'LECTOR',
+    title: user.title === 'Administrador' ? 'Usuario Básico' : user.title,
+    approvedAt: undefined,
+  };
+};
+
+// Unauthenticated visitor: basic reader, no access to the internal panel
+const GUEST_USER: RedactorProfile = {
+  id: 'usr-guest',
+  name: 'Lector Invitado',
+  email: 'lector.invitado@blacknews.media',
+  role: 'LECTOR',
+  bureau: 'Lector',
+  title: 'Invitado',
+  requestedAt: '30 Sep 2026',
+  avatarInitials: 'LI',
+  bio: 'Lector no autenticado.',
+  isGoogleAccount: false,
+};
+
+// Initial team: only the owner account exists, and it is the ADMIN
 const INITIAL_REDACTORS: RedactorProfile[] = [
   {
     id: 'usr-admin',
     name: 'Administrador',
-    email: 'blacknewsglobalmedia@gmail.com',
+    email: OWNER_EMAIL,
     role: 'ADMIN',
     bureau: 'Zúrich / Central',
     title: 'Administrador',
@@ -40,44 +82,6 @@ const INITIAL_REDACTORS: RedactorProfile[] = [
     avatarInitials: 'ADM',
     bio: 'Supervisión de la certidumbre jurídica, el libre mercado y la inviolabilidad de la propiedad privada.',
     isGoogleAccount: true,
-  },
-  {
-    id: 'usr-helena',
-    name: 'Helena Von Berg',
-    email: 'editor.portada@blacknews.media',
-    role: 'MODERADOR',
-    bureau: 'Ginebra / Mesa de Portada',
-    title: 'Moderadora de Portada',
-    requestedAt: '12 Feb 2026',
-    approvedAt: '15 Feb 2026',
-    avatarInitials: 'HB',
-    bio: 'Edición en tiempo real de la primera plana y coordinación de portada.',
-    isGoogleAccount: true,
-  },
-  {
-    id: 'usr-mateo',
-    name: 'Mateo R. Valenzuela',
-    email: 'mateo.valenzuela@blacknews.media',
-    role: 'REDACTOR',
-    bureau: 'Zúrich / Mercados',
-    title: 'Redactor de Mercados',
-    requestedAt: '10 Feb 2026',
-    approvedAt: '12 Feb 2026',
-    avatarInitials: 'MV',
-    bio: 'Análisis de divisas y asignación voluntaria de capitales.',
-    isGoogleAccount: true,
-  },
-  {
-    id: 'usr-carlos',
-    name: 'Carlos Hernán Vélez',
-    email: 'carlos.velez@prensa-economica.com',
-    role: 'LECTOR',
-    bureau: 'Lector Registrado',
-    title: 'Usuario Básico',
-    requestedAt: '24 Sep 2026',
-    avatarInitials: 'CH',
-    bio: 'Usuario lector registrado sin permisos de redacción.',
-    isGoogleAccount: false,
   },
 ];
 
@@ -198,22 +202,37 @@ export default function App() {
     });
   };
 
-  // Persistent redactors and registered users management
+  // Persistent redactors and registered users management (always honoring the single-admin rule)
   const [redactorsList, setRedactorsList] = useState<RedactorProfile[]>(() => {
     try {
       const saved = localStorage.getItem('blacknews_redactors');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const sanitized = (parsed as RedactorProfile[])
+            .filter((user) => !LEGACY_TEST_EMAILS.includes(user.email.trim().toLowerCase()))
+            .map(enforceOwnerOnlyAdmin);
+          if (sanitized.length > 0) return sanitized;
+        }
       }
     } catch {}
     return INITIAL_REDACTORS;
   });
 
-  // Current active user (defaults to Admin for full initial exploration)
-  const [currentUser, setCurrentUser] = useState<RedactorProfile>(() => {
-    return redactorsList[0] || INITIAL_REDACTORS[0];
-  });
+  // Current active user: every visitor starts as a basic reader.
+  // Editorial access is only granted after a verified Google sign-in.
+  const [currentUser, setCurrentUser] = useState<RedactorProfile>(GUEST_USER);
+
+  // Persist the sanitized roster on mount so legacy test accounts and non-owner ADMIN
+  // entries are really purged from the browser storage.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('blacknews_redactors');
+      if (saved && saved !== JSON.stringify(redactorsList)) {
+        localStorage.setItem('blacknews_redactors', JSON.stringify(redactorsList));
+      }
+    } catch {}
+  }, []);
 
   // Persistent bookmarks
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(() => {
@@ -408,12 +427,17 @@ export default function App() {
 
   // Assign user role (ADMIN, MODERADOR, REDACTOR, LECTOR)
   const handleChangeUserRole = (userId: string, newRole: RedactorRole) => {
+    const target = redactorsList.find((member) => member.id === userId);
+    // Single-admin rule: ADMIN can only ever be held by the owner email
+    const safeRole: RedactorRole =
+      newRole === 'ADMIN' && target && !isOwnerEmail(target.email) ? 'LECTOR' : newRole;
+
     const updated = redactorsList.map((member) => {
       if (member.id === userId) {
         return {
           ...member,
-          role: newRole,
-          approvedAt: newRole !== 'LECTOR' ? (member.approvedAt || '24 Sep 2026') : undefined,
+          role: safeRole,
+          approvedAt: safeRole !== 'LECTOR' ? (member.approvedAt || '30 Sep 2026') : undefined,
         };
       }
       return member;
@@ -424,9 +448,9 @@ export default function App() {
     } catch {}
 
     if (currentUser.id === userId) {
-      setCurrentUser((prev) => ({ ...prev, role: newRole }));
+      setCurrentUser((prev) => ({ ...prev, role: safeRole }));
     }
-    showToast(`Permisos actualizados: ${newRole}`);
+    showToast(`Permisos actualizados: ${safeRole}`);
   };
 
   // Approvals Management
@@ -453,7 +477,7 @@ export default function App() {
       ...candidate,
       id: `usr-${Date.now()}`,
       role: 'LECTOR',
-      requestedAt: '24 Sep 2026',
+      requestedAt: '30 Sep 2026',
       avatarInitials: initials || 'US',
       isGoogleAccount: false,
     };
@@ -467,79 +491,97 @@ export default function App() {
     showToast('Cuenta registrada como Lector básico. Solicitud enviada.');
   };
 
-  // Google Login and Registration Handler
+  // Google Login and Registration Handler.
+  // `verified` is true ONLY when the session comes from a real Firebase Google sign-in:
+  // that is the single flow capable of restoring or granting editorial roles.
   const handleLoginWithGoogle = (
     email: string,
     name: string,
     bureau: string = 'Lector Registrado',
     title: string = 'Usuario Básico',
-    role?: RedactorRole
+    verified: boolean = false
   ) => {
-    // Check if user already exists
+    const initials =
+      name
+        .split(' ')
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase() || 'US';
+
     const existing = redactorsList.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      setCurrentUser(existing);
-      showToast(`Sesión: ${existing.name} [${existing.role}]`);
+
+    // Manual (unverified) registration: always a basic reader, never inherits editorial roles
+    if (!verified) {
+      const readerProfile: RedactorProfile =
+        existing && existing.role === 'LECTOR'
+          ? existing
+          : {
+              id: `usr-manual-${Date.now()}`,
+              name,
+              email,
+              role: 'LECTOR',
+              bureau: 'Lector Registrado',
+              title: 'Usuario Básico',
+              avatarInitials: initials,
+              requestedAt: '30 Sep 2026',
+              isGoogleAccount: false,
+            };
+
+      if (!existing) {
+        const updated = [readerProfile, ...redactorsList];
+        setRedactorsList(updated);
+        try {
+          localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+        } catch {}
+      }
+
+      setCurrentUser(readerProfile);
+      showToast(
+        existing && existing.role !== 'LECTOR'
+          ? 'Permisos editoriales en pausa: verifica tu identidad con Google para activarlos.'
+          : 'Cuenta registrada como Lector básico. Solicitud enviada.'
+      );
       return;
     }
 
-    // Strict rule: Only the owner email is ADMIN. Any normal user registering with Google is LECTOR!
-    const assignedRole: RedactorRole = role 
-      ? role 
-      : email.toLowerCase() === 'blacknewsglobalmedia@gmail.com'
-      ? 'ADMIN'
-      : 'LECTOR';
+    // Verified Google session: only the owner email becomes/keeps ADMIN
+    const nextProfile: RedactorProfile = existing
+      ? isOwnerEmail(email)
+        ? { ...existing, role: 'ADMIN' }
+        : enforceOwnerOnlyAdmin(existing)
+      : {
+          id: `usr-google-${Date.now()}`,
+          name,
+          email,
+          role: isOwnerEmail(email) ? 'ADMIN' : 'LECTOR',
+          bureau,
+          title,
+          avatarInitials: initials,
+          requestedAt: '30 Sep 2026',
+          approvedAt: isOwnerEmail(email) ? '30 Sep 2026' : undefined,
+          isGoogleAccount: true,
+        };
 
-    const initials = name
-      .split(' ')
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
+    const roleChanged = !existing || nextProfile.role !== existing.role;
+    if (roleChanged) {
+      const updated = existing
+        ? redactorsList.map((u) => (u.id === existing.id ? nextProfile : u))
+        : [nextProfile, ...redactorsList];
+      setRedactorsList(updated);
+      try {
+        localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+      } catch {}
+    }
 
-    const newGoogleUser: RedactorProfile = {
-      id: `usr-google-${Date.now()}`,
-      name,
-      email,
-      role: assignedRole,
-      bureau,
-      title,
-      avatarInitials: initials || 'G',
-      requestedAt: '24 Sep 2026',
-      approvedAt: assignedRole !== 'LECTOR' ? '24 Sep 2026' : undefined,
-      isGoogleAccount: true,
-    };
-
-    const updated = [newGoogleUser, ...redactorsList];
-    setRedactorsList(updated);
-    try {
-      localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
-    } catch {}
-    setCurrentUser(newGoogleUser);
-    showToast(`Cuenta Google conectada: ${name} [${assignedRole}]`);
+    setCurrentUser(nextProfile);
+    showToast(`Sesión verificada con Google: ${nextProfile.name} [${nextProfile.role}]`);
   };
 
   const handleLogout = () => {
-    const readerUser = redactorsList.find((u) => u.role === 'LECTOR') || {
-      id: 'usr-guest',
-      name: 'Lector Invitado',
-      email: 'lector.invitado@blacknews.media',
-      role: 'LECTOR' as const,
-      bureau: 'Lector',
-      title: 'Invitado',
-      requestedAt: '24 Sep 2026',
-      avatarInitials: 'LI',
-      bio: 'Lector no autenticado.',
-      isGoogleAccount: false,
-    };
-    setCurrentUser(readerUser);
+    setCurrentUser(GUEST_USER);
     setCurrentView('portada');
     showToast('Sesión cerrada. Modo Lector activado.');
-  };
-
-  const handleSwitchUser = (user: RedactorProfile) => {
-    setCurrentUser(user);
-    showToast(`Sesión: ${user.name} [${user.role}]`);
   };
 
   // Sharing handling
@@ -643,7 +685,6 @@ export default function App() {
             onPublishReport={handlePublishReport}
             onUpdateExistingReport={handleUpdateExistingReport}
             currentUser={currentUser}
-            onSwitchUser={handleSwitchUser}
             allRedactors={redactorsList}
             onApproveRedactor={handleApproveRedactor}
             onRejectRedactor={handleRejectRedactor}

@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // BLACKNEWS — Cloudflare Worker: sirve el frontend (dist/) + API de imágenes.
+  // Secretos NO se guardan aquí: se envían con
+  //   npx wrangler secret put CLOUDINARY_API_KEY
+  //   npx wrangler secret put CLOUDINARY_API_SECRET
+  // En local (wrangler dev) van en .dev.vars (gitignored).
+  "name": "blacknews",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-30",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // El Worker atiende /api/* y delega el resto en los assets estáticos
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    // La única credencial "pública" de Cloudinary (es el identificador del entorno)
+    "CLOUDINARY_CLOUD_NAME": "jxryjgjq"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // ALMACENAMIENTO R2 (opcional, sin access keys: se usa el binding del bucket)
+  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "news-media-images" }]
+}

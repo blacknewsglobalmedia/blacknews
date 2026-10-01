@@ -1,3 +1,6 @@
+// Load local .env (gitignored). In production (Cloudflare Workers) these same
+// names come from the dashboard variables/secrets instead.
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';

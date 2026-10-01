@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Check, LogOut, ArrowRight, ShieldCheck, User, PenTool } from 'lucide-react';
-import { RedactorProfile, ROLE_PERMISSIONS, RedactorRole } from '../types/auth';
+import { X, Check, LogOut, PenTool } from 'lucide-react';
+import { RedactorProfile, ROLE_PERMISSIONS } from '../types/auth';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 
@@ -8,7 +8,7 @@ interface GoogleAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: RedactorProfile;
-  onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string, role?: RedactorRole) => void;
+  onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string, verified?: boolean) => void;
   onLogout: () => void;
   onOpenStudio?: () => void;
 }
@@ -31,51 +31,6 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
 
   const permissions = ROLE_PERMISSIONS[currentUser.role];
 
-  // Quick switchers for testing different privilege levels
-  const handleAdminQuickLogin = () => {
-    onLoginWithGoogle(
-      'blacknewsglobalmedia@gmail.com',
-      'Administrador',
-      'Zúrich / Central',
-      'Administrador',
-      'ADMIN'
-    );
-    onClose();
-  };
-
-  const handleModeratorQuickLogin = () => {
-    onLoginWithGoogle(
-      'editor.portada@blacknews.media',
-      'Helena Von Berg',
-      'Ginebra / Mesa de Portada',
-      'Moderadora de Portada',
-      'MODERADOR'
-    );
-    onClose();
-  };
-
-  const handleRedactorQuickLogin = () => {
-    onLoginWithGoogle(
-      'mateo.valenzuela@blacknews.media',
-      'Mateo R. Valenzuela',
-      'Zúrich / Mercados',
-      'Redactor de Mercados',
-      'REDACTOR'
-    );
-    onClose();
-  };
-
-  const handleReaderQuickLogin = () => {
-    onLoginWithGoogle(
-      'lector.demo@gmail.com',
-      'Usuario Lector',
-      'Lector Registrado',
-      'Usuario Básico',
-      'LECTOR'
-    );
-    onClose();
-  };
-
   // Real Google Sign-in with Firebase
   const handleRealFirebaseGoogleSignIn = async () => {
     setIsConnecting(true);
@@ -85,27 +40,23 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
       const user = result.user;
       const email = user.email || 'usuario.google@gmail.com';
       const name = user.displayName || 'Usuario Google';
-      
-      // Strict rule: Only the specific owner email gets ADMIN automatically.
-      // All other normal people sign in as LECTOR (basic user without any editing permissions).
-      const role: RedactorRole = email.toLowerCase() === 'blacknewsglobalmedia@gmail.com'
-        ? 'ADMIN'
-        : 'LECTOR';
+      const isOwner = email.trim().toLowerCase() === 'blacknewsglobalmedia@gmail.com';
 
+      // Verified identity: only the owner email gets ADMIN, everyone else enters as LECTOR.
       onLoginWithGoogle(
         email,
         name,
-        role === 'ADMIN' ? 'Central' : 'Lector Registrado',
-        role === 'ADMIN' ? 'Administrador' : 'Usuario Básico',
-        role
+        isOwner ? 'Zúrich / Central' : 'Lector Registrado',
+        isOwner ? 'Administrador' : 'Usuario Básico',
+        true
       );
       onClose();
     } catch (err: any) {
       console.warn('[Firebase Auth]:', err);
       if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
-        setAuthError('La ventana emergente fue bloqueada por el navegador. Puedes ingresar directamente usando el botón de Acceso Rápido Administrador abajo.');
+        setAuthError('La ventana emergente fue bloqueada por el navegador. Permítela e inténtalo de nuevo con el botón "Acceder con cuenta Google".');
       } else {
-        setAuthError(`Aviso: ${err.message || 'No se pudo abrir la ventana de Google'}. Puedes ingresar con el botón directo de Administrador abajo.`);
+        setAuthError(`Aviso: ${err.message || 'No se pudo abrir la ventana de Google'}. Verifica que el proveedor de Google esté habilitado en la consola de Firebase e inténtalo de nuevo.`);
       }
     } finally {
       setIsConnecting(false);
@@ -115,18 +66,15 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   const handleCustomGoogleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customEmail.trim() || !customName.trim()) return;
-    
-    // Normal registration always creates a basic LECTOR account unless it matches admin email
-    const role: RedactorRole = customEmail.trim().toLowerCase() === 'blacknewsglobalmedia@gmail.com'
-      ? 'ADMIN'
-      : 'LECTOR';
 
+    // Manual registration never grants editorial permissions: it always creates a LECTOR
+    // account. ADMIN is only reachable through the verified Google sign-in above.
     onLoginWithGoogle(
-      customEmail.trim(), 
-      customName.trim(), 
-      role === 'ADMIN' ? 'Zúrich / Central' : 'Lector Registrado', 
-      role === 'ADMIN' ? 'Administrador' : 'Usuario Básico',
-      role
+      customEmail.trim(),
+      customName.trim(),
+      'Lector Registrado',
+      'Usuario Básico',
+      false
     );
     onClose();
   };
@@ -210,7 +158,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {currentUser.role === 'LECTOR' ? (
               <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
                 <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: puedes guardar artículos y compartir sin restricciones. Para ver el panel interno con permisos editoriales, entra con la cuenta de Administrador abajo.
+                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: puedes guardar artículos y compartir sin restricciones. Para ver el panel interno con permisos editoriales es necesario iniciar sesión con la cuenta de Google del editor, verificada por Firebase.
                 </p>
               </div>
             ) : (
@@ -261,7 +209,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         {/* Real Firebase Google Auth Popup Button */}
         <div className="mb-5">
           <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 font-medium">
-            1. INICIAR SESIÓN CON GOOGLE (FIREBASE)
+            INICIAR SESIÓN CON GOOGLE (FIREBASE)
           </div>
           <button
             onClick={handleRealFirebaseGoogleSignIn}
@@ -274,95 +222,6 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           <p className="text-[11px] font-sans text-neutral-400 text-center mt-2 font-light">
             Al iniciar con la cuenta <strong className="text-neutral-300">blacknewsglobalmedia@gmail.com</strong> se activa automáticamente el rol de Administrador.
           </p>
-        </div>
-
-        {/* Fast profile switchers: ALWAYS accessible so the user can easily enter as Admin */}
-        <div className="space-y-2 mb-6 pt-4 border-t border-white/10">
-          <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 flex items-center justify-between font-medium">
-            <span>2. ACCESO DIRECTO / SELECCIÓN DE ROL:</span>
-            <span className="text-[10px] text-emerald-400">INSTANTÁNEO</span>
-          </div>
-
-          {/* Master Admin Button */}
-          <button
-            onClick={handleAdminQuickLogin}
-            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
-              currentUser.role === 'ADMIN'
-                ? 'border-emerald-500/60 bg-emerald-950/20 text-white'
-                : 'border-white/20 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.04]'
-            }`}
-          >
-            <div>
-              <div className="text-xs font-semibold text-white flex items-center gap-2">
-                <span>blacknewsglobalmedia@gmail.com</span>
-                <span className="text-[10px] bg-white text-black font-bold px-1.5 py-0.5 rounded">ADMIN</span>
-              </div>
-              <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                Rol: Administrador (Control total del medio, portada, Cloudinary y redactores)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-          </button>
-
-          {/* Moderator Button */}
-          <button
-            onClick={handleModeratorQuickLogin}
-            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
-              currentUser.role === 'MODERADOR'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
-            }`}
-          >
-            <div>
-              <div className="text-xs font-semibold text-white">
-                editor.portada@blacknews.media
-              </div>
-              <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                Rol: Moderador (Gestión de portada y aprobación de redacciones)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-
-          {/* Redactor Button */}
-          <button
-            onClick={handleRedactorQuickLogin}
-            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
-              currentUser.role === 'REDACTOR'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
-            }`}
-          >
-            <div>
-              <div className="text-xs font-semibold text-white">
-                mateo.valenzuela@blacknews.media
-              </div>
-              <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                Rol: Redactor (Edita y publica sus propios artículos)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-
-          {/* Reader Button */}
-          <button
-            onClick={handleReaderQuickLogin}
-            className={`w-full p-3 border text-left flex items-center justify-between transition-colors cursor-pointer group rounded-lg ${
-              currentUser.role === 'LECTOR'
-                ? 'border-white bg-white/10 text-white'
-                : 'border-white/10 hover:border-white text-neutral-300 hover:text-white hover:bg-white/[0.02]'
-            }`}
-          >
-            <div>
-              <div className="text-xs font-semibold text-white">
-                lector.demo@gmail.com
-              </div>
-              <div className="text-xs font-sans text-neutral-400 mt-0.5">
-                Rol: Lector básico (Vista de visitante sin panel interno)
-              </div>
-            </div>
-            <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
         </div>
 
         {/* Custom Google Account Login / Register Toggle */}
@@ -405,7 +264,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
               />
             </div>
             <p className="text-xs font-sans text-neutral-500 font-light">
-              * Si ingresas con <strong className="text-neutral-400">blacknewsglobalmedia@gmail.com</strong> se te asignará rol Administrador. Otras cuentas ingresan como LECTOR.
+              * El registro manual siempre crea una cuenta <strong className="text-neutral-400">Lector</strong> sin permisos de edición. El rol de <strong className="text-neutral-400">Administrador</strong> solo se asigna al iniciar sesión con Google desde <strong className="text-neutral-400">blacknewsglobalmedia@gmail.com</strong>.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <button

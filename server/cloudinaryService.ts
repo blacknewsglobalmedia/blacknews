@@ -15,35 +15,39 @@ export interface CloudinaryConfig {
   folder: string;
 }
 
-// Default credentials provided by the user:
-// Name: blacknews_upload
-// Key: 653486427935582
-// Secret: 9a-T0OQ4pmypj9vYMAYeBN3gG9Q
+// Credentials NEVER live in the source code. Precedence: environment variables
+// (local .env or Cloudflare Workers variables/secrets) > server/cloudinaryConfig.json.
+// See .env.example for the required keys.
 const DEFAULT_CONFIG: CloudinaryConfig = {
-  cloudName: process.env.CLOUDINARY_CLOUD_NAME || 'blacknews_upload',
-  apiKey: process.env.CLOUDINARY_API_KEY || '653486427935582',
-  apiSecret: process.env.CLOUDINARY_API_SECRET || '9a-T0OQ4pmypj9vYMAYeBN3gG9Q',
+  cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+  apiKey: process.env.CLOUDINARY_API_KEY || '',
+  apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   uploadPreset: 'blacknews_upload',
   folder: 'blacknews/articles'
 };
 
 let currentConfig: CloudinaryConfig = { ...DEFAULT_CONFIG };
 
-// Load persistent config if exists
+// Load persistent config if exists (non-secret fields), then let env vars win
 try {
   if (fs.existsSync(CONFIG_FILE)) {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     currentConfig = {
       ...DEFAULT_CONFIG,
-      ...parsed
+      ...parsed,
+      ...(process.env.CLOUDINARY_CLOUD_NAME ? { cloudName: process.env.CLOUDINARY_CLOUD_NAME } : {}),
+      ...(process.env.CLOUDINARY_API_KEY ? { apiKey: process.env.CLOUDINARY_API_KEY } : {}),
+      ...(process.env.CLOUDINARY_API_SECRET ? { apiSecret: process.env.CLOUDINARY_API_SECRET } : {})
     };
-  } else {
-    // Write default config file
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf-8');
   }
 } catch (err) {
-  console.warn('[CLOUDINARY] Failed reading config file, using defaults:', err);
+  console.warn('[CLOUDINARY] Failed reading config file, using environment:', err);
+}
+
+// True when we have real credentials to talk to Cloudinary
+export function hasCloudinaryCredentials(config: CloudinaryConfig = currentConfig): boolean {
+  return Boolean(config.cloudName && config.apiKey && config.apiSecret);
 }
 
 // Initialize Cloudinary SDK
@@ -165,6 +169,18 @@ export async function uploadAvifToCloudinary(
   }
 ): Promise<CloudinaryUploadResult> {
   return new Promise((resolve) => {
+    if (!hasCloudinaryCredentials()) {
+      resolve({
+        success: false,
+        url: '',
+        publicId,
+        format: 'avif',
+        bytes: buffer.length,
+        error: 'CLOUDINARY no configurado: faltan CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET en las variables de entorno.'
+      });
+      return;
+    }
+
     const targetFolder = options?.folder || currentConfig.folder || 'blacknews/articles';
     const finalFolder = options?.subfolder ? `${targetFolder}/${options.subfolder}` : targetFolder;
 

@@ -1,33 +1,76 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow testing connection
-    match /test/{document=**} {
-      allow read, write: if true;
+
+    // -----------------------------------------------------------------
+    // BLACKNEWS — reglas endurecidas (prioridad 1)
+    //
+    // Antes: "allow write: if true" → cualquier visitante anónimo podía
+    // sobrescribir portada, teletipo, categorías y artículos.
+    //
+    // Ahora: lecturas públicas (sitio informativo), escrituras SOLO de la
+    // sesión de Google verificada de blacknewsglobalmedia@gmail.com.
+    //
+    // Para sumar redactores más adelante, o bien añade su correo a
+    // isEditor() o —mejor— usa custom claims de Firebase Auth
+    // (request.auth.token.role == 'REDACTOR'), que no se pueden falsificar
+    // desde el cliente.
+    // -----------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Reports are public to read for all readers of BLACKNEWS
+    function isVerifiedEmail() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Único propietario/administrador del proyecto
+    function isOwner() {
+      return isVerifiedEmail()
+        && request.auth.token.email == 'blacknewsglobalmedia@gmail.com';
+    }
+
+    // Quién puede publicar/editar contenido editorial
+    function isEditor() {
+      return isOwner();
+    }
+
+    // Denegado por defecto (Firestore ya es deny-by-default; queda explícito)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Comprobación de conexión del cliente: solo lectura
+    match /test/{document=**} {
+      allow read: if true;
+      allow create, update, delete: if isOwner();
+    }
+
+    // Artículos: lectura pública para todos los lectores de BLACKNEWS
     match /reports/{reportId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update, delete: if isEditor();
     }
 
-    // Flash news / teletipo
+    // Teletipo / última hora (colección flash_news)
     match /flash_news/{flashId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update, delete: if isOwner();
     }
 
-    // Settings / Front page layout config
+    // Configuración: settings/frontpage_layout, settings/flash_news,
+    // settings/categories
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update, delete: if isOwner();
     }
 
-    // User profiles & permissions
+    // Perfiles y permisos del equipo (contiene correos → no es público)
     match /users/{userId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if isEditor();
+      allow create, update, delete: if isOwner();
     }
   }
 }
