@@ -1300,6 +1300,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           video.pause();
         } catch {}
+        // CLAVE: el grabador cuenta tiempo en pared; si sigue activo con el
+        // lienzo congelado, la duración del archivo se infla (lo que "multiplica"
+        // la duración). Pausarlo hace que ese tiempo muerto no se grabe.
+        try {
+          if (recorder.state === 'recording') recorder.pause();
+        } catch {}
         setIsVideoPlaying(false);
         setRecordingPaused(true);
       };
@@ -1311,6 +1317,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // El tiempo pausado no cuenta para el tope de seguridad
         hardDeadline += performance.now() - pausedAt;
         lastTickAt = performance.now();
+        try {
+          if (recorder.state === 'paused') recorder.resume();
+        } catch {}
         void video
           .play()
           .then(() => {
@@ -1347,9 +1356,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           return;
         }
 
-        // Cadencia insostenible (>500 ms entre ticks) = ventana sin componer
+        // Cadencia insostenible = ventana sin componer: un tick de >900 ms (p. ej.
+        // 1 Hz al estar tapada) pausa ya, sin esperar acumulaciones.
         slowTicks = dt > 500 ? slowTicks + 1 : 0;
-        if (slowTicks >= 2 || dt > 1500) {
+        if (dt > 900 || slowTicks >= 2) {
           pauseForBackground();
           rafId = requestAnimationFrame(tick);
           return;
