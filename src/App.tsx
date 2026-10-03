@@ -18,6 +18,10 @@ import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
 import { CreateAdModal } from "./components/CreateAdModal";
+import { GeoMapSection } from "./components/GeoMapSection";
+import { GlossaryShowcase } from "./components/GlossaryShowcase";
+import { InstallPromo } from "./components/InstallPromo";
+import { TrustSection } from "./components/TrustSection";
 import { REPORTS, CATEGORIES, FLASH_NEWS } from "./data/newsData";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
@@ -29,6 +33,12 @@ import {
 } from "./utils/layoutUtils";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import { doc, setDoc } from "firebase/firestore";
+
+/** Evento beforeinstallprompt (Chrome/Edge/Android) para instalar la PWA. */
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
 
 /**
  * SECURITY: single-admin rule. Only this account may hold the ADMIN role, and only
@@ -307,6 +317,42 @@ export default function App() {
       localStorage.setItem("blacknews_lite", liteMode ? "1" : "0");
     } catch {}
   }, [liteMode]);
+
+  // PWA: instalación desde el navegador (beforeinstallprompt)
+  const [installEvt, setInstallEvt] = useState<BeforeInstallPromptEvent | null>(
+    null,
+  );
+  const [isStandalone, setStandalone] = useState(
+    () =>
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone ===
+        true,
+  );
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallEvt(e as BeforeInstallPromptEvent);
+    };
+    const onInstalled = () => {
+      setInstallEvt(null);
+      setStandalone(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (!installEvt) return;
+    try {
+      await installEvt.prompt();
+      const choice = await installEvt.userChoice;
+      if (choice.outcome) setInstallEvt(null);
+    } catch {}
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -905,6 +951,16 @@ export default function App() {
                 selectedCategory === "TODAS" ? configuredDossier : undefined
               }
             />
+            <GeoMapSection reports={reportsList} />
+            <GlossaryShowcase />
+            {!isStandalone && (
+              <InstallPromo
+                reports={reportsList}
+                installAvailable={installEvt !== null}
+                onInstall={handleInstallPWA}
+              />
+            )}
+            <TrustSection reports={reportsList} />
           </>
         )}
       </main>

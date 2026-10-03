@@ -132,3 +132,27 @@ body.bn-lite figure:has(.bn-media) {
 body.bn-lite main video {
   display: none !important;
 }
+
+/* Mapa de cobertura: halo pulsante en las corresponsalías */
+.map-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bn-map-pulse 2.6s ease-out infinite;
+}
+@keyframes bn-map-pulse {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-pulse {
+    animation: none;
+    opacity: 0.45;
+  }
+}

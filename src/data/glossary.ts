@@ -78,7 +78,7 @@ export const GLOSSARY: GlossaryEntry[] = [
     def: "Moneda con curso internacional utilizada en el comercio y las finanzas globales (dólar, euro, yuan…).",
   },
   {
-    term: "volatililidad",
+    term: "volatilidad",
     def: "Rapidez con la que un precio oscila; se interpreta como medida de la incertidumbre del mercado.",
   },
   {
