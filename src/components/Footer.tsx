@@ -42,24 +42,24 @@ export const Footer: React.FC<FooterProps> = ({
             <div>
               <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
                 <Scale className="w-4 h-4 text-neutral-300" />
-                LIBERTAD ECONÓMICA Y MERCADOS
+                ANÁLISIS MACROECONÓMICO E INDEPENDENCIA
               </div>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed font-light">
-                El libre mercado, la moneda sana, la libre competencia y la
-                ausencia de privilegios corporativos son el catalizador
-                insustituible de la prosperidad humana.
+                Investigación periodística rigurosa, modelos cuantitativos y
+                datos de primera mano sobre mercados globales sin sesgos
+                partidarios ni presiones corporativas.
               </p>
             </div>
 
             <div>
               <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-neutral-300" />
-                PROPIEDAD PRIVADA Y DERECHO A LA VIDA
+                INTELIGENCIA GEOPOLÍTICA Y TECNOLOGÍA
               </div>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed font-light">
-                La inviolabilidad de la persona física, su vida y los frutos de
-                su trabajo configuran el límite infranqueable frente a cualquier
-                poder coactivo o arbitrario.
+                Seguimiento continuo de la geopolítica de materias primas,
+                tendencias monetarias internacionales, soberanía digital e
+                innovación tecnológica de frontera.
               </p>
             </div>
 
@@ -90,8 +90,8 @@ export const Footer: React.FC<FooterProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-white ml-1 inline-block"></span>
               </div>
               <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed mb-5 max-w-sm font-light">
-                Medio digital de análisis económico, geopolítica monetaria,
-                soberanía tecnológica y defensa del estado de derecho.
+                Medio internacional de análisis económico profundo, geopolítica
+                monetaria, soberanía tecnológica y rigor periodístico.
               </p>
               <button
                 onClick={onShareSite}

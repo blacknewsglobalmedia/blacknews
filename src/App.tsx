@@ -18,6 +18,10 @@ import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
 import { CreateAdModal } from "./components/CreateAdModal";
+import { MacroTerminalBar } from "./components/MacroTerminalBar";
+import { ExecutiveBriefingWidget } from "./components/ExecutiveBriefingWidget";
+import { PurchasingPowerCalculator } from "./components/PurchasingPowerCalculator";
+import { GeopoliticalRadar } from "./components/GeopoliticalRadar";
 import { REPORTS, CATEGORIES, FLASH_NEWS } from "./data/newsData";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
@@ -793,6 +797,9 @@ export default function App() {
         />
       )}
 
+      {/* Live Financial & Macro Terminal Ticker Bar */}
+      {currentView === "portada" && <MacroTerminalBar />}
+
       {/* Main View Switcher */}
       <main className="flex-1">
         {currentView === "redaccion" && canAccessInternalMedia ? (
@@ -832,13 +839,23 @@ export default function App() {
             />
 
             {leadReport && (
-              <LeadStory
-                report={leadReport}
-                onRead={handleOpenReport}
-                onShare={handleOpenShare}
-                isBookmarked={bookmarkedIds.has(leadReport.id)}
-                onToggleBookmark={handleToggleBookmark}
-              />
+              <>
+                <LeadStory
+                  report={leadReport}
+                  onRead={handleOpenReport}
+                  onShare={handleOpenShare}
+                  isBookmarked={bookmarkedIds.has(leadReport.id)}
+                  onToggleBookmark={handleToggleBookmark}
+                />
+
+                {/* 30-Second Executive Briefing & Audio Widget */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                  <ExecutiveBriefingWidget
+                    report={leadReport}
+                    onReadFullReport={handleOpenReport}
+                  />
+                </div>
+              </>
             )}
 
             {/* Visual Posts Section: News cards in 4:5 post format */}
@@ -861,6 +878,11 @@ export default function App() {
               }
             />
 
+            {/* Real-Time Geopolitical Signal Radar */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+              <GeopoliticalRadar />
+            </div>
+
             {/* In-Feed Leaderboard Horizontal Banner */}
             <AdBanner
               placement="IN_FEED_LEADERBOARD"
@@ -869,6 +891,11 @@ export default function App() {
               onTrackImpression={handleTrackImpression}
               onTrackClick={handleTrackClick}
             />
+
+            {/* Interactive Purchasing Power Preservation Calculator */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+              <PurchasingPowerCalculator />
+            </div>
 
             <ReportsGrid
               reports={secondaryReports}
