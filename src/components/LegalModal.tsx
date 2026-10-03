@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, ShieldCheck, Scale, Cookie, FileText } from "lucide-react";
+import { APP_VERSION, BUILD_STAMP } from "../version";
 
 export type LegalTab = "terms" | "privacy" | "cookies";
 
@@ -198,7 +199,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({
 
         {/* Footer */}
         <div className="pt-4 border-t border-white/10 flex items-center justify-between shrink-0 text-xs font-mono text-neutral-400">
-          <span>BLACKNEWS LEGAL · v2.4.0</span>
+          <span>BLACKNEWS LEGAL · v{APP_VERSION} ({BUILD_STAMP})</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-white text-black font-semibold uppercase tracking-wider text-xs rounded-md hover:bg-neutral-200 transition-colors cursor-pointer"

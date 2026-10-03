@@ -5,7 +5,17 @@ import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  // Sello de build: cambia en cada compilación (local o en Cloudflare) y se
+  // muestra en el footer, para comprobar en cada despliegue que la producción
+  // ejecuta el último build. Formato UTC: YYYYMMDD-HHMMSS.
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const buildStamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
+
   return {
+    define: {
+      __BUILD_STAMP__: JSON.stringify(buildStamp),
+    },
     plugins: [
       react(),
       tailwindcss(),
