@@ -1,18 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { Report } from "../types/news";
-import { WORLD_LAND_PATH } from "../data/worldLand";
+import { WORLD_DOTS_PATH } from "../data/worldDots";
 
-/** Coordenadas reales de las ciudades citadas en las corresponsalías de los informes. */
-const CITY_COORDS: Record<string, [number, number]> = {
-  "Zúrich": [8.54, 47.37],
-  "Berlín": [13.4, 52.52],
-  "Madrid": [-3.7, 40.42],
-  "Oslo": [10.75, 59.91],
-  "Ginebra": [6.14, 46.2],
-  "Santiago": [-70.65, -33.45],
-  "Antofagasta": [-70.4, -23.65],
-  "La Paz": [-68.15, -16.5],
+/** Coordenadas del centroide de los países donde ocurren noticias de la portada. */
+const COUNTRY_COORDS: Record<string, [number, number]> = {
+  Suiza: [8.2, 46.8],
+  Noruega: [10.0, 61.0],
+  Chile: [-71.0, -35.0],
+  Bolivia: [-64.5, -16.5],
 };
+
+/** Cubo de informes sin país (alcance global). */
+const INTERNATIONAL = "Internacional";
 
 /** Límite diario de lecturas en el mapa para usuarios sin suscripción. */
 const MAP_READ_KEY = "blacknews_map_reads";
@@ -25,7 +24,7 @@ const todayKey = (): string => {
   return `${d.getFullYear()}-${mm}-${dd}`;
 };
 
-/** Lecturas usadas hoy en el mapa (se reinicia cada día; falla hacia0 si no hay storage). */
+/** Lecturas usadas hoy en el mapa (se reinicia cada día; falla hacia 0 si no hay storage). */
 const readMapUsage = (): { date: string; count: number } => {
   const today = todayKey();
   try {
@@ -46,7 +45,7 @@ interface GeoMapSectionProps {
   reports: Report[];
   /** Reservado: categorías del portafolio (hoy solo se acepta, sin uso). */
   categories?: string[];
-  /** Abre el informe elegido de una corresponsalía. */
+  /** Abre el informe elegido desde el mapa. */
   onOpenReport?: (report: Report) => void;
   /** Se invoca al agotar las lecturas free del mapa. */
   onOpenSubscriptionModal?: () => void;
@@ -54,11 +53,19 @@ interface GeoMapSectionProps {
   isSubscribed?: boolean;
 }
 
+interface CountryGroup {
+  name: string;
+  reports: Report[];
+  count: number;
+  coords?: [number, number];
+}
+
 /**
- * Mapa de cobertura compacto: silueta mundial + panel lateral con las
- * corresponsalías reales declaradas en los informes (sin datos simulados).
- * Clic en punto o fila → informe más reciente de esa corresponsalía;
- * usuarios free con3 lecturas diarias en el mapa y después, modal de suscripción.
+ * Mapa de cobertura por puntos (cuadrícula de 2.5° sobre Natural Earth 110m),
+ * sin fondo: solo puntos sobre negro puro. Cada marcador muestra cuántas
+ * noticias ocurren en ese país; tocar país o marcador entra a sus titulares y
+ * cada noticia abierta cuenta para el límite free de 3 al día (la 4ª pide
+ * suscripción).
  */
 export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
   reports,
@@ -67,63 +74,52 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
   isSubscribed,
 }) => {
   const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const bureaus = useMemo(() => {
-    const seen = new Set<string>();
+  const groups = useMemo(() => {
+    const map = new Map<string, Report[]>();
     reports.forEach((r) => {
-      const b = r.author?.bureau;
-      if (b) seen.add(b);
-    });
-    return Array.from(seen);
-  }, [reports]);
-
-  const points = useMemo(() => {
-    const pts: { city: string; lon: number; lat: number; bureau: string }[] = [];
-    const done = new Set<string>();
-    bureaus.forEach((bureau) => {
-      bureau.split("/").forEach((raw) => {
-        const city = raw.trim();
-        const coords = CITY_COORDS[city];
-        if (coords && !done.has(city)) {
-          done.add(city);
-          pts.push({ city, lon: coords[0], lat: coords[1], bureau });
-        }
+      const list =
+        r.countries && r.countries.length > 0 ? r.countries : [INTERNATIONAL];
+      list.forEach((c) => {
+        const arr = map.get(c);
+        if (arr) arr.push(r);
+        else map.set(c, [r]);
       });
     });
-    return pts;
-  }, [bureaus]);
-
-  const latestByBureau = useMemo(() => {
-    const map = new Map<string, Report>();
-    const ts = (r: Report) => {
-      const v = Date.parse(r.publishedAt);
-      return Number.isNaN(v) ? 0 : v;
-    };
-    reports.forEach((r) => {
-      const b = r.author?.bureau;
-      if (!b) return;
-      const prev = map.get(b);
-      if (!prev || ts(r) > ts(prev)) map.set(b, r);
-    });
-    return map;
+    const arr: CountryGroup[] = Array.from(map.entries()).map(
+      ([name, rs]) => ({
+        name,
+        reports: rs,
+        count: rs.length,
+        coords: COUNTRY_COORDS[name],
+      }),
+    );
+    arr.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "es"));
+    const rest = arr.filter((g) => g.name !== INTERNATIONAL);
+    const intl = arr.find((g) => g.name === INTERNATIONAL);
+    return intl ? [...rest, intl] : rest;
   }, [reports]);
 
-  const canOpen = Boolean(onOpenReport);
+  if (groups.length === 0) return null;
 
-  const openBureauReport = (bureau: string) => {
+  const active = groups.find((g) => g.name === selected) || null;
+  const usage = isSubscribed ? null : readMapUsage();
+  const exhausted =
+    !isSubscribed && usage !== null && usage.count >= MAX_FREE_MAP_READS;
+
+  const openNews = (report: Report) => {
     if (!onOpenReport) return;
-    const report = latestByBureau.get(bureau);
-    if (!report) return;
     if (!isSubscribed) {
-      const usage = readMapUsage();
-      if (usage.count >= MAX_FREE_MAP_READS) {
+      const u = readMapUsage();
+      if (u.count >= MAX_FREE_MAP_READS) {
         onOpenSubscriptionModal?.();
         return;
       }
       try {
         localStorage.setItem(
           MAP_READ_KEY,
-          JSON.stringify({ date: usage.date, count: usage.count + 1 }),
+          JSON.stringify({ date: u.date, count: u.count + 1 }),
         );
       } catch {
         /* sin storage la lectura sigue adelante sin contarse */
@@ -132,13 +128,14 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
     onOpenReport(report);
   };
 
-  if (bureaus.length === 0) return null;
+  const toggleCountry = (name: string) =>
+    setSelected((s) => (s === name ? null : name));
 
   return (
     <section className="border-t border-white/10 bg-black font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="flex flex-col lg:flex-row">
-          {/* Mapa */}
+          {/* Mapa de puntos (sin fondo: la tierra son puntos sobre negro) */}
           <div className="lg:flex-1 min-w-0 flex items-center justify-center py-2 lg:py-0 lg:pr-8">
             <svg
               viewBox="-180 -90 360 180"
@@ -146,127 +143,182 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
               role="img"
               aria-label="Mapa de cobertura de BLACKNEWS"
             >
-              <path
-                d={WORLD_LAND_PATH}
-                fill="#141414"
-                stroke="#303035"
-                strokeWidth={0.35}
-                fillRule="evenodd"
-                strokeLinejoin="round"
-              />
-              {points.map((p) => {
-                const hot = hovered === p.bureau;
-                return (
-                  <g
-                    key={p.city}
-                    role={canOpen ? "button" : undefined}
-                    tabIndex={canOpen ? 0 : undefined}
-                    aria-label={canOpen ? `Abrir informe de ${p.city}` : undefined}
-                    className={canOpen ? "cursor-pointer" : undefined}
-                    onMouseEnter={() => setHovered(p.bureau)}
-                    onMouseLeave={() => setHovered(null)}
-                    onClick={canOpen ? () => openBureauReport(p.bureau) : undefined}
-                    onKeyDown={
-                      canOpen
-                        ? (e: React.KeyboardEvent<SVGGElement>) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              openBureauReport(p.bureau);
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    <circle
-                      cx={p.lon}
-                      cy={-p.lat}
-                      r={4.2}
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeWidth={0.5}
-                      className="map-pulse"
-                    />
-                    {hot && (
+              <path d={WORLD_DOTS_PATH} fill="#2e2e2e" />
+              {groups
+                .filter((g) => g.coords)
+                .map((g) => {
+                  const [lon, lat] = g.coords as [number, number];
+                  const cy = -lat;
+                  const on = hovered === g.name || selected === g.name;
+                  return (
+                    <g
+                      key={g.name}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${g.name}: ${g.count} noticias`}
+                      className="cursor-pointer"
+                      onMouseEnter={() => setHovered(g.name)}
+                      onMouseLeave={() => setHovered(null)}
+                      onClick={() => toggleCountry(g.name)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleCountry(g.name);
+                        }
+                      }}
+                    >
                       <circle
-                        cx={p.lon}
-                        cy={-p.lat}
-                        r={6}
+                        cx={lon}
+                        cy={cy}
+                        r={4.2}
                         fill="none"
                         stroke="#ffffff"
                         strokeWidth={0.5}
-                        opacity={0.45}
+                        className="map-pulse"
                       />
-                    )}
-                    <circle
-                      cx={p.lon}
-                      cy={-p.lat}
-                      r={hot ? 2.2 : 1.6}
-                      fill="#ffffff"
-                    />
-                    <title>{`${p.city} · ${p.bureau}`}</title>
-                  </g>
-                );
-              })}
+                      {on && (
+                        <circle
+                          cx={lon}
+                          cy={cy}
+                          r={6.5}
+                          fill="none"
+                          stroke="#ffffff"
+                          strokeWidth={0.5}
+                          opacity={0.5}
+                        />
+                      )}
+                      <circle
+                        cx={lon}
+                        cy={cy}
+                        r={on ? 2.2 : 1.6}
+                        fill="#ffffff"
+                      />
+                      <text
+                        x={lon}
+                        y={cy + 12.5}
+                        textAnchor="middle"
+                        fontSize={5}
+                        fontWeight={600}
+                        fill={on ? "#ffffff" : "#a1a1aa"}
+                        pointerEvents="none"
+                        style={{ userSelect: "none" }}
+                      >
+                        {g.count}
+                      </text>
+                      <title>
+                        {`${g.name} · ${g.count} ${g.count === 1 ? "noticia" : "noticias"}`}
+                      </title>
+                    </g>
+                  );
+                })}
             </svg>
           </div>
 
-          {/* Panel lateral */}
-          <aside className="w-full lg:w-72 shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-7 pt-6 lg:pt-0">
+          {/* Panel lateral: noticias por país */}
+          <aside className="w-full lg:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-7 pt-6 lg:pt-0">
             <div className="text-[10px] uppercase tracking-[0.25em] text-neutral-600 font-semibold">
               MAPA DE COBERTURA
             </div>
-            <h2 className="font-headline text-lg text-white tracking-tight leading-snug mt-2">
-              Corresponsalías
-            </h2>
-            <p className="text-[11px] text-neutral-500 font-light leading-relaxed mt-1 mb-3">
-              Cada punto, una sede real de la red.
-            </p>
-            <ul className="divide-y divide-white/5">
-              {bureaus.map((bureau) => {
-                const [city, ...rest] = bureau.split("/").map((s) => s.trim());
-                const hot = hovered === bureau;
-                const inner = (
-                  <>
-                    <span
-                      className={`text-[13px] font-medium truncate min-w-0 ${
-                        hot ? "text-white" : "text-neutral-300"
-                      }`}
-                    >
-                      {city}
-                    </span>
-                    <span className="text-[10px] text-neutral-500 truncate min-w-0 text-right shrink-0">
-                      {rest.join(" / ")}
-                    </span>
-                  </>
-                );
-                const cls = `w-full text-left flex items-baseline justify-between gap-3 py-2 -mx-2 px-2 rounded transition-colors hover:bg-white/5${
-                  canOpen ? " cursor-pointer" : ""
-                }${hot ? " bg-white/5" : ""}`;
-                return (
-                  <li key={bureau}>
-                    {canOpen ? (
+            {active ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="mt-2 text-[11px] text-neutral-500 hover:text-white transition-colors cursor-pointer"
+                >
+                  ← Todos los países
+                </button>
+                <h2 className="font-headline text-lg text-white tracking-tight leading-snug mt-1">
+                  {active.name}
+                </h2>
+                <p className="text-[11px] text-neutral-500 font-light mt-1 mb-3">
+                  {active.count} {active.count === 1 ? "noticia" : "noticias"}{" "}
+                  en curso · toca una para leerla
+                </p>
+                <ul className="divide-y divide-white/5">
+                  {active.reports.map((r) => (
+                    <li key={r.id}>
                       <button
                         type="button"
-                        onClick={() => openBureauReport(bureau)}
-                        onMouseEnter={() => setHovered(bureau)}
-                        onMouseLeave={() => setHovered(null)}
-                        className={cls}
+                        onClick={() => openNews(r)}
+                        className="w-full text-left py-2 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer"
                       >
-                        {inner}
+                        <span className="block text-[13px] text-neutral-200 leading-snug line-clamp-2">
+                          {r.title}
+                        </span>
+                        <span className="block text-[10px] text-neutral-600 mt-1">
+                          {r.publishedAt}
+                        </span>
                       </button>
-                    ) : (
-                      <div
-                        onMouseEnter={() => setHovered(bureau)}
-                        onMouseLeave={() => setHovered(null)}
-                        className={cls}
-                      >
-                        {inner}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>
+                <h2 className="font-headline text-lg text-white tracking-tight leading-snug mt-2">
+                  Noticias por país
+                </h2>
+                <p className="text-[11px] text-neutral-500 font-light leading-relaxed mt-1 mb-3">
+                  Toca un país y mira qué está pasando ahora mismo.
+                </p>
+                <ul className="divide-y divide-white/5">
+                  {groups.map((g) => {
+                    const on = hovered === g.name;
+                    return (
+                      <li key={g.name}>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(g.name)}
+                          onMouseEnter={() => setHovered(g.name)}
+                          onMouseLeave={() => setHovered(null)}
+                          className={`w-full text-left flex items-baseline justify-between gap-3 py-2 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer${
+                            on ? " bg-white/5" : ""
+                          }`}
+                        >
+                          <span
+                            className={`text-[13px] font-medium truncate min-w-0 ${
+                              on ? "text-white" : "text-neutral-300"
+                            }`}
+                          >
+                            {g.name}
+                          </span>
+                          <span className="shrink-0 text-[10px] leading-none min-w-[20px] text-center px-1.5 py-1 rounded-full bg-white/5 text-neutral-400 tabular-nums">
+                            {g.count}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
+            {/* Cuenta de lecturas free / estado de suscripción */}
+            {!isSubscribed && usage && (
+              <>
+                {exhausted && onOpenSubscriptionModal ? (
+                  <button
+                    type="button"
+                    onClick={onOpenSubscriptionModal}
+                    className="mt-4 w-full text-left text-[10px] leading-relaxed text-neutral-500 hover:text-white transition-colors cursor-pointer"
+                  >
+                    Viste tus {MAX_FREE_MAP_READS} noticias de hoy ·
+                    Suscríbete para seguir leyendo →
+                  </button>
+                ) : (
+                  <div className="mt-4 text-[10px] text-neutral-600">
+                    Lecturas gratuitas hoy: {usage.count} de{" "}
+                    {MAX_FREE_MAP_READS}
+                  </div>
+                )}
+              </>
+            )}
+            {isSubscribed && (
+              <div className="mt-4 text-[10px] text-neutral-600">
+                Suscriptor · lecturas ilimitadas
+              </div>
+            )}
           </aside>
         </div>
       </div>

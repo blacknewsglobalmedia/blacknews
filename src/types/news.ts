@@ -67,6 +67,8 @@ export interface Report {
   sections: ReportSection[];
   keyTakeaways: string[];
   tags: string[];
+  /** Países donde ocurre la noticia (para el mapa de cobertura). Sin lista = alcance internacional. */
+  countries?: string[];
   trending?: boolean;
   exclusive?: boolean;
 }

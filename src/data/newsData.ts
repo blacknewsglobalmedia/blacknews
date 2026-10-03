@@ -215,6 +215,7 @@ export const REPORTS: Report[] = [
       'La diversificación de fuentes energéticas privadas garantiza seguridad de suministro ante tensiones geopolíticas entre estados.',
     ],
     tags: ['Energía', 'Capital Privado', 'Desregulación', 'Industria', 'Eficiencia'],
+    countries: ['Noruega'],
     sections: [
       {
         type: 'paragraph',
@@ -254,6 +255,7 @@ export const REPORTS: Report[] = [
       'El tratado ratifica que el derecho a la vida y la integridad física prevalece de forma absoluta sobre cualquier justificación geoestratégica.',
     ],
     tags: ['Derecho a la Vida', 'Geopolítica', 'Tratados', 'Defensa', 'Justicia Universal'],
+    countries: ['Suiza'],
     sections: [
       {
         type: 'paragraph',
@@ -297,6 +299,7 @@ export const REPORTS: Report[] = [
       'La estabilidad de las reglas de juego durante períodos de 30 años atrae a los mayores desarrolladores tecnológicos de almacenamiento de energía.',
     ],
     tags: ['Propiedad Privada', 'Minería', 'Incentivos de Mercado', 'América Latina', 'Dossier'],
+    countries: ['Chile', 'Bolivia'],
     sections: [
       {
         type: 'paragraph',
