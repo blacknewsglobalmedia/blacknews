@@ -3,53 +3,57 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
-import { TopBar } from './components/TopBar';
-import { BreakingTicker } from './components/BreakingTicker';
-import { LeadStory } from './components/LeadStory';
-import { VisualPostsSection } from './components/VisualPostsSection';
-import { AdBanner } from './components/AdBanner';
-import { ReportsGrid } from './components/ReportsGrid';
-import { ReportDetailModal } from './components/ReportDetailModal';
-import { ShareModal } from './components/ShareModal';
-import { SearchBarModal } from './components/SearchBarModal';
-import { BookmarksDrawer } from './components/BookmarksDrawer';
-import { RedactionStudio } from './components/RedactionStudio';
-import { GoogleAuthModal } from './components/GoogleAuthModal';
-import { Footer } from './components/Footer';
-import { REPORTS, CATEGORIES, FLASH_NEWS } from './data/newsData';
-import { Report, CategoryId, FlashNews } from './types/news';
-import { RedactorProfile, RedactorRole, GUEST_USER_ID } from './types/auth';
-import { FrontPageLayoutConfig, AutomationPreset } from './types/layout';
-import { AdCampaign, INITIAL_AD_CAMPAIGNS } from './types/ads';
-import { DEFAULT_LAYOUT_CONFIG, computeLayoutPreset } from './utils/layoutUtils';
-import { db, auth } from './firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { useState, useEffect } from "react";
+import { TopBar } from "./components/TopBar";
+import { BreakingTicker } from "./components/BreakingTicker";
+import { LeadStory } from "./components/LeadStory";
+import { VisualPostsSection } from "./components/VisualPostsSection";
+import { AdBanner } from "./components/AdBanner";
+import { ReportsGrid } from "./components/ReportsGrid";
+import { ReportDetailModal } from "./components/ReportDetailModal";
+import { ShareModal } from "./components/ShareModal";
+import { SearchBarModal } from "./components/SearchBarModal";
+import { BookmarksDrawer } from "./components/BookmarksDrawer";
+import { RedactionStudio } from "./components/RedactionStudio";
+import { GoogleAuthModal } from "./components/GoogleAuthModal";
+import { Footer } from "./components/Footer";
+import { REPORTS, CATEGORIES, FLASH_NEWS } from "./data/newsData";
+import { Report, CategoryId, FlashNews } from "./types/news";
+import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
+import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
+import { AdCampaign, INITIAL_AD_CAMPAIGNS } from "./types/ads";
+import {
+  DEFAULT_LAYOUT_CONFIG,
+  computeLayoutPreset,
+} from "./utils/layoutUtils";
+import { db, auth, onAuthStateChanged, signOut } from "./firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 /**
  * SECURITY: single-admin rule. Only this account may hold the ADMIN role, and only
  * through a verified Google sign-in (see handleLoginWithGoogle). No quick-access or
  * test accounts are shipped to the public anymore.
  */
-const OWNER_EMAIL = 'blacknewsglobalmedia@gmail.com';
+const OWNER_EMAIL = "blacknewsglobalmedia@gmail.com";
 
 // Test accounts created during development: removed from the team and purged from any
 // stored roster so they can never show up (or be signed in) again.
 const LEGACY_TEST_EMAILS = [
-  'editor.portada@blacknews.media',
-  'mateo.valenzuela@blacknews.media',
-  'carlos.velez@prensa-economica.com',
+  "editor.portada@blacknews.media",
+  "mateo.valenzuela@blacknews.media",
+  "carlos.velez@prensa-economica.com",
 ];
 
-const isOwnerEmail = (email: string): boolean => email.trim().toLowerCase() === OWNER_EMAIL;
+const isOwnerEmail = (email: string): boolean =>
+  email.trim().toLowerCase() === OWNER_EMAIL;
 
 // Demotes any stored profile that holds ADMIN without being the owner (legacy test data)
 const enforceOwnerOnlyAdmin = (user: RedactorProfile): RedactorProfile => {
-  if (user.role !== 'ADMIN' || isOwnerEmail(user.email)) return user;
+  if (user.role !== "ADMIN" || isOwnerEmail(user.email)) return user;
   return {
     ...user,
-    role: 'LECTOR',
-    title: user.title === 'Administrador' ? 'Usuario Básico' : user.title,
+    role: "LECTOR",
+    title: user.title === "Administrador" ? "Usuario Básico" : user.title,
     approvedAt: undefined,
   };
 };
@@ -57,39 +61,43 @@ const enforceOwnerOnlyAdmin = (user: RedactorProfile): RedactorProfile => {
 // Unauthenticated visitor: basic reader, no access to the internal panel
 const GUEST_USER: RedactorProfile = {
   id: GUEST_USER_ID,
-  name: 'Lector Invitado',
-  email: 'lector.invitado@blacknews.media',
-  role: 'LECTOR',
-  bureau: 'Lector',
-  title: 'Invitado',
-  requestedAt: '30 Sep 2026',
-  avatarInitials: 'LI',
-  bio: 'Lector no autenticado.',
+  name: "Lector Invitado",
+  email: "lector.invitado@blacknews.media",
+  role: "LECTOR",
+  bureau: "Lector",
+  title: "Invitado",
+  requestedAt: "30 Sep 2026",
+  avatarInitials: "LI",
+  bio: "Lector no autenticado.",
   isGoogleAccount: false,
 };
 
 // Initial team: only the owner account exists, and it is the ADMIN
 const INITIAL_REDACTORS: RedactorProfile[] = [
   {
-    id: 'usr-admin',
-    name: 'Administrador',
+    id: "usr-admin",
+    name: "Administrador",
     email: OWNER_EMAIL,
-    role: 'ADMIN',
-    bureau: 'Zúrich / Central',
-    title: 'Administrador',
-    requestedAt: '01 Ene 2026',
-    approvedAt: '01 Ene 2026',
-    avatarInitials: 'ADM',
-    bio: 'Supervisión de la certidumbre jurídica, el libre mercado y la inviolabilidad de la propiedad privada.',
+    role: "ADMIN",
+    bureau: "Zúrich / Central",
+    title: "Administrador",
+    requestedAt: "01 Ene 2026",
+    approvedAt: "01 Ene 2026",
+    avatarInitials: "ADM",
+    bio: "Supervisión de la certidumbre jurídica, el libre mercado y la inviolabilidad de la propiedad privada.",
     isGoogleAccount: true,
   },
 ];
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'portada' | 'redaccion'>('portada');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId>('TODAS');
+  const [currentView, setCurrentView] = useState<"portada" | "redaccion">(
+    "portada",
+  );
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId>("TODAS");
   const [activeReport, setActiveReport] = useState<Report | null>(null);
-  const [shareTargetReport, setShareTargetReport] = useState<Report | null>(null);
+  const [shareTargetReport, setShareTargetReport] = useState<Report | null>(
+    null,
+  );
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
@@ -100,7 +108,7 @@ export default function App() {
   // Persistent reports list
   const [reportsList, setReportsList] = useState<Report[]>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_reports');
+      const saved = localStorage.getItem("blacknews_reports");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -112,7 +120,7 @@ export default function App() {
   // Persistent breaking news / teletipo
   const [flashNewsList, setFlashNewsList] = useState<FlashNews[]>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_flash_news');
+      const saved = localStorage.getItem("blacknews_flash_news");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -122,21 +130,23 @@ export default function App() {
   });
 
   // Front page layout configuration
-  const [layoutConfig, setLayoutConfig] = useState<FrontPageLayoutConfig>(() => {
-    try {
-      const saved = localStorage.getItem('blacknews_layout_config');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.leadReportId) return parsed;
-      }
-    } catch {}
-    return DEFAULT_LAYOUT_CONFIG;
-  });
+  const [layoutConfig, setLayoutConfig] = useState<FrontPageLayoutConfig>(
+    () => {
+      try {
+        const saved = localStorage.getItem("blacknews_layout_config");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.leadReportId) return parsed;
+        }
+      } catch {}
+      return DEFAULT_LAYOUT_CONFIG;
+    },
+  );
 
   // Persistent categories catalog
   const [categoriesList, setCategoriesList] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_categories');
+      const saved = localStorage.getItem("blacknews_categories");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -148,7 +158,7 @@ export default function App() {
   // Persistent Advertising Campaigns
   const [adsList, setAdsList] = useState<AdCampaign[]>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_ads');
+      const saved = localStorage.getItem("blacknews_ads");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -160,33 +170,39 @@ export default function App() {
   const handleSaveCampaign = (campaign: AdCampaign) => {
     setAdsList((prev) => {
       const exists = prev.some((c) => c.id === campaign.id);
-      const updated = exists 
+      const updated = exists
         ? prev.map((c) => (c.id === campaign.id ? campaign : c))
         : [campaign, ...prev];
       try {
-        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+        localStorage.setItem("blacknews_ads", JSON.stringify(updated));
       } catch {}
       return updated;
     });
-    showToast(`Campaña "${campaign.title.slice(0, 20)}..." guardada con éxito.`);
+    showToast(
+      `Campaña "${campaign.title.slice(0, 20)}..." guardada con éxito.`,
+    );
   };
 
   const handleDeleteCampaign = (campaignId: string) => {
     setAdsList((prev) => {
       const updated = prev.filter((c) => c.id !== campaignId);
       try {
-        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+        localStorage.setItem("blacknews_ads", JSON.stringify(updated));
       } catch {}
       return updated;
     });
-    showToast('Campaña publicitaria retirada.');
+    showToast("Campaña publicitaria retirada.");
   };
 
   const handleTrackImpression = (campaignId: string) => {
     setAdsList((prev) => {
-      const updated = prev.map((c) => c.id === campaignId ? { ...c, impressions: (c.impressions || 0) + 1 } : c);
+      const updated = prev.map((c) =>
+        c.id === campaignId
+          ? { ...c, impressions: (c.impressions || 0) + 1 }
+          : c,
+      );
       try {
-        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+        localStorage.setItem("blacknews_ads", JSON.stringify(updated));
       } catch {}
       return updated;
     });
@@ -194,9 +210,11 @@ export default function App() {
 
   const handleTrackClick = (campaignId: string) => {
     setAdsList((prev) => {
-      const updated = prev.map((c) => c.id === campaignId ? { ...c, clicks: (c.clicks || 0) + 1 } : c);
+      const updated = prev.map((c) =>
+        c.id === campaignId ? { ...c, clicks: (c.clicks || 0) + 1 } : c,
+      );
       try {
-        localStorage.setItem('blacknews_ads', JSON.stringify(updated));
+        localStorage.setItem("blacknews_ads", JSON.stringify(updated));
       } catch {}
       return updated;
     });
@@ -205,12 +223,15 @@ export default function App() {
   // Persistent redactors and registered users management (always honoring the single-admin rule)
   const [redactorsList, setRedactorsList] = useState<RedactorProfile[]>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_redactors');
+      const saved = localStorage.getItem("blacknews_redactors");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const sanitized = (parsed as RedactorProfile[])
-            .filter((user) => !LEGACY_TEST_EMAILS.includes(user.email.trim().toLowerCase()))
+            .filter(
+              (user) =>
+                !LEGACY_TEST_EMAILS.includes(user.email.trim().toLowerCase()),
+            )
             .map(enforceOwnerOnlyAdmin);
           if (sanitized.length > 0) return sanitized;
         }
@@ -219,17 +240,47 @@ export default function App() {
     return INITIAL_REDACTORS;
   });
 
-  // Current active user: every visitor starts as a basic reader.
-  // Editorial access is only granted after a verified Google sign-in.
-  const [currentUser, setCurrentUser] = useState<RedactorProfile>(GUEST_USER);
+  // Current active user: restored from persistent storage on F5 refresh.
+  // Verified Google sign-in maintains state automatically.
+  const [currentUser, setCurrentUser] = useState<RedactorProfile>(() => {
+    try {
+      const saved = localStorage.getItem("blacknews_active_user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) return parsed;
+      }
+    } catch {}
+    return GUEST_USER;
+  });
+
+  // Automatically verify and maintain Firebase Auth session across F5 page reloads
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        const email = firebaseUser.email;
+        const name = firebaseUser.displayName || "Usuario Google";
+        handleLoginWithGoogle(
+          email,
+          name,
+          isOwnerEmail(email) ? "Zúrich / Central" : "Lector Registrado",
+          isOwnerEmail(email) ? "Administrador" : "Usuario Básico",
+          true,
+        );
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Persist the sanitized roster on mount so legacy test accounts and non-owner ADMIN
   // entries are really purged from the browser storage.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('blacknews_redactors');
+      const saved = localStorage.getItem("blacknews_redactors");
       if (saved && saved !== JSON.stringify(redactorsList)) {
-        localStorage.setItem('blacknews_redactors', JSON.stringify(redactorsList));
+        localStorage.setItem(
+          "blacknews_redactors",
+          JSON.stringify(redactorsList),
+        );
       }
     } catch {}
   }, []);
@@ -237,7 +288,7 @@ export default function App() {
   // Persistent bookmarks
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem('blacknews_bookmarks');
+      const saved = localStorage.getItem("blacknews_bookmarks");
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch {
       return new Set();
@@ -255,17 +306,22 @@ export default function App() {
       ...newConfig,
       lastModifiedTimestamp: newConfig.lastModifiedTimestamp ?? Date.now(),
       autoRefreshHours: newConfig.autoRefreshHours ?? 24,
-      autoRefreshPolicy: newConfig.autoRefreshPolicy ?? 'auto-latest',
+      autoRefreshPolicy: newConfig.autoRefreshPolicy ?? "auto-latest",
       autoRefreshEnabled: newConfig.autoRefreshEnabled !== false,
     };
     setLayoutConfig(finalizedConfig);
     try {
-      localStorage.setItem('blacknews_layout_config', JSON.stringify(finalizedConfig));
-      await setDoc(doc(db, 'settings', 'frontpage_layout'), finalizedConfig);
+      localStorage.setItem(
+        "blacknews_layout_config",
+        JSON.stringify(finalizedConfig),
+      );
+      await setDoc(doc(db, "settings", "frontpage_layout"), finalizedConfig);
     } catch (err) {
-      console.warn('[BLACKNEWS] Local storage backup saved for layout config');
+      console.warn("[BLACKNEWS] Local storage backup saved for layout config");
     }
-    showToast(`Distribución de portada: [${finalizedConfig.automationPreset.toUpperCase()}]`);
+    showToast(
+      `Distribución de portada: [${finalizedConfig.automationPreset.toUpperCase()}]`,
+    );
   };
 
   // Apply automation preset with 1 click
@@ -285,15 +341,24 @@ export default function App() {
 
       if (elapsed >= intervalMs) {
         // Expiration threshold exceeded without manual edit!
-        const policy = layoutConfig.autoRefreshPolicy || 'auto-latest';
-        const refreshed = computeLayoutPreset(policy, reportsList, layoutConfig);
+        const policy = layoutConfig.autoRefreshPolicy || "auto-latest";
+        const refreshed = computeLayoutPreset(
+          policy,
+          reportsList,
+          layoutConfig,
+        );
         const now = new Date();
-        const dateStr = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        const dateStr = now.toLocaleDateString("es-ES", {
+          day: "2-digit",
+          month: "short",
+        });
         refreshed.lastUpdated = `${dateStr} · Rotación Automática (${intervalHours}h)`;
         refreshed.lastModifiedTimestamp = Date.now();
         refreshed.automationPreset = policy;
         handleUpdateLayoutConfig(refreshed);
-        showToast(`Portada rotada automáticamente con nuevas publicaciones (Ciclo de ${intervalHours}h cumplido)`);
+        showToast(
+          `Portada rotada automáticamente con nuevas publicaciones (Ciclo de ${intervalHours}h cumplido)`,
+        );
       }
     };
 
@@ -307,30 +372,38 @@ export default function App() {
   const handleUpdateFlashNews = async (updatedFlash: FlashNews[]) => {
     setFlashNewsList(updatedFlash);
     try {
-      localStorage.setItem('blacknews_flash_news', JSON.stringify(updatedFlash));
-      await setDoc(doc(db, 'settings', 'flash_news'), { items: updatedFlash });
+      localStorage.setItem(
+        "blacknews_flash_news",
+        JSON.stringify(updatedFlash),
+      );
+      await setDoc(doc(db, "settings", "flash_news"), { items: updatedFlash });
     } catch (err) {
-      console.warn('[BLACKNEWS] Local storage backup saved for flash news');
+      console.warn("[BLACKNEWS] Local storage backup saved for flash news");
     }
-    showToast('Teletipo de última hora actualizado');
+    showToast("Teletipo de última hora actualizado");
   };
 
   // Update categories catalog
   const handleUpdateCategories = async (newCategories: string[]) => {
     setCategoriesList(newCategories);
     try {
-      localStorage.setItem('blacknews_categories', JSON.stringify(newCategories));
-      await setDoc(doc(db, 'settings', 'categories'), { categories: newCategories });
+      localStorage.setItem(
+        "blacknews_categories",
+        JSON.stringify(newCategories),
+      );
+      await setDoc(doc(db, "settings", "categories"), {
+        categories: newCategories,
+      });
     } catch (err) {
-      console.warn('[BLACKNEWS] Local storage backup saved for categories');
+      console.warn("[BLACKNEWS] Local storage backup saved for categories");
     }
-    showToast('Catálogo de categorías actualizado');
+    showToast("Catálogo de categorías actualizado");
   };
 
   // URL Deeplinking: detect ?informe=id on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const reportIdFromUrl = params.get('informe');
+    const reportIdFromUrl = params.get("informe");
     if (reportIdFromUrl) {
       const found = reportsList.find((r) => r.id === reportIdFromUrl);
       if (found) {
@@ -343,12 +416,12 @@ export default function App() {
   const handleOpenReport = (report: Report) => {
     setActiveReport(report);
     const newUrl = `${window.location.pathname}?informe=${encodeURIComponent(report.id)}`;
-    window.history.pushState({ reportId: report.id }, '', newUrl);
+    window.history.pushState({ reportId: report.id }, "", newUrl);
   };
 
   const handleCloseReport = () => {
     setActiveReport(null);
-    window.history.pushState({}, '', window.location.pathname);
+    window.history.pushState({}, "", window.location.pathname);
   };
 
   // Bookmark toggling
@@ -357,13 +430,16 @@ export default function App() {
       const next = new Set(prev);
       if (next.has(report.id)) {
         next.delete(report.id);
-        showToast('Informe retirado de lecturas guardadas');
+        showToast("Informe retirado de lecturas guardadas");
       } else {
         next.add(report.id);
-        showToast('Informe añadido a lecturas guardadas');
+        showToast("Informe añadido a lecturas guardadas");
       }
       try {
-        localStorage.setItem('blacknews_bookmarks', JSON.stringify(Array.from(next)));
+        localStorage.setItem(
+          "blacknews_bookmarks",
+          JSON.stringify(Array.from(next)),
+        );
       } catch {}
       return next;
     });
@@ -374,19 +450,22 @@ export default function App() {
       const next = new Set(prev);
       next.delete(reportId);
       try {
-        localStorage.setItem('blacknews_bookmarks', JSON.stringify(Array.from(next)));
+        localStorage.setItem(
+          "blacknews_bookmarks",
+          JSON.stringify(Array.from(next)),
+        );
       } catch {}
       return next;
     });
-    showToast('Informe eliminado');
+    showToast("Informe eliminado");
   };
 
   const handleClearAllBookmarks = () => {
     setBookmarkedIds(new Set());
     try {
-      localStorage.removeItem('blacknews_bookmarks');
+      localStorage.removeItem("blacknews_bookmarks");
     } catch {}
-    showToast('Lista de lectura vaciada');
+    showToast("Lista de lectura vaciada");
   };
 
   // Publishing a new report
@@ -394,23 +473,25 @@ export default function App() {
     const updated = [newReport, ...reportsList];
     setReportsList(updated);
     try {
-      localStorage.setItem('blacknews_reports', JSON.stringify(updated));
-      await setDoc(doc(db, 'reports', newReport.id), newReport);
+      localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+      await setDoc(doc(db, "reports", newReport.id), newReport);
     } catch (err) {
-      console.warn('[BLACKNEWS] Local storage backup saved for report');
+      console.warn("[BLACKNEWS] Local storage backup saved for report");
     }
     showToast(`¡"${newReport.title.slice(0, 38)}..." publicado en portada!`);
   };
 
   // Updating an existing report (only author or admin)
   const handleUpdateExistingReport = async (updatedReport: Report) => {
-    const updated = reportsList.map((r) => (r.id === updatedReport.id ? updatedReport : r));
+    const updated = reportsList.map((r) =>
+      r.id === updatedReport.id ? updatedReport : r,
+    );
     setReportsList(updated);
     try {
-      localStorage.setItem('blacknews_reports', JSON.stringify(updated));
-      await setDoc(doc(db, 'reports', updatedReport.id), updatedReport);
+      localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+      await setDoc(doc(db, "reports", updatedReport.id), updatedReport);
     } catch (err) {
-      console.warn('[BLACKNEWS] Local storage backup saved for updated report');
+      console.warn("[BLACKNEWS] Local storage backup saved for updated report");
     }
     showToast(`¡Informe "${updatedReport.title.slice(0, 32)}..." actualizado!`);
   };
@@ -420,9 +501,9 @@ export default function App() {
     const updated = reportsList.filter((r) => r.id !== id);
     setReportsList(updated);
     try {
-      localStorage.setItem('blacknews_reports', JSON.stringify(updated));
+      localStorage.setItem("blacknews_reports", JSON.stringify(updated));
     } catch {}
-    showToast('Informe retirado de portada');
+    showToast("Informe retirado de portada");
   };
 
   // Assign user role (ADMIN, MODERADOR, REDACTOR, LECTOR)
@@ -430,21 +511,26 @@ export default function App() {
     const target = redactorsList.find((member) => member.id === userId);
     // Single-admin rule: ADMIN can only ever be held by the owner email
     const safeRole: RedactorRole =
-      newRole === 'ADMIN' && target && !isOwnerEmail(target.email) ? 'LECTOR' : newRole;
+      newRole === "ADMIN" && target && !isOwnerEmail(target.email)
+        ? "LECTOR"
+        : newRole;
 
     const updated = redactorsList.map((member) => {
       if (member.id === userId) {
         return {
           ...member,
           role: safeRole,
-          approvedAt: safeRole !== 'LECTOR' ? (member.approvedAt || '30 Sep 2026') : undefined,
+          approvedAt:
+            safeRole !== "LECTOR"
+              ? member.approvedAt || "30 Sep 2026"
+              : undefined,
         };
       }
       return member;
     });
     setRedactorsList(updated);
     try {
-      localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+      localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
     } catch {}
 
     if (currentUser.id === userId) {
@@ -455,40 +541,45 @@ export default function App() {
 
   // Approvals Management
   const handleApproveRedactor = (id: string) => {
-    handleChangeUserRole(id, 'REDACTOR');
-    showToast('Habilitado como Redactor (edición solo a sus post)');
+    handleChangeUserRole(id, "REDACTOR");
+    showToast("Habilitado como Redactor (edición solo a sus post)");
   };
 
   const handleRejectRedactor = (id: string) => {
-    handleChangeUserRole(id, 'LECTOR');
-    showToast('Permisos revocados a usuario Lector');
+    handleChangeUserRole(id, "LECTOR");
+    showToast("Permisos revocados a usuario Lector");
   };
 
-  const handleRegisterRedactor = (candidate: Omit<RedactorProfile, 'id' | 'role' | 'requestedAt' | 'avatarInitials'>) => {
+  const handleRegisterRedactor = (
+    candidate: Omit<
+      RedactorProfile,
+      "id" | "role" | "requestedAt" | "avatarInitials"
+    >,
+  ) => {
     const initials = candidate.name
-      .split(' ')
+      .split(" ")
       .map((w) => w[0])
       .slice(0, 2)
-      .join('')
+      .join("")
       .toUpperCase();
 
     // Regular registrations are always basic readers without editing capabilities
     const newProfile: RedactorProfile = {
       ...candidate,
       id: `usr-${Date.now()}`,
-      role: 'LECTOR',
-      requestedAt: '30 Sep 2026',
-      avatarInitials: initials || 'US',
+      role: "LECTOR",
+      requestedAt: "30 Sep 2026",
+      avatarInitials: initials || "US",
       isGoogleAccount: false,
     };
 
     const updated = [...redactorsList, newProfile];
     setRedactorsList(updated);
     try {
-      localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+      localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
     } catch {}
     setCurrentUser(newProfile);
-    showToast('Cuenta registrada como Lector básico. Solicitud enviada.');
+    showToast("Cuenta registrada como Lector básico. Solicitud enviada.");
   };
 
   // Google Login and Registration Handler.
@@ -497,34 +588,36 @@ export default function App() {
   const handleLoginWithGoogle = (
     email: string,
     name: string,
-    bureau: string = 'Lector Registrado',
-    title: string = 'Usuario Básico',
-    verified: boolean = false
+    bureau: string = "Lector Registrado",
+    title: string = "Usuario Básico",
+    verified: boolean = false,
   ) => {
     const initials =
       name
-        .split(' ')
+        .split(" ")
         .map((w) => w[0])
         .slice(0, 2)
-        .join('')
-        .toUpperCase() || 'US';
+        .join("")
+        .toUpperCase() || "US";
 
-    const existing = redactorsList.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const existing = redactorsList.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase(),
+    );
 
     // Manual (unverified) registration: always a basic reader, never inherits editorial roles
     if (!verified) {
       const readerProfile: RedactorProfile =
-        existing && existing.role === 'LECTOR'
+        existing && existing.role === "LECTOR"
           ? existing
           : {
               id: `usr-manual-${Date.now()}`,
               name,
               email,
-              role: 'LECTOR',
-              bureau: 'Lector Registrado',
-              title: 'Usuario Básico',
+              role: "LECTOR",
+              bureau: "Lector Registrado",
+              title: "Usuario Básico",
               avatarInitials: initials,
-              requestedAt: '30 Sep 2026',
+              requestedAt: "30 Sep 2026",
               isGoogleAccount: false,
             };
 
@@ -532,15 +625,15 @@ export default function App() {
         const updated = [readerProfile, ...redactorsList];
         setRedactorsList(updated);
         try {
-          localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+          localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
         } catch {}
       }
 
       setCurrentUser(readerProfile);
       showToast(
-        existing && existing.role !== 'LECTOR'
-          ? 'Permisos editoriales en pausa: verifica tu identidad con Google para activarlos.'
-          : 'Cuenta registrada como Lector básico. Solicitud enviada.'
+        existing && existing.role !== "LECTOR"
+          ? "Permisos editoriales en pausa: verifica tu identidad con Google para activarlos."
+          : "Cuenta registrada como Lector básico. Solicitud enviada.",
       );
       return;
     }
@@ -548,18 +641,18 @@ export default function App() {
     // Verified Google session: only the owner email becomes/keeps ADMIN
     const nextProfile: RedactorProfile = existing
       ? isOwnerEmail(email)
-        ? { ...existing, role: 'ADMIN' }
+        ? { ...existing, role: "ADMIN" }
         : enforceOwnerOnlyAdmin(existing)
       : {
           id: `usr-google-${Date.now()}`,
           name,
           email,
-          role: isOwnerEmail(email) ? 'ADMIN' : 'LECTOR',
+          role: isOwnerEmail(email) ? "ADMIN" : "LECTOR",
           bureau,
           title,
           avatarInitials: initials,
-          requestedAt: '30 Sep 2026',
-          approvedAt: isOwnerEmail(email) ? '30 Sep 2026' : undefined,
+          requestedAt: "30 Sep 2026",
+          approvedAt: isOwnerEmail(email) ? "30 Sep 2026" : undefined,
           isGoogleAccount: true,
         };
 
@@ -570,18 +663,32 @@ export default function App() {
         : [nextProfile, ...redactorsList];
       setRedactorsList(updated);
       try {
-        localStorage.setItem('blacknews_redactors', JSON.stringify(updated));
+        localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
       } catch {}
     }
 
     setCurrentUser(nextProfile);
-    showToast(`Sesión verificada con Google: ${nextProfile.name} [${nextProfile.role}]`);
+    try {
+      localStorage.setItem(
+        "blacknews_active_user",
+        JSON.stringify(nextProfile),
+      );
+    } catch {}
+    showToast(
+      `Sesión verificada con Google: ${nextProfile.name} [${nextProfile.role}]`,
+    );
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch {}
     setCurrentUser(GUEST_USER);
-    setCurrentView('portada');
-    showToast('Sesión cerrada. Modo Lector activado.');
+    setCurrentView("portada");
+    try {
+      localStorage.removeItem("blacknews_active_user");
+    } catch {}
+    showToast("Sesión cerrada. Modo Lector activado.");
   };
 
   // Sharing handling
@@ -591,45 +698,52 @@ export default function App() {
   };
 
   // Category Filtering
-  const filteredReports = selectedCategory === 'TODAS'
-    ? reportsList
-    : reportsList.filter((r) => r.category === selectedCategory);
+  const filteredReports =
+    selectedCategory === "TODAS"
+      ? reportsList
+      : reportsList.filter((r) => r.category === selectedCategory);
 
   // Layout slots computed for 'TODAS'
-  const configuredLead = reportsList.find((r) => r.id === layoutConfig.leadReportId) || reportsList[0];
+  const configuredLead =
+    reportsList.find((r) => r.id === layoutConfig.leadReportId) ||
+    reportsList[0];
   const configuredBlock1 = layoutConfig.block1ReportIds
     .map((id) => reportsList.find((r) => r.id === id))
     .filter((r): r is Report => Boolean(r));
   const configuredBlock2 = layoutConfig.block2ReportIds
     .map((id) => reportsList.find((r) => r.id === id))
     .filter((r): r is Report => Boolean(r));
-  const configuredDossier = reportsList.find((r) => r.id === layoutConfig.dossierReportId);
+  const configuredDossier = reportsList.find(
+    (r) => r.id === layoutConfig.dossierReportId,
+  );
 
   // Active Lead story for the top position
-  const leadReport = selectedCategory === 'TODAS'
-    ? configuredLead
-    : filteredReports[0];
+  const leadReport =
+    selectedCategory === "TODAS" ? configuredLead : filteredReports[0];
 
-  const secondaryReports = selectedCategory === 'TODAS'
-    ? reportsList.filter((r) => r.id !== leadReport?.id)
-    : filteredReports.slice(1);
+  const secondaryReports =
+    selectedCategory === "TODAS"
+      ? reportsList.filter((r) => r.id !== leadReport?.id)
+      : filteredReports.slice(1);
 
   // Check whether current user has editorial privileges to access internal media studio
-  const canAccessInternalMedia = Boolean(currentUser && currentUser.role !== 'LECTOR');
+  const canAccessInternalMedia = Boolean(
+    currentUser && currentUser.role !== "LECTOR",
+  );
 
   // Strict security guard: redirect away from redaccion immediately if user is LECTOR
   useEffect(() => {
-    if (!canAccessInternalMedia && currentView === 'redaccion') {
-      setCurrentView('portada');
+    if (!canAccessInternalMedia && currentView === "redaccion") {
+      setCurrentView("portada");
     }
   }, [canAccessInternalMedia, currentView]);
 
   const handleToggleStudio = () => {
     if (!canAccessInternalMedia) {
-      showToast('Acceso restringido a la sala interna de redacción.');
+      showToast("Acceso restringido a la sala interna de redacción.");
       return;
     }
-    setCurrentView(currentView === 'redaccion' ? 'portada' : 'redaccion');
+    setCurrentView(currentView === "redaccion" ? "portada" : "redaccion");
   };
 
   const savedReportsList = reportsList.filter((r) => bookmarkedIds.has(r.id));
@@ -650,7 +764,7 @@ export default function App() {
         selectedCategory={selectedCategory}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
-          setCurrentView('portada');
+          setCurrentView("portada");
         }}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenBookmarks={() => setIsBookmarksOpen(true)}
@@ -659,13 +773,13 @@ export default function App() {
         liveTickerActive={liveTickerActive}
         onToggleLiveTicker={() => setLiveTickerActive(!liveTickerActive)}
         onOpenStudio={handleToggleStudio}
-        isStudioOpen={currentView === 'redaccion' && canAccessInternalMedia}
+        isStudioOpen={currentView === "redaccion" && canAccessInternalMedia}
         currentUser={currentUser}
         onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
       />
 
       {/* Real-time breaking ticker */}
-      {liveTickerActive && currentView === 'portada' && (
+      {liveTickerActive && currentView === "portada" && (
         <BreakingTicker
           news={flashNewsList}
           onSelectNews={(repId) => {
@@ -679,9 +793,9 @@ export default function App() {
 
       {/* Main View Switcher */}
       <main className="flex-1">
-        {currentView === 'redaccion' && canAccessInternalMedia ? (
+        {currentView === "redaccion" && canAccessInternalMedia ? (
           <RedactionStudio
-            onBackToNews={() => setCurrentView('portada')}
+            onBackToNews={() => setCurrentView("portada")}
             onPublishReport={handlePublishReport}
             onUpdateExistingReport={handleUpdateExistingReport}
             currentUser={currentUser}
@@ -733,10 +847,16 @@ export default function App() {
               onShareReport={handleOpenShare}
               bookmarkedIds={bookmarkedIds}
               onToggleBookmark={handleToggleBookmark}
-              onOpenInStudio={canAccessInternalMedia ? (report) => {
-                setCurrentView('redaccion');
-                showToast(`Despacho "${report.title.slice(0, 25)}..." cargado para edición`);
-              } : undefined}
+              onOpenInStudio={
+                canAccessInternalMedia
+                  ? (report) => {
+                      setCurrentView("redaccion");
+                      showToast(
+                        `Despacho "${report.title.slice(0, 25)}..." cargado para edición`,
+                      );
+                    }
+                  : undefined
+              }
             />
 
             {/* In-Feed Leaderboard Horizontal Banner */}
@@ -757,9 +877,15 @@ export default function App() {
               onShareReport={handleOpenShare}
               bookmarkedIds={bookmarkedIds}
               onToggleBookmark={handleToggleBookmark}
-              configuredBlock1={selectedCategory === 'TODAS' ? configuredBlock1 : undefined}
-              configuredBlock2={selectedCategory === 'TODAS' ? configuredBlock2 : undefined}
-              configuredDossier={selectedCategory === 'TODAS' ? configuredDossier : undefined}
+              configuredBlock1={
+                selectedCategory === "TODAS" ? configuredBlock1 : undefined
+              }
+              configuredBlock2={
+                selectedCategory === "TODAS" ? configuredBlock2 : undefined
+              }
+              configuredDossier={
+                selectedCategory === "TODAS" ? configuredDossier : undefined
+              }
             />
           </>
         )}
@@ -770,7 +896,7 @@ export default function App() {
         categories={categoriesList}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
-          setCurrentView('portada');
+          setCurrentView("portada");
         }}
         onShareSite={() => handleOpenShare(null)}
       />

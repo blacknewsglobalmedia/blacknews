@@ -1321,7 +1321,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return "unsupported";
     }
 
-    // Bytes originales del vídeo: el archivo subido o, si no, su object URL.
+    if (isCancelledRef.current) return "cancelled";
     let raw: ArrayBuffer | null = null;
     try {
       const uploaded = uploadedVideoFileRef.current;
@@ -1333,6 +1333,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     } catch {
       raw = null;
     }
+    if (isCancelledRef.current) return "cancelled";
     if (!raw || raw.byteLength < 256) return "unsupported";
     // Solo MP4/MOV (primer átomo "ftyp"). WebM y demás → ruta clásica.
     try {
@@ -2075,13 +2076,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         setIsVideoPlaying(false);
       };
 
-      // Web Worker Timer: NO se pausa al estar la pestaña en segundo plano o minimizada
+      // Web Worker Timer: ticks a 15 ms para procesamiento ultra acelerado en segundo plano
       const workerScript = `
         let timer = null;
         self.onmessage = function(e) {
           if (e.data === 'start') {
             if (timer) clearInterval(timer);
-            timer = setInterval(function() { self.postMessage('tick'); }, 30);
+            timer = setInterval(function() { self.postMessage('tick'); }, 15);
           } else if (e.data === 'stop') {
             if (timer) clearInterval(timer);
             timer = null;
@@ -2095,12 +2096,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       timerWorker = new Worker(workerUrl);
 
       isRecordingRef.current = true;
-      recorder.start(250);
-      await video.play();
-      setIsVideoPlaying(true);
+      recorder.start(100);
+      video.currentTime = start;
 
-      let maxT = start;
-      let lastDrawVt = -1;
+      const frameStep = (1 / 30) * videoSpeed;
+      let currentFrameTime = start;
+      const totalFrames = Math.ceil((end - start) / frameStep);
+      let renderedFrames = 0;
       let lastPhase = 0;
 
       timerWorker.onmessage = (e) => {
@@ -2109,36 +2111,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           stopRecording();
           return;
         }
+
         const now = performance.now();
-        const t = video.currentTime;
-        if (t !== lastDrawVt) {
-          lastDrawVt = t;
+        if (currentFrameTime <= end && renderedFrames < totalFrames) {
+          video.currentTime = currentFrameTime;
+          currentFrameTime += frameStep;
+          renderedFrames++;
           void renderToCanvas(canvas, video, cachedFlags);
-        }
-        if (t > maxT) maxT = t;
-        const pct = Math.min(
-          99,
-          Math.round(((t - start) / Math.max(0.1, end - start)) * 100),
-        );
-        if (pct > lastPct && now - lastProgressAt > 200) {
-          lastPct = pct;
-          lastProgressAt = now;
-          if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
-          if (recBarRef.current)
-            recBarRef.current.style.width = `${Math.max(5, pct)}%`;
-          const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
-          if (phase !== lastPhase) {
-            lastPhase = phase;
-            setRecordingProgress(pct);
+
+          const pct = Math.min(
+            99,
+            Math.round((renderedFrames / Math.max(1, totalFrames)) * 100),
+          );
+          if (pct > lastPct && now - lastProgressAt > 100) {
+            lastPct = pct;
+            lastProgressAt = now;
+            if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
+            if (recBarRef.current)
+              recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+            const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
+            if (phase !== lastPhase) {
+              lastPhase = phase;
+              setRecordingProgress(pct);
+            }
           }
-        }
-        const rebobinado = t < maxT - 0.3 && maxT > start + 0.5;
-        if (
-          t >= end - 0.02 ||
-          video.ended ||
-          rebobinado ||
-          now > hardDeadline
-        ) {
+        } else {
           setRecordingProgress(99);
           stopRecording();
         }
