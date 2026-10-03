@@ -69,7 +69,7 @@ export const ExecutiveBriefingWidget: React.FC<
           </div>
           <div>
             <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 font-bold">
-              INTELIGENCIA LECTORA · MODULO EJECUTIVO
+              SÍNTESIS EDITORIAL · MÓDULO EJECUTIVO
             </div>
             <h3 className="text-sm sm:text-base font-bold text-white font-['Lexend'] tracking-tight">
               Análisis en Sintaxis de 30 Segundos
@@ -88,7 +88,7 @@ export const ExecutiveBriefingWidget: React.FC<
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Resumen IA</span>
+            <span>Resumen 30s</span>
           </button>
           <button
             onClick={() => setActiveTab("audio")}
@@ -119,8 +119,7 @@ export const ExecutiveBriefingWidget: React.FC<
       {activeTab === "brief" && (
         <div className="space-y-3 animate-in fade-in duration-150">
           <div className="text-xs text-neutral-400 font-light italic">
-            "Extraído automáticamente mediante modelos cuantitativos de análisis
-            periodístico:"
+            "Síntesis de puntos clave elaborada por la redacción de BlackNews:"
           </div>
           <div className="space-y-2.5">
             {takeaways.map((point, idx) => (
@@ -155,10 +154,10 @@ export const ExecutiveBriefingWidget: React.FC<
               </button>
               <div>
                 <div className="text-xs font-bold text-white font-mono">
-                  DESPACHO EN AUDIO DE ALTA FIDELIDAD
+                  DESPACHO EN AUDIO EDITORIAL
                 </div>
                 <div className="text-[11px] text-neutral-400">
-                  Voz síntesis neutral · Duración 1:45 min
+                  Lectura del despacho · Duración 1:45 min
                 </div>
               </div>
             </div>
