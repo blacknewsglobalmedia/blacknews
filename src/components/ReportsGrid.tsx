@@ -93,14 +93,18 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
         {reports.length === 0 ? (
           <div className="py-20 text-center p-8">
             <p className="text-sm font-sans text-neutral-400">
-              No hay despachos registrados en esta sección para la edición actual.
+              {selectedCategory === 'TODAS'
+                ? 'El archivo de BLACKNEWS está en preparación: los primeros despachos se publicarán muy pronto.'
+                : 'No hay despachos registrados en esta sección para la edición actual.'}
             </p>
-            <button
-              onClick={() => onSelectCategory('TODAS')}
-              className="mt-4 px-4 py-2 text-xs font-sans font-semibold bg-white text-black uppercase rounded-md cursor-pointer hover:bg-neutral-200 transition-colors"
-            >
-              VOLVER A TODAS LAS SECCIONES
-            </button>
+            {selectedCategory !== 'TODAS' && (
+              <button
+                onClick={() => onSelectCategory('TODAS')}
+                className="mt-4 px-4 py-2 text-xs font-sans font-semibold bg-white text-black uppercase rounded-md cursor-pointer hover:bg-neutral-200 transition-colors"
+              >
+                VOLVER A TODAS LAS SECCIONES
+              </button>
+            )}
           </div>
         ) : (
           /* Newspaper Broadsheet Modular Blocks (Ultra-Minimalist & Borderless) */

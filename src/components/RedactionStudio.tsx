@@ -1326,6 +1326,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   </button>
                 </div>
 
+                {publishedReports.length === 0 ? (
+                  <p className="py-6 text-xs text-neutral-500 font-light">
+                    Aún no hay despachos publicados. Pulsa en Redactar para crear el primero.
+                  </p>
+                ) : (
                 <div className="divide-y divide-white/5">
                   {publishedReports.slice(0, 5).map((rep) => {
                     const canEditThis = canUserEditThisReport(rep);
@@ -1383,6 +1388,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     );
                   })}
                 </div>
+                )}
               </div>
 
               {/* Right 1 Col: Active Drafts & Teletipo */}
@@ -1446,6 +1452,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     )}
                   </div>
 
+                  {flashNews.length === 0 ? (
+                    <p className="py-2 text-xs text-neutral-500 font-light">
+                      Sin alertas activas en el cintillo.
+                    </p>
+                  ) : (
                   <div className="divide-y divide-white/5">
                     {flashNews.slice(0, 3).map((f) => (
                       <div key={f.id} className="py-2">
@@ -1460,6 +1471,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                       </div>
                     ))}
                   </div>
+                  )}
                 </div>
               </div>
             </div>

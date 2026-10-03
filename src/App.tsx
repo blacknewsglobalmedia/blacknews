@@ -22,11 +22,12 @@ import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
 import { InstallPromo } from "./components/InstallPromo";
 import { TrustSection } from "./components/TrustSection";
-import { REPORTS, CATEGORIES, FLASH_NEWS } from "./data/newsData";
+import { SubscriptionModal } from "./components/SubscriptionModal";
+import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS } from "./data/newsData";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
-import { AdCampaign, INITIAL_AD_CAMPAIGNS } from "./types/ads";
+import { AdCampaign, INITIAL_AD_CAMPAIGNS, MOCK_AD_IDS } from "./types/ads";
 import {
   DEFAULT_LAYOUT_CONFIG,
   computeLayoutPreset,
@@ -123,7 +124,16 @@ export default function App() {
       const saved = localStorage.getItem("blacknews_reports");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // Depura los posts de muestra de versiones anteriores: solo queda contenido real.
+          const cleaned = parsed.filter(
+            (r: Report) => r && !MOCK_REPORT_IDS.includes(r.id),
+          );
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem("blacknews_reports", JSON.stringify(cleaned));
+          }
+          return cleaned;
+        }
       }
     } catch {}
     return REPORTS;
@@ -135,7 +145,19 @@ export default function App() {
       const saved = localStorage.getItem("blacknews_flash_news");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // Depura las alertas de muestra de versiones anteriores.
+          const cleaned = parsed.filter(
+            (f: FlashNews) => f && !MOCK_FLASH_IDS.includes(f.id),
+          );
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem(
+              "blacknews_flash_news",
+              JSON.stringify(cleaned),
+            );
+          }
+          return cleaned;
+        }
       }
     } catch {}
     return FLASH_NEWS;
@@ -173,10 +195,32 @@ export default function App() {
       const saved = localStorage.getItem("blacknews_ads");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // Depura las campañas de muestra de versiones anteriores.
+          const cleaned = parsed.filter(
+            (c: AdCampaign) => c && !MOCK_AD_IDS.includes(c.id),
+          );
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem("blacknews_ads", JSON.stringify(cleaned));
+          }
+          return cleaned;
+        }
       }
     } catch {}
     return INITIAL_AD_CAMPAIGNS;
+  });
+
+  // Subscription state (BlackNews Digital Pass / Pro Terminal)
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(() => {
+    try {
+      const raw = localStorage.getItem("blacknews_subscription");
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      return data.status === "active";
+    } catch {
+      return false;
+    }
   });
 
   const handleSaveCampaign = (campaign: AdCampaign) => {
@@ -899,9 +943,16 @@ export default function App() {
                   isBookmarked={bookmarkedIds.has(leadReport.id)}
                   onToggleBookmark={handleToggleBookmark}
                 />
-
               </>
             )}
+
+            <GeoMapSection
+              reports={reportsList}
+              categories={categoriesList}
+              onOpenReport={handleOpenReport}
+              onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
+              isSubscribed={isSubscribed}
+            />
 
             {/* Visual Posts Section: News cards in 4:5 post format */}
             <VisualPostsSection
@@ -951,7 +1002,6 @@ export default function App() {
                 selectedCategory === "TODAS" ? configuredDossier : undefined
               }
             />
-            <GeoMapSection reports={reportsList} />
             <GlossaryShowcase />
             {!isStandalone && (
               <InstallPromo
@@ -1036,6 +1086,18 @@ export default function App() {
           handleSaveCampaign(campaign);
           showToast(
             "Tu anuncio fue enviado a revisión. El equipo lo aprobará en breve.",
+          );
+        }}
+      />
+
+      {/* Subscription Plans Modal */}
+      <SubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        onSubscribeSuccess={(planId) => {
+          setIsSubscribed(true);
+          showToast(
+            `¡Suscripción [${planId.toUpperCase()}] activada con éxito! Acceso ilimitado concedido.`,
           );
         }}
       />

@@ -105,6 +105,12 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
               LA REDACCIÓN
             </div>
             <ul className="space-y-3.5">
+              {team.length === 0 && (
+                <li className="text-sm text-neutral-400 font-light">
+                  La redacción se publica junto a cada despacho: autores y
+                  corresponsalías figuran en la ficha de cada informe.
+                </li>
+              )}
               {team.map((a) => (
                 <li key={a.name} className="flex items-center gap-3">
                   <span

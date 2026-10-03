@@ -61,6 +61,11 @@ export const AdBanner: React.FC<AdBannerProps> = ({
     }
   };
 
+  // Sin campaña activa y sin gestor de consulta: no se pinta nada (evita huecos muertos).
+  if (!activeCampaign && !onOpenInquiry) {
+    return null;
+  }
+
   // If no active campaign, show tasteful sponsor invitation placeholder
   if (!activeCampaign) {
     return (

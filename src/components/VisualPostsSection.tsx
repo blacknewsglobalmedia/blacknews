@@ -88,6 +88,9 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
     setCurrentPage((prev) => (prev < totalPages - 1 ? prev + 1 : 0));
   };
 
+  // Sin despachos publicados la sección no aporta nada: se omite por completo.
+  if (reports.length === 0) return null;
+
   return (
     <section className="w-full bg-black py-10 sm:py-14 border-b border-white/10 relative overflow-hidden">
       {/* Subtle background ambient light */}
