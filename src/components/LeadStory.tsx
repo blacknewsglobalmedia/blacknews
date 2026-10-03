@@ -20,6 +20,23 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
   isBookmarked,
   onToggleBookmark,
 }) => {
+  // Datos reales del artículo para las columnas laterales de la imagen.
+  // Cada bloque se oculta si el informe no trae ese dato (nada de muestra).
+  const sections = report.sections || [];
+  const contextSection = sections.find(
+    (s) =>
+      (s.type === 'paragraph' || s.type === 'highlight') &&
+      (s.text || '').trim().length > 0,
+  );
+  const statSection = sections.find(
+    (s) => s.type === 'stat' && (s.value || '').trim().length > 0,
+  );
+  const quoteSection = sections.find(
+    (s) => s.type === 'quote' && (s.text || '').trim().length > 0,
+  );
+  const takeaways = report.keyTakeaways || [];
+  const hasContext = Boolean(contextSection || statSection);
+
   return (
     <section className="w-full bg-black pb-12 sm:pb-16 pt-6 sm:pt-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -64,29 +81,43 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
           {/* Columna Izquierda: Análisis de Contexto */}
           <div className="lg:col-span-3 flex flex-col justify-between space-y-6">
             <div>
-              <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider text-white font-semibold pb-2 mb-4 border-b border-white/10">
-                <TrendingUp className="w-3.5 h-3.5 text-neutral-300" />
-                <span>CONTEXTO & MERCADOS</span>
-              </div>
-
-              <div className="text-xs sm:text-sm text-neutral-300 leading-relaxed space-y-4 font-sans font-normal">
-                <p>
-                  <strong className="text-white font-semibold text-xs tracking-wide mr-1.5 font-sans">
-                    {report.author.bureau.split('/')[0].trim()} —
-                  </strong>
-                  Los comités de inversión internacional han dejado de considerar los títulos de deuda con tasas reales negativas como activos libres de riesgo. La evidencia empírica señala que sólo los marcos institucionales con estricta seguridad jurídica retienen el valor acumulado de los ahorradores.
-                </p>
-              </div>
-
-              {/* Stat callout con números tabulares refinados */}
-              <div className="my-6 pt-4 border-t border-white/10">
-                <div className="text-3xl sm:text-4xl font-mono font-light text-white tracking-tight tabular-nums">
-                  +340%
+              {hasContext && (
+                <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider text-white font-semibold pb-2 mb-4 border-b border-white/10">
+                  <TrendingUp className="w-3.5 h-3.5 text-neutral-300" />
+                  <span>CONTEXTO & MERCADOS</span>
                 </div>
-                <div className="text-xs font-sans text-neutral-400 mt-1.5 leading-snug">
-                  Crecimiento del flujo de inversión directa hacia jurisdicciones con régimen fiscal predecible y propiedad privada protegida.
+              )}
+
+              {contextSection && (
+                <div className="text-xs sm:text-sm text-neutral-300 leading-relaxed space-y-4 font-sans font-normal">
+                  <p>
+                    <strong className="text-white font-semibold text-xs tracking-wide mr-1.5 font-sans">
+                      {report.author.bureau.split('/')[0].trim()} —
+                    </strong>
+                    {contextSection.text}
+                  </p>
                 </div>
-              </div>
+              )}
+
+              {/* Cifra destacada: primera sección tipo 'cifra' del artículo */}
+              {statSection && (
+                <div
+                  className={`font-sans ${
+                    contextSection
+                      ? 'my-6 pt-4 border-t border-white/10'
+                      : 'pt-2'
+                  }`}
+                >
+                  <div className="text-3xl sm:text-4xl font-mono font-light text-white tracking-tight tabular-nums">
+                    {statSection.value}
+                  </div>
+                  {statSection.label && (
+                    <div className="text-xs text-neutral-400 mt-1.5 leading-snug">
+                      {statSection.label}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="text-xs text-neutral-400 font-sans pt-2">
                 <span className="text-white font-medium block text-sm">{report.author.name}</span>
@@ -135,9 +166,6 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
                 <p className="text-sm sm:text-base text-neutral-200 leading-relaxed font-normal editorial-drop-cap font-sans">
                   {report.lead}
                 </p>
-                <p className="mt-4 text-xs sm:text-sm text-neutral-400 leading-relaxed font-sans">
-                  El comercio voluntario entre particulares y la libre concurrencia en la producción demuestran ser la salvaguarda más efectiva frente a las distorsiones de la planificación central.
-                </p>
               </div>
             </div>
 
@@ -159,32 +187,46 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
           {/* Columna Derecha: Claves Editoriales & Acciones */}
           <div className="lg:col-span-3 flex flex-col justify-between space-y-6">
             <div>
-              <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider text-white font-semibold pb-2 mb-4 border-b border-white/10">
-                <Sparkles className="w-3.5 h-3.5 text-neutral-300" />
-                <span>CLAVES EDITORIALES</span>
-              </div>
+              {takeaways.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider text-white font-semibold pb-2 mb-4 border-b border-white/10">
+                    <Sparkles className="w-3.5 h-3.5 text-neutral-300" />
+                    <span>CLAVES EDITORIALES</span>
+                  </div>
 
-              {/* Bullet list limpia y legible */}
-              <ul className="space-y-4">
-                {report.keyTakeaways.map((takeaway, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-neutral-300 font-sans">
-                    <span className="font-mono text-xs font-medium text-neutral-400 mt-0.5 shrink-0 tabular-nums">
-                      0{idx + 1}.
-                    </span>
-                    <span className="leading-relaxed">{takeaway}</span>
-                  </li>
-                ))}
-              </ul>
+                  {/* Bullet list limpia y legible */}
+                  <ul className="space-y-4">
+                    {takeaways.map((takeaway, idx) => (
+                      <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-neutral-300 font-sans">
+                        <span className="font-mono text-xs font-medium text-neutral-400 mt-0.5 shrink-0 tabular-nums">
+                          0{idx + 1}.
+                        </span>
+                        <span className="leading-relaxed">{takeaway}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
 
-              {/* Cita editorial */}
-              <div className="mt-8 pt-4 border-t border-white/10">
-                <div className="font-headline italic text-base sm:text-lg text-neutral-200 leading-relaxed">
-                  "El derecho de propiedad y la libertad de intercambio son la base moral y material de toda civilización libre."
+              {/* Cita destacada: primera sección tipo 'cita' del artículo */}
+              {quoteSection && (
+                <div
+                  className={`${
+                    takeaways.length > 0
+                      ? 'mt-8 pt-4 border-t border-white/10'
+                      : 'pt-2'
+                  }`}
+                >
+                  <div className="font-headline italic text-base sm:text-lg text-neutral-200 leading-relaxed">
+                    "{quoteSection.text}"
+                  </div>
+                  {quoteSection.cite && (
+                    <div className="mt-2 text-xs font-sans text-neutral-400 font-medium tracking-wide">
+                      — {quoteSection.cite}
+                    </div>
+                  )}
                 </div>
-                <div className="mt-2 text-xs font-sans text-neutral-400 font-medium tracking-wide">
-                  — Archivo Editorial BLACKNEWS
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Acciones de lectura */}
