@@ -62,6 +62,7 @@ import { ImportArticleModal } from './ImportArticleModal';
 import { DraftsModal, ArticleDraft } from './DraftsModal';
 import { RedactorFloatingBar } from './RedactorFloatingBar';
 import { AdsManager } from './AdsManager';
+import { OptimizedPicture } from './OptimizedPicture';
 import { downloadArticleTemplateJson, ParsedArticleImport } from '../utils/articleTemplate';
 
 interface RedactionStudioProps {
@@ -703,7 +704,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   return (
     <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row pb-20 lg:pb-0">
       {/* MOBILE COMPACT HEADER (< lg) */}
-      <div className="lg:hidden border-b border-white/10 bg-neutral-950 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+      <div className="lg:hidden border-b border-white/10 bg-black px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2.5">
           <div className="w-3.5 h-3.5 bg-white shrink-0" />
           <span className="text-xs font-bold uppercase tracking-wider text-white">
@@ -737,7 +738,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       {/* COMPACT DASHBOARD SIDEBAR (Desktop sticky, Mobile collapsible) */}
       <aside className={`
         ${isMobileSidebarOpen ? 'block' : 'hidden'} lg:block 
-        w-full lg:w-64 lg:min-h-screen border-r border-white/10 bg-neutral-950/80 backdrop-blur-md 
+        w-full lg:w-64 lg:min-h-screen border-r border-white/10 bg-black
         p-4 shrink-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto z-40 flex flex-col justify-between
       `}>
         <div className="space-y-5">
@@ -761,9 +762,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
           </div>
 
           {/* User Profile Capsule (Compact) */}
-          <div className="p-3 rounded-xl bg-neutral-900/60 border border-white/10 space-y-2">
+          <div className="space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs shrink-0 shadow-sm">
+              <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs shrink-0">
                 {currentUser.avatarInitials}
               </div>
               <div className="min-w-0 flex-1">
@@ -798,7 +799,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                   activeTab === 'overview'
-                    ? 'bg-white text-black font-bold shadow-md'
+                    ? 'bg-white text-black font-bold'
                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -818,7 +819,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   }}
                   className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                     activeTab === 'builder'
-                      ? 'bg-white text-black font-bold shadow-md'
+                      ? 'bg-white text-black font-bold'
                       : 'text-neutral-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -841,7 +842,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                   activeTab === 'my-articles'
-                    ? 'bg-white text-black font-bold shadow-md'
+                    ? 'bg-white text-black font-bold'
                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -866,10 +867,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide text-neutral-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Bookmark className="w-4 h-4 text-cyan-400" />
+                  <Bookmark className="w-4 h-4 text-neutral-400" />
                   <span>Borradores</span>
                 </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-400 font-bold border border-cyan-500/20">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-neutral-400 font-bold">
                   {drafts.length}
                 </span>
               </button>
@@ -890,15 +891,15 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                   activeTab === 'post-generator'
-                    ? 'bg-white text-black font-bold shadow-md'
+                    ? 'bg-white text-black font-bold'
                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <Smartphone className="w-4 h-4 text-neutral-400" />
                   <span>Creador Post 4:5</span>
                 </div>
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded text-neutral-500 font-bold">
                   MP4 / IMG
                 </span>
               </button>
@@ -912,12 +913,12 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                   activeTab === 'images'
-                    ? 'bg-white text-black font-bold shadow-md'
+                    ? 'bg-white text-black font-bold'
                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-amber-400" />
+                  <ImageIcon className="w-4 h-4 text-neutral-400" />
                   <span>Optimizador .AVIF</span>
                 </div>
               </button>
@@ -939,7 +940,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                       activeTab === 'layout'
-                        ? 'bg-white text-black font-bold shadow-md'
+                        ? 'bg-white text-black font-bold'
                         : 'text-neutral-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -959,7 +960,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                       activeTab === 'categories'
-                        ? 'bg-white text-black font-bold shadow-md'
+                        ? 'bg-white text-black font-bold'
                         : 'text-neutral-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -979,7 +980,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                       activeTab === 'users'
-                        ? 'bg-white text-black font-bold shadow-md'
+                        ? 'bg-white text-black font-bold'
                         : 'text-neutral-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -1020,7 +1021,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       {/* MAIN WORKSPACE */}
       <main className="flex-1 min-w-0 flex flex-col bg-black">
         {/* Workspace Sticky Header */}
-        <div className="border-b border-white/10 bg-neutral-950/80 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3">
+        <div className="border-b border-white/10 bg-black/85 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3">
           {/* Breadcrumb Title */}
           <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider">
             <span className="text-neutral-500 font-semibold">SISTEMA EDITORIAL</span>
@@ -1054,7 +1055,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   onClick={() => setIsDraftsModalOpen(true)}
                   className="text-xs font-semibold text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 px-3 rounded-lg bg-neutral-900 border border-white/10 hover:bg-neutral-800"
                 >
-                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                  <Bookmark className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Borradores</span> ({drafts.length})
                 </button>
                 <button
@@ -1090,9 +1091,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDraftsModalOpen(true)}
-                  className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border border-white/10 cursor-pointer"
+                  className="px-3 py-1.5 text-neutral-400 hover:text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                  <Bookmark className="w-3.5 h-3.5" />
                   <span>Borradores ({drafts.length})</span>
                 </button>
               </>
@@ -1119,11 +1120,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
         {/* TAB CONTENT 0: DASHBOARD COMPACTO (OVERVIEW) */}
         {activeTab === 'overview' && (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 w-full">
             {/* Welcome & Identity Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-white/10 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
               <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-white text-black font-black flex items-center justify-center text-sm shadow-md">
+                <div className="w-9 h-9 rounded-lg bg-white text-black font-black flex items-center justify-center text-xs">
                   {currentUser.avatarInitials}
                 </div>
                 <div>
@@ -1131,15 +1132,15 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
                       {currentUser.name}
                     </h2>
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-white/10 text-neutral-200 border border-white/15">
+                    <span className="text-[10px] font-mono text-neutral-500">
                       {currentUser.role}
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                    <span className="text-[10px] text-neutral-500 font-medium flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-neutral-400 inline-block animate-pulse" />
                       Mesa Activa
                     </span>
                   </div>
-                  <p className="text-xs text-neutral-400 mt-0.5 font-light">
+                  <p className="text-xs text-neutral-500 mt-0.5 font-light">
                     {currentUser.title} · Corresponsalía: {currentUser.bureau}
                   </p>
                 </div>
@@ -1154,7 +1155,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                       handleNewBlankArticle();
                       setActiveTab('builder');
                     }}
-                    className="px-3.5 py-2 bg-white text-black hover:bg-neutral-200 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                    className="px-3.5 py-2 bg-white text-black hover:bg-neutral-200 rounded-lg font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Nuevo Despacho</span>
@@ -1163,141 +1164,147 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDraftsModalOpen(true)}
-                  className="px-3 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5 border border-white/10 cursor-pointer"
+                  className="px-3 py-2 text-neutral-400 hover:text-white rounded-lg font-medium text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                  <Bookmark className="w-3.5 h-3.5" />
                   <span>Borradores ({drafts.length})</span>
                 </button>
               </div>
             </div>
 
-            {/* KPI Metrics Cards (4 Column Grid) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* KPI Metrics: cifras desnudas separadas por filetes */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-0 lg:divide-x lg:divide-white/10">
               {/* Card 1: Total Despachos */}
               <div 
                 onClick={() => setActiveTab('my-articles')}
-                className="p-4 rounded-xl bg-neutral-950 border border-white/10 hover:border-white/30 transition-all cursor-pointer group shadow-lg"
+                className="group cursor-pointer lg:pl-6 lg:first:pl-0 transition-colors"
               >
-                <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
-                  <span className="font-semibold uppercase tracking-wider text-[10px]">Archivo Central</span>
-                  <Newspaper className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600 group-hover:text-neutral-400 transition-colors">
+                  Archivo Central
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  {publishedReports.length}
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {publishedReports.length}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
+                    Despachos publicados
+                  </span>
                 </div>
-                <p className="text-[11px] text-neutral-400 mt-1 flex items-center justify-between">
-                  <span>Despachos publicados</span>
-                  <span className="text-neutral-500 group-hover:text-white transition-colors">Ver todos →</span>
-                </p>
               </div>
 
               {/* Card 2: Tus Despachos */}
               <div 
                 onClick={() => setActiveTab('my-articles')}
-                className="p-4 rounded-xl bg-neutral-950 border border-white/10 hover:border-white/30 transition-all cursor-pointer group shadow-lg"
+                className="group cursor-pointer lg:pl-6 lg:first:pl-0 transition-colors"
               >
-                <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
-                  <span className="font-semibold uppercase tracking-wider text-[10px]">Tus Artículos</span>
-                  <FileText className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600 group-hover:text-neutral-400 transition-colors">
+                  Tus Artículos
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  {userPublishedCount}
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {userPublishedCount}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
+                    Bajo tu firma
+                  </span>
                 </div>
-                <p className="text-[11px] text-neutral-400 mt-1">
-                  Bajo tu firma y autoría
-                </p>
               </div>
 
               {/* Card 3: Borradores */}
               <div 
                 onClick={() => setIsDraftsModalOpen(true)}
-                className="p-4 rounded-xl bg-neutral-950 border border-white/10 hover:border-white/30 transition-all cursor-pointer group shadow-lg"
+                className="group cursor-pointer lg:pl-6 lg:first:pl-0 transition-colors"
               >
-                <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
-                  <span className="font-semibold uppercase tracking-wider text-[10px]">Borradores</span>
-                  <Bookmark className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600 group-hover:text-neutral-400 transition-colors">
+                  Borradores
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  {drafts.length} <span className="text-xs text-neutral-500 font-normal">/ {MAX_DRAFTS_PER_USER}</span>
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {drafts.length}{' '}
+                    <span className="text-xs text-neutral-600 font-normal">/ {MAX_DRAFTS_PER_USER}</span>
+                  </span>
+                  <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
+                    En memoria local
+                  </span>
                 </div>
-                <p className="text-[11px] text-neutral-400 mt-1 flex items-center justify-between">
-                  <span>En memoria local</span>
-                  <span className="text-neutral-500 group-hover:text-white transition-colors">Abrir →</span>
-                </p>
               </div>
 
               {/* Card 4: Teletipo / Portada */}
               <div 
                 onClick={() => permissions.canManageLayout ? setActiveTab('layout') : null}
-                className={`p-4 rounded-xl bg-neutral-950 border border-white/10 transition-all shadow-lg ${
-                  permissions.canManageLayout ? 'hover:border-white/30 cursor-pointer group' : ''
+                className={`group lg:pl-6 lg:first:pl-0 transition-colors ${
+                  permissions.canManageLayout ? 'cursor-pointer' : ''
                 }`}
               >
-                <div className="flex items-center justify-between text-neutral-400 text-xs mb-1.5">
-                  <span className="font-semibold uppercase tracking-wider text-[10px]">Teletipo en Vivo</span>
-                  <Radio className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600 group-hover:text-neutral-400 transition-colors">
+                  Teletipo en Vivo
                 </div>
-                <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  {flashNews.length}
+                <div className="mt-1.5 flex items-baseline gap-2">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {flashNews.length}
+                  </span>
+                  <span className="text-[11px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
+                    Alertas flash activas
+                  </span>
                 </div>
-                <p className="text-[11px] text-neutral-400 mt-1 flex items-center justify-between">
-                  <span>Alertas flash activas</span>
-                  {permissions.canManageLayout && <span className="text-neutral-500 group-hover:text-white transition-colors">Editar →</span>}
-                </p>
               </div>
             </div>
 
             {/* Quick Action Commands */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
               <button
                 type="button"
                 onClick={() => {
                   handleNewBlankArticle();
                   setActiveTab('builder');
                 }}
-                className="p-3.5 bg-neutral-950 hover:bg-neutral-900 border border-white/10 hover:border-white/30 rounded-xl text-left transition-all cursor-pointer group shadow-md"
+                className="group pt-3 border-t border-white/10 text-left transition-colors cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white mb-2 group-hover:bg-white group-hover:text-black transition-colors">
-                  <Edit3 className="w-4 h-4" />
+                <div className="text-xs font-bold text-white uppercase tracking-wider group-hover:text-neutral-300 transition-colors">
+                  Redactar
                 </div>
-                <div className="text-xs font-bold text-white uppercase tracking-wider">Redactar</div>
-                <div className="text-[11px] text-neutral-400 mt-0.5">Crear nuevo despacho</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  Crear nuevo despacho
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('post-generator')}
-                className="p-3.5 bg-neutral-950 hover:bg-neutral-900 border border-white/10 hover:border-white/30 rounded-xl text-left transition-all cursor-pointer group shadow-md"
+                className="group pt-3 border-t border-white/10 text-left transition-colors cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white mb-2 group-hover:bg-white group-hover:text-black transition-colors">
-                  <Smartphone className="w-4 h-4" />
+                <div className="text-xs font-bold text-white uppercase tracking-wider group-hover:text-neutral-300 transition-colors">
+                  Post 4:5
                 </div>
-                <div className="text-xs font-bold text-white uppercase tracking-wider">Post 4:5</div>
-                <div className="text-[11px] text-neutral-400 mt-0.5">Generar video / imagen</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  Generar video / imagen
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('images')}
-                className="p-3.5 bg-neutral-950 hover:bg-neutral-900 border border-white/10 hover:border-white/30 rounded-xl text-left transition-all cursor-pointer group shadow-md"
+                className="group pt-3 border-t border-white/10 text-left transition-colors cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white mb-2 group-hover:bg-white group-hover:text-black transition-colors">
-                  <ImageIcon className="w-4 h-4" />
+                <div className="text-xs font-bold text-white uppercase tracking-wider group-hover:text-neutral-300 transition-colors">
+                  Optimizador
                 </div>
-                <div className="text-xs font-bold text-white uppercase tracking-wider">Optimizador</div>
-                <div className="text-[11px] text-neutral-400 mt-0.5">Procesar a .AVIF</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  Procesar a .AVIF
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowImportModal(true)}
-                className="p-3.5 bg-neutral-950 hover:bg-neutral-900 border border-white/10 hover:border-white/30 rounded-xl text-left transition-all cursor-pointer group shadow-md"
+                className="group pt-3 border-t border-white/10 text-left transition-colors cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-white mb-2 group-hover:bg-white group-hover:text-black transition-colors">
-                  <Upload className="w-4 h-4" />
+                <div className="text-xs font-bold text-white uppercase tracking-wider group-hover:text-neutral-300 transition-colors">
+                  Importar
                 </div>
-                <div className="text-xs font-bold text-white uppercase tracking-wider">Importar</div>
-                <div className="text-[11px] text-neutral-400 mt-0.5">Cargar desde JSON</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
+                  Cargar desde JSON
+                </div>
               </button>
             </div>
 
@@ -1319,19 +1326,21 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="divide-y divide-white/5">
                   {publishedReports.slice(0, 5).map((rep) => {
                     const canEditThis = canUserEditThisReport(rep);
                     return (
                       <div 
                         key={rep.id}
-                        className="p-3 rounded-xl bg-neutral-950 border border-white/10 hover:border-white/25 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                        className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group transition-colors hover:bg-white/[0.02]"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <img 
-                            src={rep.image} 
-                            alt={rep.title} 
-                            className="w-14 h-11 object-cover rounded-lg shrink-0 border border-white/10 bg-neutral-900" 
+                          <OptimizedPicture
+                            image={rep.image}
+                            alt={rep.title}
+                            className="w-14 h-11 rounded-md shrink-0"
+                            sizes="56px"
+                            aspectRatio="14/11"
                           />
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase text-neutral-400">
@@ -1348,12 +1357,12 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                           {canEditThis && (
                             <button
                               type="button"
                               onClick={() => handleStartEdit(rep)}
-                              className="px-2.5 py-1 bg-white/5 hover:bg-white/15 text-neutral-200 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer border border-white/10"
+                              className="px-2 py-1 text-neutral-500 hover:text-white text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
                               title="Editar artículo"
                             >
                               <Edit2 className="w-3 h-3" />
@@ -1363,10 +1372,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                           <button
                             type="button"
                             onClick={() => setActiveTab('post-generator')}
-                            className="px-2.5 py-1 bg-white/5 hover:bg-white/15 text-neutral-200 hover:text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer border border-white/10"
+                            className="px-2 py-1 text-neutral-500 hover:text-white text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
                             title="Crear Post 4:5 para redes"
                           >
-                            <Smartphone className="w-3 h-3 text-cyan-400" />
+                            <Smartphone className="w-3 h-3" />
                             <span>Post 4:5</span>
                           </button>
                         </div>
@@ -1379,28 +1388,28 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {/* Right 1 Col: Active Drafts & Teletipo */}
               <div className="space-y-4">
                 {/* Drafts Widget */}
-                <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 space-y-3 shadow-lg">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-white/10">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                      <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                      <Bookmark className="w-3.5 h-3.5 text-neutral-500" />
                       <span>Borradores en Curso</span>
                     </h3>
                     <button
                       type="button"
                       onClick={() => setIsDraftsModalOpen(true)}
-                      className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                      className="text-[11px] text-neutral-500 hover:text-white font-medium cursor-pointer"
                     >
                       Ver ({drafts.length})
                     </button>
                   </div>
 
                   {drafts.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="divide-y divide-white/5">
                       {drafts.slice(0, 3).map((draft) => (
-                        <div 
+                        <div
                           key={draft.id}
                           onClick={() => handleLoadDraft(draft)}
-                          className="p-2.5 rounded-lg bg-neutral-900/60 hover:bg-neutral-900 border border-white/5 hover:border-white/20 transition-all cursor-pointer"
+                          className="py-2.5 hover:bg-white/[0.03] transition-colors cursor-pointer"
                         >
                           <div className="text-xs font-bold text-white truncate">
                             {draft.title || 'Borrador sin título'}
@@ -1420,10 +1429,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 </div>
 
                 {/* Teletipo Widget */}
-                <div className="p-4 rounded-xl bg-neutral-950 border border-white/10 space-y-3 shadow-lg">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-white/10">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                      <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                      <Radio className="w-3.5 h-3.5 text-neutral-500" />
                       <span>Cintillo de Última Hora</span>
                     </h3>
                     {permissions.canManageLayout && (
@@ -1437,11 +1446,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     )}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="divide-y divide-white/5">
                     {flashNews.slice(0, 3).map((f) => (
-                      <div key={f.id} className="p-2 rounded-lg bg-neutral-900/40 border border-white/5">
-                        <div className="text-[10px] font-mono text-neutral-400 flex items-center gap-1.5">
-                          <span className="text-emerald-400 font-bold">{f.time}</span>
+                      <div key={f.id} className="py-2">
+                        <div className="text-[10px] font-mono text-neutral-500 flex items-center gap-1.5">
+                          <span className="text-white font-bold">{f.time}</span>
                           <span>·</span>
                           <span className="truncate">{f.category}</span>
                         </div>
