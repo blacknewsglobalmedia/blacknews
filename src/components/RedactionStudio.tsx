@@ -1703,10 +1703,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   </p>
 
                   <div className="aspect-[16/9] w-full bg-neutral-950 overflow-hidden mb-3 rounded-2xl shadow-lg">
-                    <img
-                      src={customImageUrl.trim() ? customImageUrl : selectedImage}
+                    <OptimizedPicture
+                      image={customImageUrl.trim() ? customImageUrl : selectedImage}
                       alt={title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full"
+                      sizes="(max-width: 768px) 100vw, 768px"
                     />
                   </div>
                   <div className="text-xs text-neutral-400 italic mb-8 font-light">
@@ -2076,10 +2077,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                           ) : customImageUrl || selectedOptimizedImage ? (
                             <div className="space-y-3">
                               <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-black group">
-                                <img
-                                  src={customImageUrl || selectedImage}
+                                <OptimizedPicture
+                                  image={customImageUrl || selectedImage}
                                   alt="Vista previa"
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full"
+                                  sizes="(max-width: 768px) 100vw, 768px"
                                 />
                                 <div className="absolute top-2 left-2 flex items-center gap-1.5 flex-wrap">
                                   <span className="bg-black/80 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -2183,7 +2185,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                                   }`}
                                 >
                                   <div className="aspect-[16/9] w-full overflow-hidden mb-1 rounded">
-                                    <img src={img.url} alt={img.label} className="w-full h-full object-cover" />
+                                    <OptimizedPicture image={img.url} alt={img.label} className="w-full h-full" sizes="200px" />
                                   </div>
                                   <div className="text-[10px] truncate text-neutral-200 font-medium">{img.label}</div>
                                 </button>
