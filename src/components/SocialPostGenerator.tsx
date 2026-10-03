@@ -1,21 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Download, 
-  Copy, 
-  Upload, 
-  Image as ImageIcon, 
-  Video as VideoIcon, 
-  Volume2, 
-  VolumeX, 
-  Sparkles, 
-  Check, 
-  RotateCcw, 
-  Eye, 
-  Layers, 
-  Sliders, 
-  FileText, 
-  Play, 
-  Pause, 
+import React, { useState, useRef, useEffect } from "react";
+import {
+  Download,
+  Copy,
+  Upload,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  Check,
+  RotateCcw,
+  Eye,
+  Layers,
+  Sliders,
+  FileText,
+  Play,
+  Pause,
   Maximize2,
   Trash2,
   Palette,
@@ -32,10 +32,10 @@ import {
   FileCode,
   FolderUp,
   FileDown,
-  User
-} from 'lucide-react';
-import { Report } from '../types/news';
-import fixWebmDuration from 'fix-webm-duration';
+  User,
+} from "lucide-react";
+import { Report } from "../types/news";
+import fixWebmDuration from "fix-webm-duration";
 
 interface SocialPostGeneratorProps {
   reports?: Report[];
@@ -49,70 +49,72 @@ export interface CountryItem {
 }
 
 export const POPULAR_COUNTRIES: CountryItem[] = [
-  { name: 'Israel', code: 'IL', flag: '🇮🇱' },
-  { name: 'Irán', code: 'IR', flag: '🇮🇷' },
-  { name: 'EE.UU.', code: 'US', flag: '🇺🇸' },
-  { name: 'China', code: 'CN', flag: '🇨🇳' },
-  { name: 'Rusia', code: 'RU', flag: '🇷🇺' },
-  { name: 'Ucrania', code: 'UA', flag: '🇺🇦' },
-  { name: 'Arabia Saudí', code: 'SA', flag: '🇸🇦' },
-  { name: 'Líbano', code: 'LB', flag: '🇱🇧' },
-  { name: 'Siria', code: 'SY', flag: '🇸🇾' },
-  { name: 'Yemen', code: 'YE', flag: '🇾🇪' },
-  { name: 'Taiwán', code: 'TW', flag: '🇹🇼' },
-  { name: 'Corea del Sur', code: 'KR', flag: '🇰🇷' },
-  { name: 'Corea del Norte', code: 'KP', flag: '🇰🇵' },
-  { name: 'España', code: 'ES', flag: '🇪🇸' },
-  { name: 'Reino Unido', code: 'GB', flag: '🇬🇧' },
-  { name: 'Francia', code: 'FR', flag: '🇫🇷' },
-  { name: 'Alemania', code: 'DE', flag: '🇩🇪' },
-  { name: 'Argentina', code: 'AR', flag: '🇦🇷' },
-  { name: 'Venezuela', code: 'VE', flag: '🇻🇪' },
-  { name: 'Brasil', code: 'BR', flag: '🇧🇷' },
-  { name: 'México', code: 'MX', flag: '🇲🇽' },
-  { name: 'Colombia', code: 'CO', flag: '🇨🇴' },
-  { name: 'Chile', code: 'CL', flag: '🇨🇱' },
-  { name: 'Perú', code: 'PE', flag: '🇵🇪' },
-  { name: 'Japón', code: 'JP', flag: '🇯🇵' },
-  { name: 'India', code: 'IN', flag: '🇮🇳' },
-  { name: 'Turquía', code: 'TR', flag: '🇹🇷' },
-  { name: 'Egipto', code: 'EG', flag: '🇪🇬' },
-  { name: 'Qatar', code: 'QA', flag: '🇶🇦' },
-  { name: 'Unión Europea', code: 'EU', flag: '🇪🇺' },
-  { name: 'Internacional', code: 'GLOBAL', flag: '🌐' },
+  { name: "Israel", code: "IL", flag: "🇮🇱" },
+  { name: "Irán", code: "IR", flag: "🇮🇷" },
+  { name: "EE.UU.", code: "US", flag: "🇺🇸" },
+  { name: "China", code: "CN", flag: "🇨🇳" },
+  { name: "Rusia", code: "RU", flag: "🇷🇺" },
+  { name: "Ucrania", code: "UA", flag: "🇺🇦" },
+  { name: "Arabia Saudí", code: "SA", flag: "🇸🇦" },
+  { name: "Líbano", code: "LB", flag: "🇱🇧" },
+  { name: "Siria", code: "SY", flag: "🇸🇾" },
+  { name: "Yemen", code: "YE", flag: "🇾🇪" },
+  { name: "Taiwán", code: "TW", flag: "🇹🇼" },
+  { name: "Corea del Sur", code: "KR", flag: "🇰🇷" },
+  { name: "Corea del Norte", code: "KP", flag: "🇰🇵" },
+  { name: "España", code: "ES", flag: "🇪🇸" },
+  { name: "Reino Unido", code: "GB", flag: "🇬🇧" },
+  { name: "Francia", code: "FR", flag: "🇫🇷" },
+  { name: "Alemania", code: "DE", flag: "🇩🇪" },
+  { name: "Argentina", code: "AR", flag: "🇦🇷" },
+  { name: "Venezuela", code: "VE", flag: "🇻🇪" },
+  { name: "Brasil", code: "BR", flag: "🇧🇷" },
+  { name: "México", code: "MX", flag: "🇲🇽" },
+  { name: "Colombia", code: "CO", flag: "🇨🇴" },
+  { name: "Chile", code: "CL", flag: "🇨🇱" },
+  { name: "Perú", code: "PE", flag: "🇵🇪" },
+  { name: "Japón", code: "JP", flag: "🇯🇵" },
+  { name: "India", code: "IN", flag: "🇮🇳" },
+  { name: "Turquía", code: "TR", flag: "🇹🇷" },
+  { name: "Egipto", code: "EG", flag: "🇪🇬" },
+  { name: "Qatar", code: "QA", flag: "🇶🇦" },
+  { name: "Unión Europea", code: "EU", flag: "🇪🇺" },
+  { name: "Internacional", code: "GLOBAL", flag: "🌐" },
 ];
 
 export const EXPANDED_CATEGORIES: string[] = [
-  'GEOPOLÍTICA',
-  'ECONOMÍA & MERCADOS',
-  'TECNOLOGÍA & INNOVACIÓN',
-  'DEFENSA & INTELIGENCIA',
-  'DERECHO & PROPIEDAD',
-  'ENERGÍA & PETRÓLEO',
-  'CRIPTOACTIVOS & SOBERANÍA',
-  'RELACIONES EXTERIORES',
-  'COMERCIO GLOBAL',
-  'POLÍTICA MONETARIA',
-  'CADENAS DE SUMINISTRO',
-  'INFRAESTRUCTURA & INDUSTRIA',
-  'FINANZAS & BANCA',
-  'SEGURIDAD & CIBERDEFENSA',
-  'DOSSIERS',
-  'EDITORIAL'
+  "GEOPOLÍTICA",
+  "ECONOMÍA & MERCADOS",
+  "TECNOLOGÍA & INNOVACIÓN",
+  "DEFENSA & INTELIGENCIA",
+  "DERECHO & PROPIEDAD",
+  "ENERGÍA & PETRÓLEO",
+  "CRIPTOACTIVOS & SOBERANÍA",
+  "RELACIONES EXTERIORES",
+  "COMERCIO GLOBAL",
+  "POLÍTICA MONETARIA",
+  "CADENAS DE SUMINISTRO",
+  "INFRAESTRUCTURA & INDUSTRIA",
+  "FINANZAS & BANCA",
+  "SEGURIDAD & CIBERDEFENSA",
+  "DOSSIERS",
+  "EDITORIAL",
 ];
 
 // In-memory cache for loaded flag images for canvas rendering
 const flagImageCache = new Map<string, HTMLImageElement>();
 
-export const loadFlagImage = (code: string): Promise<HTMLImageElement | null> => {
-  if (!code || code === 'GLOBAL') return Promise.resolve(null);
+export const loadFlagImage = (
+  code: string,
+): Promise<HTMLImageElement | null> => {
+  if (!code || code === "GLOBAL") return Promise.resolve(null);
   const lower = code.toLowerCase();
   if (flagImageCache.has(lower)) {
     return Promise.resolve(flagImageCache.get(lower)!);
   }
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    img.crossOrigin = "anonymous";
     img.onload = () => {
       flagImageCache.set(lower, img);
       resolve(img);
@@ -122,14 +124,20 @@ export const loadFlagImage = (code: string): Promise<HTMLImageElement | null> =>
   });
 };
 
-export const CountryFlag: React.FC<{ code: string; className?: string; fallback?: string }> = ({
+export const CountryFlag: React.FC<{
+  code: string;
+  className?: string;
+  fallback?: string;
+}> = ({
   code,
-  className = 'w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs',
-  fallback = '🌐',
+  className = "w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs",
+  fallback = "🌐",
 }) => {
   const [failed, setFailed] = useState(false);
-  if (!code || code === 'GLOBAL' || failed) {
-    return <span className="inline-block text-[11px] leading-none">{fallback}</span>;
+  if (!code || code === "GLOBAL" || failed) {
+    return (
+      <span className="inline-block text-[11px] leading-none">{fallback}</span>
+    );
   }
   return (
     <img
@@ -142,7 +150,7 @@ export const CountryFlag: React.FC<{ code: string; className?: string; fallback?
   );
 };
 
-type MediaFilter = 'bw-high' | 'bw-smooth' | 'noir' | 'color' | 'muted-color';
+type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   reports = [],
@@ -152,41 +160,47 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const allAvailableCategories = Array.from(
     new Set([
       ...EXPANDED_CATEGORIES,
-      ...propCategories.filter((c) => c !== 'TODAS')
-    ])
+      ...propCategories.filter((c) => c !== "TODAS"),
+    ]),
   );
 
   // Post Text Content
-  const [category, setCategory] = useState('GEOPOLÍTICA');
-  const [title, setTitle] = useState('Oriente Medio,\nen una nueva fase\nde incertidumbre');
+  const [category, setCategory] = useState("GEOPOLÍTICA");
+  const [title, setTitle] = useState(
+    "Oriente Medio,\nen una nueva fase\nde incertidumbre",
+  );
   const [description, setDescription] = useState(
-    'La escalada de tensiones entre Israel e Irán reconfigura el tablero regional y pone a prueba la estabilidad global.'
+    "La escalada de tensiones entre Israel e Irán reconfigura el tablero regional y pone a prueba la estabilidad global.",
   );
   // Optional caption/character at bottom right of photo
-  const [photoCaption, setPhotoCaption] = useState<string>('');
+  const [photoCaption, setPhotoCaption] = useState<string>("");
 
   // Countries / Regional attribution
   const [selectedCountries, setSelectedCountries] = useState<CountryItem[]>([
-    { name: 'Israel', code: 'IL', flag: '🇮🇱' },
-    { name: 'Irán', code: 'IR', flag: '🇮🇷' }
+    { name: "Israel", code: "IL", flag: "🇮🇱" },
+    { name: "Irán", code: "IR", flag: "🇮🇷" },
   ]);
-  const [customCountryName, setCustomCountryName] = useState('');
-  const [countryPlacement, setCountryPlacement] = useState<'line' | 'badge' | 'none'>('line');
-  const [countryFormat, setCountryFormat] = useState<'names' | 'flags-names' | 'flags-codes'>('names');
-  const [countrySearch, setCountrySearch] = useState('');
+  const [customCountryName, setCustomCountryName] = useState("");
+  const [countryPlacement, setCountryPlacement] = useState<
+    "line" | "badge" | "none"
+  >("line");
+  const [countryFormat, setCountryFormat] = useState<
+    "names" | "flags-names" | "flags-codes"
+  >("names");
+  const [countrySearch, setCountrySearch] = useState("");
   const [autoFitHeader, setAutoFitHeader] = useState(true);
   const [headerSize, setHeaderSize] = useState(20);
 
   // Media state
-  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+  const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [mediaSrc, setMediaSrc] = useState<string>(
-    'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80'
+    "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80",
   );
-  const [mediaName, setMediaName] = useState<string>('Imagen predeterminada');
+  const [mediaName, setMediaName] = useState<string>("Imagen predeterminada");
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Filters & Appearance
-  const [filter, setFilter] = useState<MediaFilter>('bw-high');
+  const [filter, setFilter] = useState<MediaFilter>("bw-high");
   const [isMuted, setIsMuted] = useState(true);
   const [blendFade, setBlendFade] = useState(true); // Smooth fade into black background
   const [brightness, setBrightness] = useState(100);
@@ -208,10 +222,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [recordingProgress, setRecordingProgress] = useState(0);
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [fastExport, setFastExport] = useState(false); // ruta WebCodecs (sin tiempo real)
-  const [videoQuality, setVideoQuality] = useState<'social' | 'compact' | 'hq'>('social');
-  const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm'>('mp4');
+  const [videoQuality, setVideoQuality] = useState<"social" | "compact" | "hq">(
+    "social",
+  );
+  const [videoFormat, setVideoFormat] = useState<"mp4" | "webm">("mp4");
   const [maxVideoDuration, setMaxVideoDuration] = useState<number>(0); // 5s, 10s, 15s, 30s, 60s or 0 (full)
-  const [exportedVideoSize, setExportedVideoSize] = useState<string | null>(null);
+  const [exportedVideoSize, setExportedVideoSize] = useState<string | null>(
+    null,
+  );
   const [videoSpeed, setVideoSpeed] = useState<number>(1.0);
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [trimStart, setTrimStart] = useState<number>(0);
@@ -219,7 +237,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // JSON import/export modal states
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
-  const [jsonInputText, setJsonInputText] = useState('');
+  const [jsonInputText, setJsonInputText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -228,9 +246,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [exportedImageUrl, setExportedImageUrl] = useState<string | null>(null);
-  const [exportFileName, setExportFileName] = useState<string>('blacknews-post-4x5.png');
+  const [exportFileName, setExportFileName] = useState<string>(
+    "blacknews-post-4x5.png",
+  );
   const [exportedVideoUrl, setExportedVideoUrl] = useState<string | null>(null);
-  const [exportVideoFileName, setExportVideoFileName] = useState<string>('blacknews-video-4x5.webm');
+  const [exportVideoFileName, setExportVideoFileName] = useState<string>(
+    "blacknews-video-4x5.webm",
+  );
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -242,10 +264,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   // WebAudio graph for the preview video (created on first export with sound and
   // reused afterwards: a media element can only be routed through one source node)
-  const audioGraphRef = useRef<{ ctx: AudioContext; dest: MediaStreamAudioDestinationNode } | null>(null);
+  const audioGraphRef = useRef<{
+    ctx: AudioContext;
+    dest: MediaStreamAudioDestinationNode;
+  } | null>(null);
   // true mientras el grabador de video controla el clip (desactiva el rebobinado
   // del preview, que si no reinicia en trimStart justo al llegar a trimEnd)
   const isRecordingRef = useRef(false);
+  const isCancelledRef = useRef(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const uploadedVideoFileRef = useRef<File | null>(null);
 
@@ -254,15 +280,32 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleCancelVideoExport = () => {
+    isCancelledRef.current = true;
+    isRecordingRef.current = false;
+    setIsRecordingVideo(false);
+    setRecordingProgress(0);
+    setRecordingPaused(false);
+    setFastExport(false);
+    try {
+      if (videoRef.current) {
+        videoRef.current.loop = true;
+      }
+    } catch {}
+    showToast("Exportación de video cancelada.");
+  };
+
   // Segundos reales que saldrán en la exportación de video (trim + duración
   // máxima + velocidad). Se muestra antes y durante la grabación para que
   // nunca sorprenda un clip más corto que el original.
   const exportClipSeconds = (() => {
-    if (mediaType !== 'video' || !(videoDuration > 0)) return null;
+    if (mediaType !== "video" || !(videoDuration > 0)) return null;
     const duration = videoDuration;
     const s = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
-    let e = trimEnd > s && duration > 0 ? Math.min(trimEnd, duration) : duration;
-    if (maxVideoDuration > 0) e = Math.min(e, s + maxVideoDuration * videoSpeed);
+    let e =
+      trimEnd > s && duration > 0 ? Math.min(trimEnd, duration) : duration;
+    if (maxVideoDuration > 0)
+      e = Math.min(e, s + maxVideoDuration * videoSpeed);
     if (!(e > s)) return null;
     return Math.round(((e - s) / videoSpeed) * 10) / 10;
   })();
@@ -270,9 +313,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Toggle country selection
   const handleToggleCountry = (country: CountryItem) => {
     setSelectedCountries((prev) => {
-      const exists = prev.some((c) => c.code === country.code || c.name.toLowerCase() === country.name.toLowerCase());
+      const exists = prev.some(
+        (c) =>
+          c.code === country.code ||
+          c.name.toLowerCase() === country.name.toLowerCase(),
+      );
       if (exists) {
-        return prev.filter((c) => c.code !== country.code && c.name.toLowerCase() !== country.name.toLowerCase());
+        return prev.filter(
+          (c) =>
+            c.code !== country.code &&
+            c.name.toLowerCase() !== country.name.toLowerCase(),
+        );
       } else {
         return [...prev, country];
       }
@@ -288,13 +339,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const newCountry: CountryItem = {
       name: trimmed,
       code: trimmed.toUpperCase().slice(0, 4),
-      flag: '📍'
+      flag: "📍",
     };
 
-    if (!selectedCountries.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+    if (
+      !selectedCountries.some(
+        (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+      )
+    ) {
       setSelectedCountries([...selectedCountries, newCountry]);
     }
-    setCustomCountryName('');
+    setCustomCountryName("");
     showToast(`País/Región "${trimmed}" añadido al post`);
   };
 
@@ -308,39 +363,41 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const found = reports.find((r) => r.id === reportId);
     if (!found) return;
 
-    setCategory(found.category || 'GEOPOLÍTICA');
+    setCategory(found.category || "GEOPOLÍTICA");
     setTitle(found.title);
-    setDescription(found.subtitle || found.lead || '');
-    setPhotoCaption(found.imageCaption || '');
+    setDescription(found.subtitle || found.lead || "");
+    setPhotoCaption(found.imageCaption || "");
     if (found.image) {
-      setMediaType('image');
+      setMediaType("image");
       setMediaSrc(found.image);
-      setMediaName(found.title.slice(0, 25) + '...');
+      setMediaName(found.title.slice(0, 25) + "...");
     }
-    showToast(`Despacho "${found.title.slice(0, 30)}..." cargado en el generador`);
+    showToast(
+      `Despacho "${found.title.slice(0, 30)}..." cargado en el generador`,
+    );
   };
 
   // Drag and Drop & File Upload handling
   const handleFile = (file: File) => {
     if (!file) return;
 
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
 
     if (!isImage && !isVideo) {
-      showToast('Por favor sube un archivo de imagen o video válido.');
+      showToast("Por favor sube un archivo de imagen o video válido.");
       return;
     }
 
     const objectUrl = URL.createObjectURL(file);
     setMediaSrc(objectUrl);
-    setMediaType(isVideo ? 'video' : 'image');
+    setMediaType(isVideo ? "video" : "image");
     setMediaName(file.name);
 
     if (isVideo) {
       uploadedVideoFileRef.current = file;
       setIsVideoPlaying(true);
-      const tempVideo = document.createElement('video');
+      const tempVideo = document.createElement("video");
       tempVideo.src = objectUrl;
       tempVideo.onloadedmetadata = () => {
         const dur = Math.round((tempVideo.duration || 0) * 10) / 10;
@@ -351,7 +408,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       };
     }
-    showToast(`${isVideo ? 'Video' : 'Imagen'} "${file.name}" cargada correctamente`);
+    showToast(
+      `${isVideo ? "Video" : "Imagen"} "${file.name}" cargada correctamente`,
+    );
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -362,13 +421,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  const LOCAL_STORAGE_KEY = 'blacknews_post_generator_draft';
+  const LOCAL_STORAGE_KEY = "blacknews_post_generator_draft";
 
   // Construct full post configuration JSON object
   const getPostConfigObject = () => {
     return {
       version: 1,
-      appName: 'BlackNews 4:5 Generator',
+      appName: "BlackNews 4:5 Generator",
       savedAt: new Date().toISOString(),
       content: {
         title,
@@ -405,8 +464,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         videoQuality,
         videoFormat,
         maxVideoDuration,
-        mediaUrl: mediaSrc.startsWith('blob:') ? null : mediaSrc,
-      }
+        mediaUrl: mediaSrc.startsWith("blob:") ? null : mediaSrc,
+      },
     };
   };
 
@@ -416,9 +475,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const config = getPostConfigObject();
       const jsonStr = JSON.stringify(config, null, 2);
       navigator.clipboard.writeText(jsonStr);
-      showToast('✓ ¡Configuración JSON copiada al portapapeles!');
+      showToast("✓ ¡Configuración JSON copiada al portapapeles!");
     } catch {
-      showToast('No se pudo copiar directamente al portapapeles.');
+      showToast("No se pudo copiar directamente al portapapeles.");
     }
   };
 
@@ -427,13 +486,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     try {
       const config = getPostConfigObject();
       const jsonStr = JSON.stringify(config, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const blob = new Blob([jsonStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const slug = title.slice(0, 16).toLowerCase().replace(/[^a-z0-9]/g, '-');
-      triggerDownload(url, `blacknews-post-${slug || 'draft'}.json`);
-      showToast('✓ Archivo JSON descargado');
+      const slug = title
+        .slice(0, 16)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+      triggerDownload(url, `blacknews-post-${slug || "draft"}.json`);
+      showToast("✓ Archivo JSON descargado");
     } catch {
-      showToast('Error al descargar archivo JSON.');
+      showToast("Error al descargar archivo JSON.");
     }
   };
 
@@ -441,53 +503,83 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const handleApplyJson = (rawText: string) => {
     try {
       if (!rawText.trim()) {
-        setJsonError('Pega un contenido JSON válido.');
+        setJsonError("Pega un contenido JSON válido.");
         return;
       }
       const data = JSON.parse(rawText);
       if (data.content) {
-        if (typeof data.content.title === 'string') setTitle(data.content.title);
-        if (typeof data.content.description === 'string') setDescription(data.content.description);
-        if (typeof data.content.category === 'string') setCategory(data.content.category);
-        if (typeof data.content.photoCaption === 'string') setPhotoCaption(data.content.photoCaption);
-        if (data.content.countryPlacement) setCountryPlacement(data.content.countryPlacement);
-        if (data.content.countryFormat) setCountryFormat(data.content.countryFormat);
-        if (Array.isArray(data.content.selectedCountries)) setSelectedCountries(data.content.selectedCountries);
+        if (typeof data.content.title === "string")
+          setTitle(data.content.title);
+        if (typeof data.content.description === "string")
+          setDescription(data.content.description);
+        if (typeof data.content.category === "string")
+          setCategory(data.content.category);
+        if (typeof data.content.photoCaption === "string")
+          setPhotoCaption(data.content.photoCaption);
+        if (data.content.countryPlacement)
+          setCountryPlacement(data.content.countryPlacement);
+        if (data.content.countryFormat)
+          setCountryFormat(data.content.countryFormat);
+        if (Array.isArray(data.content.selectedCountries))
+          setSelectedCountries(data.content.selectedCountries);
       }
       if (data.typography) {
-        if (data.typography.fontSizeTitle) setFontSizeTitle(data.typography.fontSizeTitle);
-        if (data.typography.fontSizeDesc) setFontSizeDesc(data.typography.fontSizeDesc);
-        if (data.typography.gapCategoryToTitle) setGapCategoryToTitle(data.typography.gapCategoryToTitle);
-        if (data.typography.gapTitleToDesc) setGapTitleToDesc(data.typography.gapTitleToDesc);
-        if (data.typography.titleLineHeightRatio) setTitleLineHeightRatio(data.typography.titleLineHeightRatio);
-        if (data.typography.descLineHeightRatio) setDescLineHeightRatio(data.typography.descLineHeightRatio);
-        if (data.typography.headerSize) setHeaderSize(data.typography.headerSize);
-        if (typeof data.typography.autoFitHeader === 'boolean') setAutoFitHeader(data.typography.autoFitHeader);
+        if (data.typography.fontSizeTitle)
+          setFontSizeTitle(data.typography.fontSizeTitle);
+        if (data.typography.fontSizeDesc)
+          setFontSizeDesc(data.typography.fontSizeDesc);
+        if (data.typography.gapCategoryToTitle)
+          setGapCategoryToTitle(data.typography.gapCategoryToTitle);
+        if (data.typography.gapTitleToDesc)
+          setGapTitleToDesc(data.typography.gapTitleToDesc);
+        if (data.typography.titleLineHeightRatio)
+          setTitleLineHeightRatio(data.typography.titleLineHeightRatio);
+        if (data.typography.descLineHeightRatio)
+          setDescLineHeightRatio(data.typography.descLineHeightRatio);
+        if (data.typography.headerSize)
+          setHeaderSize(data.typography.headerSize);
+        if (typeof data.typography.autoFitHeader === "boolean")
+          setAutoFitHeader(data.typography.autoFitHeader);
       }
       if (data.appearance) {
         if (data.appearance.filter) setFilter(data.appearance.filter);
-        if (typeof data.appearance.brightness === 'number') setBrightness(data.appearance.brightness);
-        if (typeof data.appearance.contrast === 'number') setContrast(data.appearance.contrast);
-        if (typeof data.appearance.blendFade === 'boolean') setBlendFade(data.appearance.blendFade);
+        if (typeof data.appearance.brightness === "number")
+          setBrightness(data.appearance.brightness);
+        if (typeof data.appearance.contrast === "number")
+          setContrast(data.appearance.contrast);
+        if (typeof data.appearance.blendFade === "boolean")
+          setBlendFade(data.appearance.blendFade);
       }
       if (data.mediaSettings) {
-        if (data.mediaSettings.mediaType) setMediaType(data.mediaSettings.mediaType);
-        if (data.mediaSettings.mediaName) setMediaName(data.mediaSettings.mediaName);
-        if (typeof data.mediaSettings.isMuted === 'boolean') setIsMuted(data.mediaSettings.isMuted);
-        if (typeof data.mediaSettings.videoSpeed === 'number') setVideoSpeed(data.mediaSettings.videoSpeed);
-        if (typeof data.mediaSettings.trimStart === 'number') setTrimStart(data.mediaSettings.trimStart);
-        if (typeof data.mediaSettings.trimEnd === 'number') setTrimEnd(data.mediaSettings.trimEnd);
-        if (data.mediaSettings.videoQuality) setVideoQuality(data.mediaSettings.videoQuality);
-        if (data.mediaSettings.videoFormat) setVideoFormat(data.mediaSettings.videoFormat);
-        if (typeof data.mediaSettings.maxVideoDuration === 'number') setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
-        if (data.mediaSettings.mediaUrl) setMediaSrc(data.mediaSettings.mediaUrl);
+        if (data.mediaSettings.mediaType)
+          setMediaType(data.mediaSettings.mediaType);
+        if (data.mediaSettings.mediaName)
+          setMediaName(data.mediaSettings.mediaName);
+        if (typeof data.mediaSettings.isMuted === "boolean")
+          setIsMuted(data.mediaSettings.isMuted);
+        if (typeof data.mediaSettings.videoSpeed === "number")
+          setVideoSpeed(data.mediaSettings.videoSpeed);
+        if (typeof data.mediaSettings.trimStart === "number")
+          setTrimStart(data.mediaSettings.trimStart);
+        if (typeof data.mediaSettings.trimEnd === "number")
+          setTrimEnd(data.mediaSettings.trimEnd);
+        if (data.mediaSettings.videoQuality)
+          setVideoQuality(data.mediaSettings.videoQuality);
+        if (data.mediaSettings.videoFormat)
+          setVideoFormat(data.mediaSettings.videoFormat);
+        if (typeof data.mediaSettings.maxVideoDuration === "number")
+          setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
+        if (data.mediaSettings.mediaUrl)
+          setMediaSrc(data.mediaSettings.mediaUrl);
       }
       setIsJsonModalOpen(false);
       setJsonError(null);
-      setJsonInputText('');
-      showToast('✓ ¡Post restaurado con éxito desde JSON!');
+      setJsonInputText("");
+      showToast("✓ ¡Post restaurado con éxito desde JSON!");
     } catch (err: any) {
-      setJsonError('Formato JSON no válido: ' + (err.message || 'error de sintaxis'));
+      setJsonError(
+        "Formato JSON no válido: " + (err.message || "error de sintaxis"),
+      );
     }
   };
 
@@ -513,10 +605,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }, 600);
     return () => clearTimeout(timeout);
   }, [
-    title, description, category, countryPlacement, countryFormat, selectedCountries,
-    fontSizeTitle, fontSizeDesc, gapCategoryToTitle, gapTitleToDesc, titleLineHeightRatio,
-    descLineHeightRatio, filter, brightness, contrast, blendFade, isMuted,
-    mediaType, videoSpeed, trimStart, trimEnd, videoQuality, videoFormat, maxVideoDuration
+    title,
+    description,
+    category,
+    countryPlacement,
+    countryFormat,
+    selectedCountries,
+    fontSizeTitle,
+    fontSizeDesc,
+    gapCategoryToTitle,
+    gapTitleToDesc,
+    titleLineHeightRatio,
+    descLineHeightRatio,
+    filter,
+    brightness,
+    contrast,
+    blendFade,
+    isMuted,
+    mediaType,
+    videoSpeed,
+    trimStart,
+    trimEnd,
+    videoQuality,
+    videoFormat,
+    maxVideoDuration,
   ]);
 
   // Restore draft on initial load if available
@@ -525,7 +637,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.content?.title && parsed.content.title.trim() !== '') {
+        if (parsed.content?.title && parsed.content.title.trim() !== "") {
           handleApplyJson(saved);
         }
       }
@@ -545,7 +657,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const items = e.clipboardData?.items;
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
+        if (items[i].type.indexOf("image") !== -1) {
           const blob = items[i].getAsFile();
           if (blob) {
             handleFile(blob);
@@ -554,23 +666,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       }
     };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
   }, []);
 
   // Compute CSS filter style for live preview
   const getFilterCss = () => {
     let base = `brightness(${brightness}%) contrast(${contrast}%)`;
     switch (filter) {
-      case 'bw-high':
+      case "bw-high":
         return `grayscale(100%) contrast(${contrast + 15}%) brightness(${brightness - 5}%)`;
-      case 'bw-smooth':
+      case "bw-smooth":
         return `grayscale(100%) contrast(${contrast}%) brightness(${brightness}%)`;
-      case 'noir':
+      case "noir":
         return `grayscale(100%) contrast(${contrast + 35}%) brightness(${brightness - 10}%)`;
-      case 'muted-color':
+      case "muted-color":
         return `saturate(45%) contrast(${contrast}%) brightness(${brightness}%)`;
-      case 'color':
+      case "color":
       default:
         return base;
     }
@@ -581,15 +693,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     let b = brightness / 100;
     let c = contrast / 100;
     switch (filter) {
-      case 'bw-high':
+      case "bw-high":
         return `grayscale(100%) contrast(${(c * 1.15).toFixed(2)}) brightness(${(b * 0.95).toFixed(2)})`;
-      case 'bw-smooth':
+      case "bw-smooth":
         return `grayscale(100%) contrast(${c.toFixed(2)}) brightness(${b.toFixed(2)})`;
-      case 'noir':
-        return `grayscale(100%) contrast(${(c * 1.35).toFixed(2)}) brightness(${(b * 0.90).toFixed(2)})`;
-      case 'muted-color':
+      case "noir":
+        return `grayscale(100%) contrast(${(c * 1.35).toFixed(2)}) brightness(${(b * 0.9).toFixed(2)})`;
+      case "muted-color":
         return `saturate(45%) contrast(${c.toFixed(2)}) brightness(${b.toFixed(2)})`;
-      case 'color':
+      case "color":
       default:
         return `brightness(${b.toFixed(2)}) contrast(${c.toFixed(2)})`;
     }
@@ -599,23 +711,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const wrapText = (
     ctx: CanvasRenderingContext2D,
     text: string,
-    maxWidth: number
+    maxWidth: number,
   ): string[] => {
-    const paragraphs = text.split('\n');
+    const paragraphs = text.split("\n");
     const allLines: string[] = [];
 
     paragraphs.forEach((paragraph) => {
       if (paragraph.length === 0) {
-        allLines.push('');
+        allLines.push("");
         return;
       }
-      const words = paragraph.split(' ');
-      let currentLine = '';
+      const words = paragraph.split(" ");
+      let currentLine = "";
 
       for (let n = 0; n < words.length; n++) {
         const testLine = currentLine ? `${currentLine} ${words[n]}` : words[n];
         const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && currentLine !== '') {
+        if (metrics.width > maxWidth && currentLine !== "") {
           allLines.push(currentLine);
           currentLine = words[n];
         } else {
@@ -631,16 +743,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // Formatted countries string for display and canvas
-  const getFormattedCountries = (fmt: 'names' | 'flags-names' | 'flags-codes' = countryFormat) => {
-    if (selectedCountries.length === 0) return '';
+  const getFormattedCountries = (
+    fmt: "names" | "flags-names" | "flags-codes" = countryFormat,
+  ) => {
+    if (selectedCountries.length === 0) return "";
     switch (fmt) {
-      case 'flags-codes':
-        return selectedCountries.map((c) => `${c.flag} ${c.code}`).join(' · ');
-      case 'flags-names':
-        return selectedCountries.map((c) => `${c.flag} ${c.name.toUpperCase()}`).join(' · ');
-      case 'names':
+      case "flags-codes":
+        return selectedCountries.map((c) => `${c.flag} ${c.code}`).join(" · ");
+      case "flags-names":
+        return selectedCountries
+          .map((c) => `${c.flag} ${c.name.toUpperCase()}`)
+          .join(" · ");
+      case "names":
       default:
-        return selectedCountries.map((c) => c.name.toUpperCase()).join(' · ');
+        return selectedCountries.map((c) => c.name.toUpperCase()).join(" · ");
     }
   };
 
@@ -648,12 +764,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const renderToCanvas = async (
     targetCanvas: HTMLCanvasElement,
     mediaElement?: HTMLImageElement | HTMLVideoElement,
-    cachedFlags?: Array<{ code: string; img: HTMLImageElement | null; text: string }>,
+    cachedFlags?: Array<{
+      code: string;
+      img: HTMLImageElement | null;
+      text: string;
+    }>,
     isOverlayOnly = false,
     // Fuente externa (p. ej. un VideoFrame de WebCodecs) con sus dimensiones y
     // rotación declaradas: el elemento <video> aplica la rotación solo, un
     // fotograma decodificado llega "en crudo" y hay que girarlo al dibujar.
-    frameOverride?: { source: CanvasImageSource; width: number; height: number; rotation?: number }
+    frameOverride?: {
+      source: CanvasImageSource;
+      width: number;
+      height: number;
+      rotation?: number;
+    },
   ): Promise<void> => {
     const W = 1080;
     const H = 1350;
@@ -661,45 +786,49 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 1) Todo el trabajo asíncrono ANTES de tocar el lienzo: si esperamos fuentes
     //    o banderas despejándolo, el capturador del grabador de video puede leer un
     //    fotograma a medio pintar (parpadeos, "rayas" y macrobloques en el archivo).
-    if (document.fonts) {
+    if (!cachedFlags && document.fonts) {
       await document.fonts.ready;
     }
-    const flagsData = cachedFlags || await Promise.all(
-      selectedCountries.map(async (c) => {
-        const img = countryFormat !== 'names' ? await loadFlagImage(c.code) : null;
-        const text = countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase();
-        return { code: c.code, img, text };
-      })
-    );
+    const flagsData =
+      cachedFlags ||
+      (await Promise.all(
+        selectedCountries.map(async (c) => {
+          const img =
+            countryFormat !== "names" ? await loadFlagImage(c.code) : null;
+          const text =
+            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase();
+          return { code: c.code, img, text };
+        }),
+      ));
 
     // 2) Lienzo y estado de forma síncrona: solo redimensionar si hace falta
     //    (reasignar el tamaño reinicia el bitmap y rearmada la capa capturada)
     //    y de ahí en adelante no se vuelve a esperar nada antes de dibujar.
     if (targetCanvas.width !== W) targetCanvas.width = W;
     if (targetCanvas.height !== H) targetCanvas.height = H;
-    const ctx = targetCanvas.getContext('2d');
+    const ctx = targetCanvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.filter = 'none';
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = "none";
     ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
+    ctx.shadowColor = "transparent";
     ctx.lineWidth = 1;
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'start';
-    ctx.textBaseline = 'alphabetic';
-    ctx.letterSpacing = '0px';
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+    ctx.letterSpacing = "0px";
 
     // 3. Background
     if (isOverlayOnly) {
       ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, 540);
     } else {
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
     }
 
@@ -710,7 +839,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 2. Category & Country Header Line (Guaranteed Single Line with Vector Flags)
     ctx.save();
-    ctx.textBaseline = 'top';
+    ctx.textBaseline = "top";
     const catUpper = category.trim().toUpperCase();
     const maxTextWidth = contentWidth - 65; // Leaves space for at least 45px line
 
@@ -722,38 +851,44 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.font = `600 ${fSize}px 'Lexend', sans-serif`;
       ctx.letterSpacing = `${lSpacing}px`;
       let totalW = ctx.measureText(catUpper).width;
-      if (countryPlacement === 'line' && flagsData.length > 0) {
-        totalW += ctx.measureText('  ·  ').width;
+      if (countryPlacement === "line" && flagsData.length > 0) {
+        totalW += ctx.measureText("  ·  ").width;
         const flagW = Math.round(fSize * 1.3);
         for (let i = 0; i < flagsData.length; i++) {
-          if (countryFormat !== 'names' && flagsData[i].img) {
+          if (countryFormat !== "names" && flagsData[i].img) {
             totalW += flagW + 6;
           }
           totalW += ctx.measureText(flagsData[i].text).width;
           if (i < flagsData.length - 1) {
-            totalW += ctx.measureText(' · ').width;
+            totalW += ctx.measureText(" · ").width;
           }
         }
       }
       return totalW;
     };
 
-    while (computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth && curHeaderSize > 10.5) {
+    while (
+      computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth &&
+      curHeaderSize > 10.5
+    ) {
       curHeaderSize -= 0.5;
-      curLetterSpacing = Math.max(0.5, Number((curHeaderSize * 0.1).toFixed(1)));
+      curLetterSpacing = Math.max(
+        0.5,
+        Number((curHeaderSize * 0.1).toFixed(1)),
+      );
     }
 
     ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
     ctx.letterSpacing = `${curLetterSpacing}px`;
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = "#FFFFFF";
 
     let curX = padX;
     ctx.fillText(catUpper, curX, curY);
     curX += ctx.measureText(catUpper).width;
 
-    if (countryPlacement === 'line' && flagsData.length > 0) {
-      ctx.fillStyle = '#64748B';
-      const sepStr = '  ·  ';
+    if (countryPlacement === "line" && flagsData.length > 0) {
+      ctx.fillStyle = "#64748B";
+      const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
       curX += ctx.measureText(sepStr).width;
 
@@ -763,17 +898,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       for (let i = 0; i < flagsData.length; i++) {
         const item = flagsData[i];
-        if (countryFormat !== 'names' && item.img) {
+        if (countryFormat !== "names" && item.img) {
           ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
           curX += flagW + 6;
         }
-        ctx.fillStyle = '#E2E8F0';
+        ctx.fillStyle = "#E2E8F0";
         ctx.fillText(item.text, curX, curY);
         curX += ctx.measureText(item.text).width;
 
         if (i < flagsData.length - 1) {
-          ctx.fillStyle = '#64748B';
-          const midSep = ' · ';
+          ctx.fillStyle = "#64748B";
+          const midSep = " · ";
           ctx.fillText(midSep, curX, curY);
           curX += ctx.measureText(midSep).width;
         }
@@ -785,7 +920,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const lineEndX = Math.min(lineStartX + 60, W - padX);
 
     if (lineEndX > lineStartX + 8) {
-      ctx.strokeStyle = '#FFFFFF';
+      ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 2;
       ctx.beginPath();
       const lineCenterY = Math.round(curY + curHeaderSize / 2);
@@ -798,12 +933,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     curY += curHeaderSize + gapCategoryToTitle;
 
     // 2.1 Country Badge (if placement is 'badge')
-    if (countryPlacement === 'badge' && flagsData.length > 0) {
+    if (countryPlacement === "badge" && flagsData.length > 0) {
       ctx.save();
       const badgeFontSize = 18;
       ctx.font = `600 ${badgeFontSize}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = '1.5px';
-      ctx.textBaseline = 'top';
+      ctx.letterSpacing = "1.5px";
+      ctx.textBaseline = "top";
 
       const bFlagW = Math.round(badgeFontSize * 1.3);
       const bFlagH = Math.round(bFlagW * 0.68);
@@ -816,12 +951,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
           bX += bFlagW + 7;
         }
-        ctx.fillStyle = '#CBD5E1';
+        ctx.fillStyle = "#CBD5E1";
         ctx.fillText(item.text, bX, curY);
         bX += ctx.measureText(item.text).width;
         if (i < flagsData.length - 1) {
-          ctx.fillStyle = '#64748B';
-          const sep = '   ·   ';
+          ctx.fillStyle = "#64748B";
+          const sep = "   ·   ";
           ctx.fillText(sep, bX, curY);
           bX += ctx.measureText(sep).width;
         }
@@ -833,8 +968,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 3. Title (Lexend Bold)
     ctx.save();
     ctx.font = `700 ${fontSizeTitle}px 'Lexend', sans-serif`;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.textBaseline = 'top';
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textBaseline = "top";
     const titleLineHeight = Math.round(fontSizeTitle * titleLineHeightRatio);
     const titleLines = wrapText(ctx, title, contentWidth);
     for (const line of titleLines) {
@@ -851,8 +986,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (description.trim()) {
       ctx.save();
       ctx.font = `400 ${fontSizeDesc}px 'Lexend', sans-serif`;
-      ctx.fillStyle = '#E2E8F0';
-      ctx.textBaseline = 'top';
+      ctx.fillStyle = "#E2E8F0";
+      ctx.textBaseline = "top";
       const descLineHeight = Math.round(fontSizeDesc * descLineHeightRatio);
       const descLines = wrapText(ctx, description, contentWidth);
       for (const line of descLines) {
@@ -877,7 +1012,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const canvasFilter = getCanvasFilterString();
       // Identidad (brillo/contraste al 100%): saltarnos ctx.filter acelera mucho
       // el dibujo por fotograma y evita el filo que el filtro deja en los bordes.
-      if (canvasFilter !== 'brightness(1.00) contrast(1.00)') {
+      if (canvasFilter !== "brightness(1.00) contrast(1.00)") {
         ctx.filter = canvasFilter;
       }
 
@@ -887,8 +1022,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         elW = frameOverride.width;
         elH = frameOverride.height;
       } else {
-        elW = (mediaElement as HTMLVideoElement).videoWidth || (mediaElement as HTMLImageElement).naturalWidth || 1280;
-        elH = (mediaElement as HTMLVideoElement).videoHeight || (mediaElement as HTMLImageElement).naturalHeight || 720;
+        elW =
+          (mediaElement as HTMLVideoElement).videoWidth ||
+          (mediaElement as HTMLImageElement).naturalWidth ||
+          1280;
+        elH =
+          (mediaElement as HTMLVideoElement).videoHeight ||
+          (mediaElement as HTMLImageElement).naturalHeight ||
+          720;
       }
       const rot = frameOverride?.rotation ?? 0;
       // Con giro, las dimensiones vistas por el usuario intercambian ancho/alto
@@ -898,7 +1039,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const targetRatio = W / mediaHeight;
       const sourceRatio = dispW / dispH;
 
-      let sx = 0, sy = 0, sw = dispW, sh = dispH;
+      let sx = 0,
+        sy = 0,
+        sw = dispW,
+        sh = dispH;
       if (sourceRatio > targetRatio) {
         sw = dispH * targetRatio;
         sx = (dispW - sw) / 2;
@@ -907,13 +1051,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         sy = (dispH - sh) / 2;
       }
 
-      const src = (frameOverride ? frameOverride.source : mediaElement!) as CanvasImageSource;
+      const src = (
+        frameOverride ? frameOverride.source : mediaElement!
+      ) as CanvasImageSource;
       if (!rot) {
         ctx.drawImage(src, sx, sy, sw, sh, 0, mediaTopY, W, mediaHeight);
       } else {
         // El recorte se expresa en píxeles del origen sin girar y el dibujo se
         // hace girando el sistema al centro del rectángulo destino.
-        let csx = sx, csy = sy, csw = sw, csh = sh;
+        let csx = sx,
+          csy = sy,
+          csw = sw,
+          csh = sh;
         if (rot === 90) {
           csx = sy;
           csy = dispW - sx - sw;
@@ -941,11 +1090,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (blendFade) {
       ctx.save();
       const fadeHeight = Math.min(220, mediaHeight * 0.42);
-      const grad = ctx.createLinearGradient(0, mediaTopY, 0, mediaTopY + fadeHeight);
-      grad.addColorStop(0, '#000000');
-      grad.addColorStop(0.3, 'rgba(0, 0, 0, 0.7)');
-      grad.addColorStop(0.7, 'rgba(0, 0, 0, 0.2)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      const grad = ctx.createLinearGradient(
+        0,
+        mediaTopY,
+        0,
+        mediaTopY + fadeHeight,
+      );
+      grad.addColorStop(0, "#000000");
+      grad.addColorStop(0.3, "rgba(0, 0, 0, 0.7)");
+      grad.addColorStop(0.7, "rgba(0, 0, 0, 0.2)");
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
 
       ctx.fillStyle = grad;
       ctx.fillRect(0, mediaTopY, W, fadeHeight);
@@ -955,8 +1109,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // Subtle bottom shadow vignette behind logo and caption
     ctx.save();
     const bottomGrad = ctx.createLinearGradient(0, H - 160, 0, H);
-    bottomGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    bottomGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
+    bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
+    bottomGrad.addColorStop(1, "rgba(0,0,0,0.85)");
     ctx.fillStyle = bottomGrad;
     ctx.fillRect(0, H - 160, W, 160);
     ctx.restore();
@@ -966,30 +1120,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const logoY = H - 65;
     const logoBoxSize = 34;
 
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillRect(padX, logoY - logoBoxSize + 4, logoBoxSize, logoBoxSize);
 
     ctx.font = `700 36px 'Lexend', sans-serif`;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillStyle = "#FFFFFF";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
     ctx.shadowBlur = 6;
-    ctx.fillText('BlackNews', padX + logoBoxSize + 16, logoY);
+    ctx.fillText("BlackNews", padX + logoBoxSize + 16, logoY);
 
     // 6.1 Compact Photo Caption / Personaje at Bottom-Right (same height as logo, only if present)
     if (photoCaption && photoCaption.trim()) {
       ctx.font = `500 24px 'Lexend', sans-serif`;
-      ctx.fillStyle = '#E2E8F0';
-      ctx.textAlign = 'right';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.fillStyle = "#E2E8F0";
+      ctx.textAlign = "right";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
       ctx.shadowBlur = 6;
 
       const maxCapWidth = contentWidth - (logoBoxSize + 16 + 260);
       let capText = photoCaption.trim();
       if (ctx.measureText(capText).width > maxCapWidth) {
-        while (ctx.measureText(capText + '...').width > maxCapWidth && capText.length > 3) {
+        while (
+          ctx.measureText(capText + "...").width > maxCapWidth &&
+          capText.length > 3
+        ) {
           capText = capText.slice(0, -1);
         }
-        capText += '...';
+        capText += "...";
       }
       ctx.fillText(capText, W - padX, logoY);
     }
@@ -998,11 +1155,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // Helper to safely trigger browser download
   const triggerDownload = (url: string, filename: string) => {
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -1013,12 +1170,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // Helper to load image safely without crossOrigin tainting
-  const loadImageSafely = async (src: string): Promise<HTMLImageElement | null> => {
+  const loadImageSafely = async (
+    src: string,
+  ): Promise<HTMLImageElement | null> => {
     if (!src) return null;
     return new Promise((resolve) => {
       const img = new Image();
-      if (!src.startsWith('data:') && !src.startsWith('blob:')) {
-        img.crossOrigin = 'anonymous';
+      if (!src.startsWith("data:") && !src.startsWith("blob:")) {
+        img.crossOrigin = "anonymous";
       }
       img.onload = () => resolve(img);
       img.onerror = () => {
@@ -1043,15 +1202,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
-      if (mediaType === 'video' && videoRef.current) {
+      if (mediaType === "video" && videoRef.current) {
         await renderToCanvas(canvas, videoRef.current);
       } else {
         const img = await loadImageSafely(mediaSrc);
-        await renderToCanvas(canvas, img && img.complete && img.naturalWidth > 0 ? img : undefined);
+        await renderToCanvas(
+          canvas,
+          img && img.complete && img.naturalWidth > 0 ? img : undefined,
+        );
       }
 
-      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const filename = `blacknews-post-${slug || '4x5'}-${Date.now()}.png`;
+      const slug = title
+        .slice(0, 20)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+      const filename = `blacknews-post-${slug || "4x5"}-${Date.now()}.png`;
       setExportFileName(filename);
 
       try {
@@ -1059,13 +1224,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (!blob) {
             // Fallback to toDataURL
             try {
-              const dataUrl = canvas.toDataURL('image/png');
+              const dataUrl = canvas.toDataURL("image/png");
               triggerDownload(dataUrl, filename);
               setExportedImageUrl(dataUrl);
-              showToast('¡Post 4:5 exportado en PNG con éxito (1080×1350)!');
+              showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
             } catch (canvasErr) {
               console.error(canvasErr);
-              showToast('La imagen tiene restricciones de origen. Te mostramos la vista previa para guardar.');
+              showToast(
+                "La imagen tiene restricciones de origen. Te mostramos la vista previa para guardar.",
+              );
             }
             setIsExporting(false);
             return;
@@ -1073,24 +1240,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const url = URL.createObjectURL(blob);
           triggerDownload(url, filename);
           setExportedImageUrl(url);
-          showToast('¡Post 4:5 exportado en PNG con éxito (1080×1350)!');
+          showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
           setIsExporting(false);
-        }, 'image/png');
+        }, "image/png");
       } catch (toBlobErr) {
         console.error(toBlobErr);
         try {
-          const dataUrl = canvas.toDataURL('image/png');
+          const dataUrl = canvas.toDataURL("image/png");
           triggerDownload(dataUrl, filename);
           setExportedImageUrl(dataUrl);
-          showToast('¡Post 4:5 exportado en PNG con éxito (1080×1350)!');
+          showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
         } catch {
-          showToast('Error de exportación por origen de imagen. Prueba subiendo la foto directamente.');
+          showToast(
+            "Error de exportación por origen de imagen. Prueba subiendo la foto directamente.",
+          );
         }
         setIsExporting(false);
       }
     } catch (err) {
       console.error(err);
-      showToast('Ocurrió un error al exportar la imagen.');
+      showToast("Ocurrió un error al exportar la imagen.");
       setIsExporting(false);
     }
   };
@@ -1102,7 +1271,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (!canvas) return;
 
       let mediaEl: HTMLImageElement | HTMLVideoElement | undefined = undefined;
-      if (mediaType === 'video' && videoRef.current) {
+      if (mediaType === "video" && videoRef.current) {
         mediaEl = videoRef.current;
       } else {
         const img = await loadImageSafely(mediaSrc);
@@ -1115,17 +1284,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (!blob) return;
         try {
           await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
+            new ClipboardItem({ "image/png": blob }),
           ]);
           setCopySuccess(true);
-          showToast('¡Imagen copiada al portapapeles!');
+          showToast("¡Imagen copiada al portapapeles!");
           setTimeout(() => setCopySuccess(false), 3000);
         } catch {
-          showToast('Usa el botón de descargar PNG.');
+          showToast("Usa el botón de descargar PNG.");
         }
-      }, 'image/png');
+      }, "image/png");
     } catch {
-      showToast('No se pudo copiar directamente al portapapeles.');
+      showToast("No se pudo copiar directamente al portapapeles.");
     }
   };
 
@@ -1141,13 +1310,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   //   2) RUTA CLÁSICA (MediaRecorder): grabación en tiempo real con sus
   //      protecciones de segundo plano. Es el respaldo para WebM, archivos no
   //      MP4 y navegadores sin WebCodecs.
-  const exportVideoFast = async (): Promise<'done' | 'unsupported'> => {
+  const exportVideoFast = async (): Promise<
+    "done" | "unsupported" | "cancelled"
+  > => {
     if (
-      typeof VideoDecoder === 'undefined' ||
-      typeof VideoEncoder === 'undefined' ||
-      typeof AudioEncoder === 'undefined'
+      typeof VideoDecoder === "undefined" ||
+      typeof VideoEncoder === "undefined" ||
+      typeof AudioEncoder === "undefined"
     ) {
-      return 'unsupported';
+      return "unsupported";
     }
 
     // Bytes originales del vídeo: el archivo subido o, si no, su object URL.
@@ -1162,12 +1333,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     } catch {
       raw = null;
     }
-    if (!raw || raw.byteLength < 256) return 'unsupported';
+    if (!raw || raw.byteLength < 256) return "unsupported";
     // Solo MP4/MOV (primer átomo "ftyp"). WebM y demás → ruta clásica.
     try {
-      if (new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== 'ftyp') return 'unsupported';
+      if (new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== "ftyp")
+        return "unsupported";
     } catch {
-      return 'unsupported';
+      return "unsupported";
     }
 
     setIsRecordingVideo(true);
@@ -1175,6 +1347,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setRecordingPaused(false);
     setRecordingProgress(4);
     isRecordingRef.current = true;
+    isCancelledRef.current = false;
     try {
       videoRef.current?.pause();
     } catch {}
@@ -1186,15 +1359,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // Tiempos por fase: visibles en DevTools con nivel "Verbose" ([export-rapida])
     const tStart = performance.now();
     const snap = (label: string) =>
-      console.debug(`[export-rapida] ${label}: ${Math.round(performance.now() - tStart)}ms`);
+      console.debug(
+        `[export-rapida] ${label}: ${Math.round(performance.now() - tStart)}ms`,
+      );
 
     try {
-      const { createFile } = await import('mp4box');
-      const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
+      const { createFile } = await import("mp4box");
+      const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
       // ── 1. Demux: muestras de vídeo en orden de decodificación ──
       const mp4 = createFile(true);
-      const samples: Array<{ cts: number; duration: number; is_sync: boolean; data: Uint8Array }> = [];
+      const samples: Array<{
+        cts: number;
+        duration: number;
+        is_sync: boolean;
+        data: Uint8Array;
+      }> = [];
       let readyInfo: any = null;
       let demuxError: string | null = null;
       mp4.onError = (e) => {
@@ -1202,7 +1382,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       };
       mp4.onReady = (ready) => {
         readyInfo = ready;
-        const vt = (ready as any).tracks?.find((t: any) => t.type === 'video');
+        const vt = (ready as any).tracks?.find((t: any) => t.type === "video");
         if (vt) {
           // Extrae todas las muestras de golpe (se dispara dentro de appendBuffer)
           mp4.setExtractionOptions(vt.id, null, { nbSamples: 1000000 });
@@ -1215,12 +1395,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const buf = raw as ArrayBuffer & { fileStart: number };
       buf.fileStart = 0;
       mp4.appendBuffer(buf);
-      if (typeof (mp4 as any).flush === 'function') (mp4 as any).flush();
+      if (typeof (mp4 as any).flush === "function") (mp4 as any).flush();
       if (demuxError) throw new Error(demuxError);
-      snap('demux');
+      snap("demux");
 
-      const vTrack = readyInfo?.tracks?.find((t: any) => t.type === 'video');
-      if (!vTrack || samples.length < 2 || !/^avc1/.test(String(vTrack.codec))) return 'unsupported';
+      const vTrack = readyInfo?.tracks?.find((t: any) => t.type === "video");
+      if (!vTrack || samples.length < 2 || !/^avc1/.test(String(vTrack.codec)))
+        return "unsupported";
 
       // avcC → descripción binaria que necesita VideoDecoder (ISO 14496-15)
       const stsd = (mp4.getTrackById(vTrack.id) as any)?.mdia?.minf?.stbl?.stsd;
@@ -1228,17 +1409,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // mp4box v2 envuelve cada NALU en { length, data } donde data son los bytes
       const toNalBytes = (nal: unknown): Uint8Array => {
         const anyNal = nal as any;
-        const src = anyNal instanceof Uint8Array || Array.isArray(anyNal) ? anyNal : anyNal?.data;
+        const src =
+          anyNal instanceof Uint8Array || Array.isArray(anyNal)
+            ? anyNal
+            : anyNal?.data;
         if (src instanceof Uint8Array) return src;
         if (Array.isArray(src)) return Uint8Array.from(src);
-        if (src && typeof src === 'object') return Uint8Array.from(Object.values(src));
+        if (src && typeof src === "object")
+          return Uint8Array.from(Object.values(src));
         return new Uint8Array(0);
       };
-      const spsList = ((avcCBox?.SPS ?? []) as unknown[]).map(toNalBytes).filter((b) => b.length > 0);
-      const ppsList = ((avcCBox?.PPS ?? []) as unknown[]).map(toNalBytes).filter((b) => b.length > 0);
-      if (spsList.length === 0) return 'unsupported';
+      const spsList = ((avcCBox?.SPS ?? []) as unknown[])
+        .map(toNalBytes)
+        .filter((b) => b.length > 0);
+      const ppsList = ((avcCBox?.PPS ?? []) as unknown[])
+        .map(toNalBytes)
+        .filter((b) => b.length > 0);
+      if (spsList.length === 0) return "unsupported";
       const descSize =
-        7 + spsList.reduce((n, s) => n + 2 + s.length, 0) + ppsList.reduce((n, p) => n + 2 + p.length, 0);
+        7 +
+        spsList.reduce((n, s) => n + 2 + s.length, 0) +
+        ppsList.reduce((n, p) => n + 2 + p.length, 0);
       const description = new Uint8Array(descSize);
       let dOff = 0;
       description[dOff++] = 1; // configurationVersion
@@ -1264,7 +1455,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Rotación declarada en tkhd: los móviles guardan el vídeo "acostado" y el
       // <video> la aplica solo; los fotogramas decodificados llegan en crudo.
       const norm = (v: number) => (v > 0x7fffffff ? v - 0x100000000 : v);
-      const m: ArrayLike<number> | undefined = (mp4.getTrackById(vTrack.id) as any)?.tkhd?.matrix;
+      const m: ArrayLike<number> | undefined = (
+        mp4.getTrackById(vTrack.id) as any
+      )?.tkhd?.matrix;
       let rot = 0;
       if (m && m.length >= 5) {
         const a = norm(Number(m[0]));
@@ -1282,12 +1475,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // ── 2. Ventana de exportación (mismo criterio que la ruta clásica) ──
       const ts = Number(vTrack.timescale) || 90000;
       const srcDur = Number(vTrack.duration) / ts;
-      const duration = Number.isFinite(srcDur) && srcDur > 0 ? srcDur : videoDuration;
-      const start = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
-      let end = trimEnd > start && duration > 0 ? Math.min(trimEnd, duration) : duration;
-      if (maxVideoDuration > 0) end = Math.min(end, start + maxVideoDuration * videoSpeed);
+      const duration =
+        Number.isFinite(srcDur) && srcDur > 0 ? srcDur : videoDuration;
+      const start = Math.max(
+        0,
+        Math.min(trimStart, Math.max(duration - 0.1, 0)),
+      );
+      let end =
+        trimEnd > start && duration > 0
+          ? Math.min(trimEnd, duration)
+          : duration;
+      if (maxVideoDuration > 0)
+        end = Math.min(end, start + maxVideoDuration * videoSpeed);
       if (!(end > start)) {
-        throw new Error('El recorte de video no es válido: revisa inicio y fin.');
+        throw new Error(
+          "El recorte de video no es válido: revisa inicio y fin.",
+        );
       }
       const speed = videoSpeed > 0 ? videoSpeed : 1;
       const outDur = (end - start) / speed;
@@ -1296,7 +1499,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         const t = s.cts / ts;
         return t >= start - 0.05 && t <= end + 0.05;
       });
-      if (inRange.length < 2) throw new Error('No hay fotogramas en el rango seleccionado.');
+      if (inRange.length < 2)
+        throw new Error("No hay fotogramas en el rango seleccionado.");
       const outUs = (s: (typeof inRange)[number]) =>
         Math.max(0, Math.round((s.cts / ts - start) * (1 / speed) * 1e6));
       // Con B-frames el orden de llegada no es el de presentación: se reordena
@@ -1313,7 +1517,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const decoderCtx = new OfflineAudioContext(1, 1, 44100);
           const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
           const outRate = 48000;
-          const oac = new OfflineAudioContext(2, Math.max(1, Math.ceil(outDur * outRate)), outRate);
+          const oac = new OfflineAudioContext(
+            2,
+            Math.max(1, Math.ceil(outDur * outRate)),
+            outRate,
+          );
           const srcNode = oac.createBufferSource();
           srcNode.buffer = fullAudio;
           srcNode.playbackRate.value = speed;
@@ -1325,7 +1533,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       }
       const hasAudio = !!renderedAudio && renderedAudio.length > 0;
-      snap('audio');
+      snap("audio");
 
       // Primer error capturado (codificadores, muxer, decoder…): se propaga a
       // todas las esperas y aborta el bucle para caer a la ruta clásica.
@@ -1342,21 +1550,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const notify = () => {
         while (waiters.length) waiters.shift()!();
       };
-      const hardStop = performance.now() + Math.max(45000, outDur * 1000 + 45000);
+      const hardStop =
+        performance.now() + Math.max(45000, outDur * 1000 + 45000);
       const waitWhile = async (cond: () => boolean): Promise<void> => {
         while (cond()) {
+          if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
           if (fail) throw fail;
           if (performance.now() > hardStop) {
-            throw new Error('La exportación acelerada superó su tiempo máximo.');
+            throw new Error(
+              "La exportación acelerada superó su tiempo máximo.",
+            );
           }
           await new Promise<void>((resolve) => {
-            const timer = window.setTimeout(resolve, 250);
+            const timer = window.setTimeout(resolve, 5);
             waiters.push(() => {
               window.clearTimeout(timer);
               resolve();
             });
           });
         }
+        if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
         if (fail) throw fail;
       };
 
@@ -1364,15 +1577,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const target = new ArrayBufferTarget();
       const muxer = new Muxer({
         target,
-        video: { codec: 'avc', width: 1080, height: 1350, frameRate: 30 },
-        ...(hasAudio ? { audio: { codec: 'aac' as const, sampleRate: 48000, numberOfChannels: 2 } } : {}),
-        fastStart: 'in-memory',
-        firstTimestampBehavior: 'offset',
+        video: { codec: "avc", width: 1080, height: 1350, frameRate: 30 },
+        ...(hasAudio
+          ? {
+              audio: {
+                codec: "aac" as const,
+                sampleRate: 48000,
+                numberOfChannels: 2,
+              },
+            }
+          : {}),
+        fastStart: "in-memory",
+        firstTimestampBehavior: "offset",
       });
 
-      const bitrate = videoQuality === 'hq' ? 6_000_000 : videoQuality === 'compact' ? 1_500_000 : 3_000_000;
+      const bitrate =
+        videoQuality === "hq"
+          ? 6_000_000
+          : videoQuality === "compact"
+            ? 1_500_000
+            : 3_000_000;
       let videoConfig: VideoEncoderConfig | null = null;
-      for (const codecName of ['avc1.640028', 'avc1.4D4028', 'avc1.64002A']) {
+      for (const codecName of ["avc1.640028", "avc1.4D4028", "avc1.64002A"]) {
         try {
           const candidate: VideoEncoderConfig = {
             codec: codecName,
@@ -1380,8 +1606,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             height: 1350,
             bitrate,
             framerate: 30,
-            latencyMode: 'realtime',
-            avc: { format: 'avc' },
+            latencyMode: "realtime",
+            avc: { format: "avc" },
           };
           const support = await VideoEncoder.isConfigSupported(candidate);
           if (support.supported) {
@@ -1392,7 +1618,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           // probamos el siguiente códec
         }
       }
-      if (!videoConfig) return 'unsupported';
+      if (!videoConfig) return "unsupported";
 
       encoder = new VideoEncoder({
         output: (chunk, meta) => {
@@ -1420,7 +1646,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           error: failWith,
         });
         audioEncoder.configure({
-          codec: 'mp4a.40.2',
+          codec: "mp4a.40.2",
           sampleRate: 48000,
           numberOfChannels: 2,
           bitrate: 96_000,
@@ -1428,19 +1654,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
 
       // ── 5. Canvas dedicado (no pisa la vista previa) + calentamiento ──
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.width = 1080;
       canvas.height = 1350;
       const cachedFlags = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat !== 'names' ? await loadFlagImage(c.code) : null,
-          text: countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase(),
-        }))
+          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        })),
       );
       await renderToCanvas(canvas, undefined, cachedFlags); // fuentes y overlay base
       setRecordingProgress(10);
-      snap('warmup');
+      snap("warmup");
 
       // ── 6. Bucle decodificar → componer → codificar (reordenando B-frames) ──
       let encoded = 0;
@@ -1449,13 +1675,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const pending = new Map<number, VideoFrame[]>();
       const progress = { at: 0, pct: 10, phase: 0 };
       const updateProgress = () => {
-        const pct = Math.min(99, 10 + Math.round((encoded / inRange.length) * 85));
+        const pct = Math.min(
+          99,
+          10 + Math.round((encoded / inRange.length) * 85),
+        );
         const now = performance.now();
         if (pct > progress.pct && now - progress.at > 200) {
           progress.at = now;
           progress.pct = pct;
           if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
-          if (recBarRef.current) recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+          if (recBarRef.current)
+            recBarRef.current.style.width = `${Math.max(5, pct)}%`;
           const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
           if (phase !== progress.phase) {
             progress.phase = phase;
@@ -1481,7 +1711,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           duration: Math.max(1, Math.round(frame.duration ?? 33333)),
         });
         try {
-          (encoder as VideoEncoder).encode(out, { keyFrame: syncPts.has(frameTs) });
+          (encoder as VideoEncoder).encode(out, {
+            keyFrame: syncPts.has(frameTs),
+          });
         } finally {
           out.close();
           frame.close();
@@ -1509,7 +1741,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           } finally {
             draining = false;
             notify();
-            if (nextIdx < sortedPts.length && pending.has(sortedPts[nextIdx])) pump();
+            if (nextIdx < sortedPts.length && pending.has(sortedPts[nextIdx]))
+              pump();
           }
         })();
       };
@@ -1531,18 +1764,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
         (decoder as VideoDecoder).decode(
           new EncodedVideoChunk({
-            type: s.is_sync ? 'key' : 'delta',
+            type: s.is_sync ? "key" : "delta",
             timestamp: outUs(s),
-            duration: Math.max(1, Math.round((s.duration / ts) * (1 / speed) * 1e6)),
+            duration: Math.max(
+              1,
+              Math.round((s.duration / ts) * (1 / speed) * 1e6),
+            ),
             data: s.data,
-          })
+          }),
         );
         pump();
       }
       await (decoder as VideoDecoder).flush();
-      snap('feed');
-      await waitWhile(() => nextIdx < sortedPts.length || draining || (encoder as VideoEncoder).encodeQueueSize > 0);
-      snap('encode');
+      snap("feed");
+      await waitWhile(
+        () =>
+          nextIdx < sortedPts.length ||
+          draining ||
+          (encoder as VideoEncoder).encodeQueueSize > 0,
+      );
+      snap("encode");
 
       // ── 7. Audio → AAC (rápido: el búfer ya está renderizado) ──
       const ra = renderedAudio;
@@ -1559,28 +1800,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           data.set(ch1.subarray(i, i + n), n);
           ae.encode(
             new AudioData({
-              format: 'f32-planar',
+              format: "f32-planar",
               sampleRate: 48000,
               numberOfFrames: n,
               numberOfChannels: 2,
               timestamp: Math.round((i / 48000) * 1e6),
               data,
-            })
+            }),
           );
         }
         await ae.flush();
       }
-      snap('audio-encode');
+      snap("audio-encode");
 
       await (encoder as VideoEncoder).flush();
       if (fail) throw fail;
-      snap('flush');
+      snap("flush");
       muxer.finalize();
 
       // ── 8. Resultado ──
-      const blob = new Blob([target.buffer], { type: 'video/mp4' });
-      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const filename = `blacknews-video-${slug || '4x5'}-${Date.now()}.mp4`;
+      const blob = new Blob([target.buffer], { type: "video/mp4" });
+      const slug = title
+        .slice(0, 20)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+      const filename = `blacknews-video-${slug || "4x5"}-${Date.now()}.mp4`;
       setExportVideoFileName(filename);
       const url = URL.createObjectURL(blob);
       const sizeFormatted =
@@ -1591,18 +1835,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setExportedVideoUrl(url);
       setRecordingProgress(100);
       triggerDownload(url, filename);
-      showToast(`¡Video 4:5 exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`);
-      snap('finalize');
-      return 'done';
+      showToast(
+        `¡Video 4:5 exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`,
+      );
+      snap("finalize");
+      return "done";
+    } catch (err: any) {
+      if (err?.message === "EXPORT_CANCELLED" || isCancelledRef.current) {
+        return "cancelled";
+      }
+      throw err;
     } finally {
       try {
-        if (decoder && decoder.state !== 'closed') decoder.close();
+        if (decoder && decoder.state !== "closed") decoder.close();
       } catch {}
       try {
-        if (encoder && encoder.state !== 'closed') encoder.close();
+        if (encoder && encoder.state !== "closed") encoder.close();
       } catch {}
       try {
-        if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
+        if (audioEncoder && audioEncoder.state !== "closed")
+          audioEncoder.close();
       } catch {}
       try {
         if (videoRef.current) videoRef.current.loop = true;
@@ -1616,76 +1868,66 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   const handleExportVideo = async () => {
-    if (mediaType !== 'video') return;
+    if (mediaType !== "video") return;
     const video = videoRef.current;
     const canvas = hiddenCanvasRef.current;
     if (!video || !canvas) {
-      showToast('Carga un video antes de exportar.');
-      return;
-    }
-    // Ruta rápida primero (solo cuando se pidió MP4). Si el archivo o el
-    // navegador no la admiten, o falla a mitad, se cae a la ruta clásica.
-    if (videoFormat === 'mp4') {
-      try {
-        const result = await exportVideoFast();
-        if (result === 'done') return;
-      } catch (fastErr) {
-        console.error('Exportación acelerada falló; se usa el método clásico:', fastErr);
-        showToast('Modo rápido no disponible: exportando con el método clásico.');
-      }
-    }
-    if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
-      showToast('Tu navegador no admite exportación de video. Prueba con Chrome o Edge.');
+      showToast("Carga un video antes de exportar.");
       return;
     }
 
-    // Prefiere el formato elegido por el usuario y cae a cualquier otro soportado
-    const pickCodec = (): { mimeType: string; ext: 'mp4' | 'webm' } => {
-      const mp4 = [
-        'video/mp4;codecs=avc1.640028,mp4a.40.2',
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4',
-      ];
-      const webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-      const groups = videoFormat === 'mp4' ? [mp4, webm] : [webm, mp4];
-      for (const group of groups) {
-        for (const mime of group) {
-          if (MediaRecorder.isTypeSupported(mime)) {
-            return { mimeType: mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' };
-          }
-        }
-      }
-      return { mimeType: '', ext: 'webm' };
-    };
+    isCancelledRef.current = false;
 
-    // PREFLIGHT de cadencia: cuando Chrome deja de componer la ventana (pestaña
-    // en segundo plano, ventana tapada o minimizada) rAF cae a ~1 Hz y la
-    // grabación saldría congelada a 1 fotograma por segundo. Medimos antes de
-    // empezar y nos negamos a grabar en ese estado.
-    const preFps = await new Promise<number>((resolve) => {
-      let frames = 0;
-      let alive = true;
-      const loop = () => {
-        frames += 1;
-        if (alive) requestAnimationFrame(loop);
-      };
-      requestAnimationFrame(loop);
-      window.setTimeout(() => {
-        alive = false;
-        resolve((frames * 1000) / 700);
-      }, 700);
-    });
-    if (preFps < 12) {
+    // Intenta WebCodecs primero (tanto para MP4 como para WebM si está disponible)
+    try {
+      const result = await exportVideoFast();
+      if (result === "done") return;
+      if (result === "cancelled") return;
+    } catch (fastErr) {
+      console.error(
+        "Exportación acelerada falló; se usa el método clásico con Web Worker:",
+        fastErr,
+      );
+    }
+
+    if (
+      typeof MediaRecorder === "undefined" ||
+      typeof canvas.captureStream !== "function"
+    ) {
       showToast(
-        'La pestaña del navegador está en segundo plano y el vídeo saldría congelado. Vuelve a la pestaña de BlackNews y pulsa Exportar de nuevo.'
+        "Tu navegador no admite exportación de video. Prueba con Chrome o Edge.",
       );
       return;
     }
 
-    // Pista viva del capturador: se libera en `finally` aunque falle a mitad
-    // de grabación (si no, el canvas seguiría capturando en segundo plano).
+    const pickCodec = (): { mimeType: string; ext: "mp4" | "webm" } => {
+      const mp4 = [
+        "video/mp4;codecs=avc1.640028,mp4a.40.2",
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+      ];
+      const webm = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ];
+      const groups = videoFormat === "mp4" ? [mp4, webm] : [webm, mp4];
+      for (const group of groups) {
+        for (const mime of group) {
+          if (MediaRecorder.isTypeSupported(mime)) {
+            return {
+              mimeType: mime,
+              ext: mime.startsWith("video/mp4") ? "mp4" : "webm",
+            };
+          }
+        }
+      }
+      return { mimeType: "", ext: "webm" };
+    };
+
     let liveStream: MediaStream | null = null;
-    let removeVisibilityListener: (() => void) | null = null;
+    let timerWorker: Worker | null = null;
+    let workerUrl: string | null = null;
 
     try {
       setIsRecordingVideo(true);
@@ -1693,29 +1935,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       const { mimeType, ext } = pickCodec();
       const formatNote =
-        videoFormat === 'mp4' && ext !== 'mp4'
-          ? ' Este navegador no graba MP4: se exportó en WebM.'
-          : '';
+        videoFormat === "mp4" && ext !== "mp4"
+          ? " Este navegador no graba MP4: se exportó en WebM."
+          : "";
 
-      // Ventana de recorte en tiempo de origen (trim + duración máxima + velocidad)
       const duration =
-        Number.isFinite(video.duration) && video.duration > 0 ? video.duration : videoDuration;
-      const start = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
-      let end = trimEnd > start && duration > 0 ? Math.min(trimEnd, duration) : duration;
-      if (maxVideoDuration > 0) end = Math.min(end, start + maxVideoDuration * videoSpeed);
+        Number.isFinite(video.duration) && video.duration > 0
+          ? video.duration
+          : videoDuration;
+      const start = Math.max(
+        0,
+        Math.min(trimStart, Math.max(duration - 0.1, 0)),
+      );
+      let end =
+        trimEnd > start && duration > 0
+          ? Math.min(trimEnd, duration)
+          : duration;
+      if (maxVideoDuration > 0)
+        end = Math.min(end, start + maxVideoDuration * videoSpeed);
       if (!(end > start)) {
-        showToast('El recorte de video no es válido: revisa inicio y fin.');
+        showToast("El recorte de video no es válido: revisa inicio y fin.");
         return;
       }
 
-      // Calentamiento: tipografías y banderas una sola vez, para que cada fotograma
-      // grabado sea solo trabajo de canvas (sin red)
       const cachedFlags = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat !== 'names' ? await loadFlagImage(c.code) : null,
-          text: countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase(),
-        }))
+          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        })),
       );
       await renderToCanvas(canvas, video, cachedFlags);
       setRecordingProgress(10);
@@ -1724,8 +1972,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       video.loop = false;
       video.playbackRate = videoSpeed;
       video.muted = isMuted;
-      // Solo buscar si hace falta: si ya está en `start`, el evento 'seeked'
-      // nunca llega y estaríamos esperando el timeout entero antes de grabar.
+
       if (Math.abs(video.currentTime - start) > 0.05) {
         video.currentTime = start;
         await new Promise<void>((resolve) => {
@@ -1733,17 +1980,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const onSeeked = () => {
             if (settled) return;
             settled = true;
-            video.removeEventListener('seeked', onSeeked);
+            video.removeEventListener("seeked", onSeeked);
             resolve();
           };
-          video.addEventListener('seeked', onSeeked);
-          // En archivos grandes el seek puede tardar: si no llega en 3 s, no
-          // bloqueamos la grabación (el tick ignora saltos durante el arranque).
+          video.addEventListener("seeked", onSeeked);
           window.setTimeout(onSeeked, 3000);
         });
       }
 
-      // Audio: el elemento se enruta por WebAudio una sola vez y se reutiliza
       let audioTrack: MediaStreamTrack | null = null;
       if (!isMuted) {
         try {
@@ -1757,10 +2001,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             graph = { ctx: audioCtx, dest };
             audioGraphRef.current = graph;
           }
-          if (graph.ctx.state === 'suspended') await graph.ctx.resume();
+          if (graph.ctx.state === "suspended") await graph.ctx.resume();
           audioTrack = graph.dest.stream.getAudioTracks()[0] ?? null;
         } catch (audioErr) {
-          console.warn('Audio no disponible en la grabación:', audioErr);
+          console.warn("Audio no disponible en la grabación:", audioErr);
         }
       }
       setRecordingProgress(14);
@@ -1769,7 +2013,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       liveStream = stream;
       if (audioTrack) stream.addTrack(audioTrack);
       const videoBitsPerSecond =
-        videoQuality === 'hq' ? 6_000_000 : videoQuality === 'compact' ? 1_500_000 : 3_000_000;
+        videoQuality === "hq"
+          ? 6_000_000
+          : videoQuality === "compact"
+            ? 1_500_000
+            : 3_000_000;
       const recorder = new MediaRecorder(stream, {
         ...(mimeType ? { mimeType } : {}),
         videoBitsPerSecond,
@@ -1782,31 +2030,44 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       };
       const finished = new Promise<Blob>((resolve, reject) => {
         recorder.onstop = () =>
-          resolve(new Blob(chunks, { type: recorder.mimeType || mimeType || 'video/webm' }));
-        recorder.addEventListener('error', (e) =>
-          reject((e as unknown as { error?: Error }).error ?? new Error('Error de grabación'))
+          resolve(
+            new Blob(chunks, {
+              type: recorder.mimeType || mimeType || "video/webm",
+            }),
+          );
+        recorder.addEventListener("error", (e) =>
+          reject(
+            (e as unknown as { error?: Error }).error ??
+              new Error("Error de grabación"),
+          ),
         );
       });
 
-      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
-      const filename = `blacknews-video-${slug || '4x5'}-${Date.now()}.${ext}`;
+      const slug = title
+        .slice(0, 20)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+      const filename = `blacknews-video-${slug || "4x5"}-${Date.now()}.${ext}`;
       setExportVideoFileName(filename);
 
-      let rafId = 0;
       let stopped = false;
       let lastPct = 14;
       let lastProgressAt = 0;
-      let hardDeadline = performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
+      let hardDeadline =
+        performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
+
       const stopRecording = () => {
         if (stopped) return;
         stopped = true;
-        cancelAnimationFrame(rafId);
         try {
-          if (recorder.state !== 'inactive') recorder.stop();
+          if (timerWorker) {
+            timerWorker.postMessage("stop");
+            timerWorker.terminate();
+          }
         } catch {}
-        // ATENCIÓN: las pistas NO se cortan aquí. Hacerlo justo después de
-        // recorder.stop() truncaba el último chunk (fin del vídeo roto/cortado);
-        // se liberan cuando ya tenemos el blob y en `finally`.
+        try {
+          if (recorder.state !== "inactive") recorder.stop();
+        } catch {}
         try {
           video.pause();
           video.loop = true;
@@ -1814,55 +2075,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         setIsVideoPlaying(false);
       };
 
-      // PROTECCIÓN DE SEGUNDO PLANO: si la ventana deja de componer (rAF cae a
-      // ~1 Hz o se detiene al ocultar la pestaña) pausamos el vídeo —el tiempo
-      // de contenido deja de avanzar, así que no se pierde nada— y reanudamos
-      // cuando la pestaña vuelve. Sin esto la exportación sale a 1 fps y rota.
-      let lastTickAt = performance.now();
-      let slowTicks = 0;
-      let fastTicks = 0;
-      let pausedForBg = false;
-      let pausedAt = 0;
-      const pauseForBackground = () => {
-        if (pausedForBg || stopped) return;
-        pausedForBg = true;
-        pausedAt = performance.now();
-        try {
-          video.pause();
-        } catch {}
-        // CLAVE: el grabador cuenta tiempo en pared; si sigue activo con el
-        // lienzo congelado, la duración del archivo se infla (lo que "multiplica"
-        // la duración). Pausarlo hace que ese tiempo muerto no se grabe.
-        try {
-          if (recorder.state === 'recording') recorder.pause();
-        } catch {}
-        setIsVideoPlaying(false);
-        setRecordingPaused(true);
-      };
-      const resumeFromBackground = () => {
-        if (!pausedForBg || stopped) return;
-        pausedForBg = false;
-        fastTicks = 0;
-        slowTicks = 0;
-        // El tiempo pausado no cuenta para el tope de seguridad
-        hardDeadline += performance.now() - pausedAt;
-        lastTickAt = performance.now();
-        try {
-          if (recorder.state === 'paused') recorder.resume();
-        } catch {}
-        void video
-          .play()
-          .then(() => {
-            if (!stopped) setIsVideoPlaying(true);
-          })
-          .catch(() => {});
-        setRecordingPaused(false);
-      };
-      const onVisibility = () => {
-        if (document.visibilityState === 'hidden') pauseForBackground();
-      };
-      document.addEventListener('visibilitychange', onVisibility);
-      removeVisibilityListener = () => document.removeEventListener('visibilitychange', onVisibility);
+      // Web Worker Timer: NO se pausa al estar la pestaña en segundo plano o minimizada
+      const workerScript = `
+        let timer = null;
+        self.onmessage = function(e) {
+          if (e.data === 'start') {
+            if (timer) clearInterval(timer);
+            timer = setInterval(function() { self.postMessage('tick'); }, 30);
+          } else if (e.data === 'stop') {
+            if (timer) clearInterval(timer);
+            timer = null;
+          }
+        };
+      `;
+      const workerBlob = new Blob([workerScript], {
+        type: "application/javascript",
+      });
+      workerUrl = URL.createObjectURL(workerBlob);
+      timerWorker = new Worker(workerUrl);
 
       isRecordingRef.current = true;
       recorder.start(250);
@@ -1872,67 +2102,52 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let maxT = start;
       let lastDrawVt = -1;
       let lastPhase = 0;
-      const tick = () => {
+
+      timerWorker.onmessage = (e) => {
+        if (e.data !== "tick" || stopped) return;
+        if (isCancelledRef.current) {
+          stopRecording();
+          return;
+        }
         const now = performance.now();
-        const dt = now - lastTickAt;
-        lastTickAt = now;
-
-        // Recuperación tras estar en segundo plano: exigen dos ticks rápidos
-        // segundos para no flapping con ráfagas aisladas.
-        if (pausedForBg) {
-          fastTicks = dt < 250 ? fastTicks + 1 : 0;
-          if (fastTicks >= 2) resumeFromBackground();
-          rafId = requestAnimationFrame(tick);
-          return;
-        }
-
-        // Cadencia insostenible = ventana sin componer: un tick de >900 ms (p. ej.
-        // 1 Hz al estar tapada) pausa ya, sin esperar acumulaciones.
-        slowTicks = dt > 500 ? slowTicks + 1 : 0;
-        if (dt > 900 || slowTicks >= 2) {
-          pauseForBackground();
-          rafId = requestAnimationFrame(tick);
-          return;
-        }
-        slowTicks = 0;
-
         const t = video.currentTime;
-        // Dibujar SOLO cuando el vídeo avanza: los renders redundantes a 60 Hz
-        // saturaban la CPU principal y dejaban menos margen al codificador.
         if (t !== lastDrawVt) {
           lastDrawVt = t;
           void renderToCanvas(canvas, video, cachedFlags);
         }
         if (t > maxT) maxT = t;
-        const pct = Math.min(99, Math.round(((t - start) / Math.max(0.1, end - start)) * 100));
-        // Progreso: escritura directa en el DOM (~4/s). React solo se entera al
-        // cruzar de tramo de mensaje (≤4 veces por exportación).
-        if (pct > lastPct && now - lastProgressAt > 250) {
+        const pct = Math.min(
+          99,
+          Math.round(((t - start) / Math.max(0.1, end - start)) * 100),
+        );
+        if (pct > lastPct && now - lastProgressAt > 200) {
           lastPct = pct;
           lastProgressAt = now;
           if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
-          if (recBarRef.current) recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+          if (recBarRef.current)
+            recBarRef.current.style.width = `${Math.max(5, pct)}%`;
           const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
           if (phase !== lastPhase) {
             lastPhase = phase;
             setRecordingProgress(pct);
           }
         }
-        // Fin natural, clip terminado o rebobinado (si el preview volviera a
-        // iniciar el bucle). El reinicio por trimEnd queda desactivado arriba;
-        // la gracia de 0,5 s evita cortar por un seek de arranque tardío.
         const rebobinado = t < maxT - 0.3 && maxT > start + 0.5;
-        if (t >= end - 0.02 || video.ended || rebobinado || now > hardDeadline) {
+        if (
+          t >= end - 0.02 ||
+          video.ended ||
+          rebobinado ||
+          now > hardDeadline
+        ) {
           setRecordingProgress(99);
           stopRecording();
-          return;
         }
-        rafId = requestAnimationFrame(tick);
       };
-      rafId = requestAnimationFrame(tick);
+
+      timerWorker.postMessage("start");
 
       const blob = await finished;
-      // El grabador ya entregó su último chunk: ahora sí se sueltan las pistas.
+      if (isCancelledRef.current) return;
       stream.getVideoTracks().forEach((track) => track.stop());
       const url = URL.createObjectURL(blob);
       const sizeFormatted =
@@ -1943,23 +2158,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setExportedVideoUrl(url);
       setRecordingProgress(100);
       triggerDownload(url, filename);
-      showToast(`¡Video 4:5 exportado en tu navegador (${sizeFormatted})!${formatNote}`);
+      showToast(
+        `¡Video 4:5 exportado en tu navegador (${sizeFormatted})!${formatNote}`,
+      );
     } catch (err: any) {
-      console.error('Error exportando video:', err);
-      showToast(err?.message || 'No se pudo exportar el video en el navegador.');
+      if (!isCancelledRef.current) {
+        console.error("Error exportando video:", err);
+        showToast(
+          err?.message || "No se pudo exportar el video en el navegador.",
+        );
+      }
     } finally {
       isRecordingRef.current = false;
       setIsRecordingVideo(false);
       setRecordingProgress(0);
       setRecordingPaused(false);
-      removeVisibilityListener?.();
+      try {
+        if (timerWorker) timerWorker.terminate();
+        if (workerUrl) URL.revokeObjectURL(workerUrl);
+      } catch {}
       liveStream?.getVideoTracks().forEach((track) => track.stop());
     }
   };
 
   // Real-time proportional metrics for live preview (canvas: 1080px wide, preview ~420px max)
   const previewScale = 0.3888;
-  const previewTitleSize = Math.max(15, Math.round(fontSizeTitle * previewScale));
+  const previewTitleSize = Math.max(
+    15,
+    Math.round(fontSizeTitle * previewScale),
+  );
   const previewDescSize = Math.max(11, Math.round(fontSizeDesc * previewScale));
   const previewPadTop = Math.round(76 * previewScale);
   const previewPadX = Math.round(84 * previewScale);
@@ -1967,39 +2194,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const previewGapTitleDesc = Math.round(gapTitleToDesc * previewScale);
 
   // Dynamic header sizing calculation to strictly fit in ONE single line
-  const countriesLineText = countryPlacement === 'line' ? getFormattedCountries() : '';
-  const headerTotalLength = (category || 'GEOPOLÍTICA').length + (countriesLineText ? countriesLineText.length + 3 : 0);
+  const countriesLineText =
+    countryPlacement === "line" ? getFormattedCountries() : "";
+  const headerTotalLength =
+    (category || "GEOPOLÍTICA").length +
+    (countriesLineText ? countriesLineText.length + 3 : 0);
 
-  let previewHeaderSize = autoFitHeader 
-    ? (headerTotalLength > 48 ? 8 : headerTotalLength > 36 ? 9 : headerTotalLength > 24 ? 10 : 11.5)
+  let previewHeaderSize = autoFitHeader
+    ? headerTotalLength > 48
+      ? 8
+      : headerTotalLength > 36
+        ? 9
+        : headerTotalLength > 24
+          ? 10
+          : 11.5
     : Math.max(8, Math.round(headerSize * previewScale * 10) / 10);
-  
-  let previewHeaderTracking = previewHeaderSize < 9.5 ? '0.04em' : previewHeaderSize < 11 ? '0.08em' : '0.14em';
+
+  let previewHeaderTracking =
+    previewHeaderSize < 9.5
+      ? "0.04em"
+      : previewHeaderSize < 11
+        ? "0.08em"
+        : "0.14em";
 
   // Filtered countries for search
   const filteredCountries = countrySearch.trim()
-    ? POPULAR_COUNTRIES.filter((c) =>
-        c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-        c.code.toLowerCase().includes(countrySearch.toLowerCase())
+    ? POPULAR_COUNTRIES.filter(
+        (c) =>
+          c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+          c.code.toLowerCase().includes(countrySearch.toLowerCase()),
       )
     : POPULAR_COUNTRIES;
 
   return (
     <div className="font-['Lexend',sans-serif] space-y-8 pb-16">
       {/* High-res processing canvas (positioned offscreen to maintain active compositor pipeline for captureStream) */}
-      <canvas 
-        ref={hiddenCanvasRef} 
-        width={1080} 
+      <canvas
+        ref={hiddenCanvasRef}
+        width={1080}
         height={1350}
         style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: '-9999px',
-          width: '1080px',
-          height: '1350px',
-          pointerEvents: 'none',
+          position: "fixed",
+          left: "-9999px",
+          top: "-9999px",
+          width: "1080px",
+          height: "1350px",
+          pointerEvents: "none",
           opacity: 0,
-          zIndex: -9999
+          zIndex: -9999,
         }}
         aria-hidden="true"
       />
@@ -2015,7 +2257,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             Generador de Posts 4:5
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-light max-w-2xl leading-relaxed">
-            Publicaciones visuales de alto impacto con fondo negro absoluto, tipografía Lexend, atribución geográfica por países, filtros fotográficos y controles de audio para video.
+            Publicaciones visuales de alto impacto con fondo negro absoluto,
+            tipografía Lexend, atribución geográfica por países, filtros
+            fotográficos y controles de audio para video.
           </p>
         </div>
 
@@ -2037,7 +2281,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               type="button"
               onClick={() => {
                 setJsonError(null);
-                setJsonInputText('');
+                setJsonInputText("");
                 setIsJsonModalOpen(true);
               }}
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
@@ -2057,11 +2301,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 defaultValue=""
                 className="bg-transparent text-xs text-neutral-200 focus:outline-none cursor-pointer truncate max-w-[190px] font-medium"
               >
-                <option value="" disabled className="bg-neutral-900 text-neutral-400">
+                <option
+                  value=""
+                  disabled
+                  className="bg-neutral-900 text-neutral-400"
+                >
                   ⚡ Autocompletar desde despacho...
                 </option>
                 {reports.map((r) => (
-                  <option key={r.id} value={r.id} className="bg-neutral-900 text-white">
+                  <option
+                    key={r.id}
+                    value={r.id}
+                    className="bg-neutral-900 text-white"
+                  >
                     {r.category}: {r.title}
                   </option>
                 ))}
@@ -2081,10 +2333,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       {/* Main Grid: Controls (Left) vs Live Preview (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
         {/* LEFT COLUMN: Controls & Settings (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          
           {/* Card 1: Text Content & Typography */}
           <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -2127,11 +2377,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setFontSizeTitle(sz)}
                         className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
                           fontSizeTitle === sz
-                            ? 'bg-white text-black font-bold'
-                            : 'bg-neutral-900 text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {sz === 48 ? 'S' : sz === 62 ? 'M' : 'L'}
+                        {sz === 48 ? "S" : sz === 62 ? "M" : "L"}
                       </button>
                     ))}
                   </div>
@@ -2146,7 +2396,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm sm:text-base font-bold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
               />
               <span className="text-[11px] text-neutral-500 font-light block">
-                Presiona Enter para romper la línea exactamente donde quieras equilibrar el texto.
+                Presiona Enter para romper la línea exactamente donde quieras
+                equilibrar el texto.
               </span>
             </div>
 
@@ -2180,11 +2431,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setFontSizeDesc(sz)}
                         className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
                           fontSizeDesc === sz
-                            ? 'bg-white text-black font-bold'
-                            : 'bg-neutral-900 text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {sz === 24 ? 'S' : sz === 30 ? 'M' : 'L'}
+                        {sz === 24 ? "S" : sz === 30 ? "M" : "L"}
                       </button>
                     ))}
                   </div>
@@ -2216,8 +2467,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {/* Gap Title to Desc */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-400">Separación Titular ↔ Bajada</span>
-                    <span className="font-mono text-white font-bold">{gapTitleToDesc}px</span>
+                    <span className="text-neutral-400">
+                      Separación Titular ↔ Bajada
+                    </span>
+                    <span className="font-mono text-white font-bold">
+                      {gapTitleToDesc}px
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -2235,11 +2490,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setGapTitleToDesc(gap)}
                         className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
                           gapTitleToDesc === gap
-                            ? 'bg-white text-black font-bold'
-                            : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "bg-neutral-800 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {gap === 16 ? 'Compacto' : gap === 26 ? 'Equilibrado' : 'Amplio'}
+                        {gap === 16
+                          ? "Compacto"
+                          : gap === 26
+                            ? "Equilibrado"
+                            : "Amplio"}
                       </button>
                     ))}
                   </div>
@@ -2248,15 +2507,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {/* Gap Category to Title */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-400">Separación Cabecera ↔ Titular</span>
-                    <span className="font-mono text-white font-bold">{gapCategoryToTitle}px</span>
+                    <span className="text-neutral-400">
+                      Separación Cabecera ↔ Titular
+                    </span>
+                    <span className="font-mono text-white font-bold">
+                      {gapCategoryToTitle}px
+                    </span>
                   </div>
                   <input
                     type="range"
                     min={16}
                     max={48}
                     value={gapCategoryToTitle}
-                    onChange={(e) => setGapCategoryToTitle(Number(e.target.value))}
+                    onChange={(e) =>
+                      setGapCategoryToTitle(Number(e.target.value))
+                    }
                     className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                   />
                   <div className="flex items-center gap-1">
@@ -2267,11 +2532,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setGapCategoryToTitle(gap)}
                         className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
                           gapCategoryToTitle === gap
-                            ? 'bg-white text-black font-bold'
-                            : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "bg-neutral-800 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {gap === 22 ? 'Pegado' : gap === 30 ? 'Estándar' : 'Holgado'}
+                        {gap === 22
+                          ? "Pegado"
+                          : gap === 30
+                            ? "Estándar"
+                            : "Holgado"}
                       </button>
                     ))}
                   </div>
@@ -2281,7 +2550,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {/* Line height presets */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
                 <div className="flex items-center gap-2">
-                  <span className="text-neutral-400">Interlineado Titular:</span>
+                  <span className="text-neutral-400">
+                    Interlineado Titular:
+                  </span>
                   <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
                     {[1.12, 1.18, 1.25].map((ratio) => (
                       <button
@@ -2290,8 +2561,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setTitleLineHeightRatio(ratio)}
                         className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
                           titleLineHeightRatio === ratio
-                            ? 'bg-white text-black font-bold'
-                            : 'text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "text-neutral-400 hover:text-white"
                         }`}
                       >
                         {ratio}x
@@ -2310,8 +2581,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setDescLineHeightRatio(ratio)}
                         className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
                           descLineHeightRatio === ratio
-                            ? 'bg-white text-black font-bold'
-                            : 'text-neutral-400 hover:text-white'
+                            ? "bg-white text-black font-bold"
+                            : "text-neutral-400 hover:text-white"
                         }`}
                       >
                         {ratio}x
@@ -2361,7 +2632,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     Elegir del catálogo ({allAvailableCategories.length})
                   </option>
                   {allAvailableCategories.map((c) => (
-                    <option key={c} value={c} className="bg-neutral-900 text-white">
+                    <option
+                      key={c}
+                      value={c}
+                      className="bg-neutral-900 text-white"
+                    >
                       {c}
                     </option>
                   ))}
@@ -2370,15 +2645,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
               {/* Quick Category Chips */}
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {['GEOPOLÍTICA', 'ECONOMÍA & MERCADOS', 'DEFENSA & INTELIGENCIA', 'TECNOLOGÍA & INNOVACIÓN', 'ENERGÍA & PETRÓLEO', 'CRIPTOACTIVOS & SOBERANÍA', 'COMERCIO GLOBAL'].map((c) => (
+                {[
+                  "GEOPOLÍTICA",
+                  "ECONOMÍA & MERCADOS",
+                  "DEFENSA & INTELIGENCIA",
+                  "TECNOLOGÍA & INNOVACIÓN",
+                  "ENERGÍA & PETRÓLEO",
+                  "CRIPTOACTIVOS & SOBERANÍA",
+                  "COMERCIO GLOBAL",
+                ].map((c) => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => setCategory(c)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-all cursor-pointer ${
                       category === c
-                        ? 'bg-white text-black font-bold shadow-sm'
-                        : 'bg-neutral-900 text-neutral-400 hover:text-white border border-white/5'
+                        ? "bg-white text-black font-bold shadow-sm"
+                        : "bg-neutral-900 text-neutral-400 hover:text-white border border-white/5"
                     }`}
                   >
                     {c}
@@ -2396,7 +2679,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <span>Países o Regiones del Acontecimiento</span>
                   </label>
                   <p className="text-[11px] text-neutral-400 font-light">
-                    Muestra a qué actores internacionales corresponde la noticia (ej. Israel e Irán).
+                    Muestra a qué actores internacionales corresponde la noticia
+                    (ej. Israel e Irán).
                   </p>
                 </div>
 
@@ -2404,11 +2688,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div className="flex items-center gap-1.5 bg-neutral-900 p-1 rounded-xl border border-white/10 text-[11px]">
                   <button
                     type="button"
-                    onClick={() => setCountryPlacement('line')}
+                    onClick={() => setCountryPlacement("line")}
                     className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === 'line'
-                        ? 'bg-white text-black font-bold'
-                        : 'text-neutral-400 hover:text-white'
+                      countryPlacement === "line"
+                        ? "bg-white text-black font-bold"
+                        : "text-neutral-400 hover:text-white"
                     }`}
                     title="Mostrar en la barra superior junto a la categoría"
                   >
@@ -2416,11 +2700,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCountryPlacement('badge')}
+                    onClick={() => setCountryPlacement("badge")}
                     className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === 'badge'
-                        ? 'bg-white text-black font-bold'
-                        : 'text-neutral-400 hover:text-white'
+                      countryPlacement === "badge"
+                        ? "bg-white text-black font-bold"
+                        : "text-neutral-400 hover:text-white"
                     }`}
                     title="Mostrar como etiqueta destacada sobre el titular"
                   >
@@ -2428,11 +2712,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCountryPlacement('none')}
+                    onClick={() => setCountryPlacement("none")}
                     className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === 'none'
-                        ? 'bg-white text-black font-bold'
-                        : 'text-neutral-400 hover:text-white'
+                      countryPlacement === "none"
+                        ? "bg-white text-black font-bold"
+                        : "text-neutral-400 hover:text-white"
                     }`}
                     title="Ocultar mención de países"
                   >
@@ -2442,7 +2726,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
 
               {/* Single-line Format & Sizing Controls (When 'line' placement is active) */}
-              {countryPlacement === 'line' && selectedCountries.length > 0 && (
+              {countryPlacement === "line" && selectedCountries.length > 0 && (
                 <div className="p-3 bg-neutral-900/90 rounded-xl border border-white/10 space-y-2.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                     <span className="text-neutral-300 font-semibold uppercase tracking-wider text-[11px]">
@@ -2451,11 +2735,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
                       <button
                         type="button"
-                        onClick={() => setCountryFormat('names')}
+                        onClick={() => setCountryFormat("names")}
                         className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === 'names'
-                            ? 'bg-white text-black font-bold'
-                            : 'text-neutral-400 hover:text-white'
+                          countryFormat === "names"
+                            ? "bg-white text-black font-bold"
+                            : "text-neutral-400 hover:text-white"
                         }`}
                         title="Solo nombres: ISRAEL · IRÁN"
                       >
@@ -2463,11 +2747,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCountryFormat('flags-names')}
+                        onClick={() => setCountryFormat("flags-names")}
                         className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === 'flags-names'
-                            ? 'bg-white text-black font-bold'
-                            : 'text-neutral-400 hover:text-white'
+                          countryFormat === "flags-names"
+                            ? "bg-white text-black font-bold"
+                            : "text-neutral-400 hover:text-white"
                         }`}
                         title="Banderas y nombres: 🇮🇱 ISRAEL · 🇮🇷 IRÁN"
                       >
@@ -2475,11 +2759,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCountryFormat('flags-codes')}
+                        onClick={() => setCountryFormat("flags-codes")}
                         className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === 'flags-codes'
-                            ? 'bg-white text-black font-bold'
-                            : 'text-neutral-400 hover:text-white'
+                          countryFormat === "flags-codes"
+                            ? "bg-white text-black font-bold"
+                            : "text-neutral-400 hover:text-white"
                         }`}
                         title="Ultra compacto para muchos países: 🇮🇱 IL · 🇮🇷 IR"
                       >
@@ -2498,20 +2782,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onChange={(e) => setAutoFitHeader(e.target.checked)}
                         className="w-3.5 h-3.5 accent-white rounded cursor-pointer"
                       />
-                      <label htmlFor="autoFitCheck" className="text-neutral-300 font-medium cursor-pointer">
-                        Ajuste automático inteligente a 1 sola línea (garantiza que quepan todos)
+                      <label
+                        htmlFor="autoFitCheck"
+                        className="text-neutral-300 font-medium cursor-pointer"
+                      >
+                        Ajuste automático inteligente a 1 sola línea (garantiza
+                        que quepan todos)
                       </label>
                     </div>
 
                     {!autoFitHeader && (
                       <div className="flex items-center gap-2">
-                        <span className="text-neutral-400 font-mono">{headerSize}px</span>
+                        <span className="text-neutral-400 font-mono">
+                          {headerSize}px
+                        </span>
                         <input
                           type="range"
                           min={12}
                           max={26}
                           value={headerSize}
-                          onChange={(e) => setHeaderSize(Number(e.target.value))}
+                          onChange={(e) =>
+                            setHeaderSize(Number(e.target.value))
+                          }
                           className="w-20 accent-white h-1 bg-neutral-800 rounded-lg cursor-pointer"
                         />
                       </div>
@@ -2531,7 +2823,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       key={c.code}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/10 text-white rounded-lg text-xs font-semibold border border-white/15"
                     >
-                      <CountryFlag code={c.code} className="w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs" fallback="📍" />
+                      <CountryFlag
+                        code={c.code}
+                        className="w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
+                        fallback="📍"
+                      />
                       <span>{c.name}</span>
                       <button
                         type="button"
@@ -2553,7 +2849,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </div>
               ) : (
                 <div className="p-3 bg-neutral-900/40 rounded-xl border border-dashed border-white/10 text-xs text-neutral-500 text-center">
-                  Ningún país seleccionado actualmente. Haz clic en los botones de abajo o escribe uno personalizado.
+                  Ningún país seleccionado actualmente. Haz clic en los botones
+                  de abajo o escribe uno personalizado.
                 </div>
               )}
 
@@ -2567,7 +2864,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
                 />
 
-                <form onSubmit={handleAddCustomCountry} className="flex items-center gap-1">
+                <form
+                  onSubmit={handleAddCustomCountry}
+                  className="flex items-center gap-1"
+                >
                   <input
                     type="text"
                     value={customCountryName}
@@ -2589,7 +2889,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/5">
                 {filteredCountries.map((c) => {
                   const isSelected = selectedCountries.some(
-                    (item) => item.code === c.code || item.name.toLowerCase() === c.name.toLowerCase()
+                    (item) =>
+                      item.code === c.code ||
+                      item.name.toLowerCase() === c.name.toLowerCase(),
                   );
                   return (
                     <button
@@ -2598,11 +2900,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       onClick={() => handleToggleCountry(c)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-white text-black font-bold shadow-sm'
-                          : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 hover:text-white border border-white/5'
+                          ? "bg-white text-black font-bold shadow-sm"
+                          : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 hover:text-white border border-white/5"
                       }`}
                     >
-                      <CountryFlag code={c.code} className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs" fallback="📍" />
+                      <CountryFlag
+                        code={c.code}
+                        className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
+                        fallback="📍"
+                      />
                       <span>{c.name}</span>
                     </button>
                   );
@@ -2619,7 +2925,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span>3. Imagen o Video (Arrastra o Selecciona)</span>
               </h3>
               <span className="text-[11px] text-neutral-400 font-mono">
-                {mediaType === 'video' ? '🎬 Modo Video' : '🖼️ Modo Imagen'}
+                {mediaType === "video" ? "🎬 Modo Video" : "🖼️ Modo Imagen"}
               </span>
             </div>
 
@@ -2634,8 +2940,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
                 isDragOver
-                  ? 'border-white bg-white/10'
-                  : 'border-white/15 bg-neutral-900/60 hover:border-white/30 hover:bg-neutral-900'
+                  ? "border-white bg-white/10"
+                  : "border-white/15 bg-neutral-900/60 hover:border-white/30 hover:bg-neutral-900"
               }`}
             >
               <input
@@ -2652,7 +2958,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
               <div className="flex flex-col items-center justify-center gap-2">
                 <div className="p-3 bg-white/5 rounded-2xl text-white">
-                  {mediaType === 'video' ? (
+                  {mediaType === "video" ? (
                     <VideoIcon className="w-6 h-6" />
                   ) : (
                     <ImageIcon className="w-6 h-6" />
@@ -2662,7 +2968,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   Arrastra aquí tu imagen o video, o haz clic para explorar
                 </p>
                 <p className="text-[11px] text-neutral-400 font-light">
-                  Soporta PNG, JPG, WebP, AVIF, MP4 y WebM · También puedes pegar con Ctrl+V
+                  Soporta PNG, JPG, WebP, AVIF, MP4 y WebM · También puedes
+                  pegar con Ctrl+V
                 </p>
               </div>
             </div>
@@ -2670,15 +2977,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Current loaded media bar */}
             <div className="flex items-center justify-between bg-neutral-900/80 px-4 py-2.5 rounded-xl border border-white/5 text-xs">
               <span className="text-neutral-400 truncate max-w-xs font-mono">
-                Archivo actual: <strong className="text-white">{mediaName}</strong>
+                Archivo actual:{" "}
+                <strong className="text-white">{mediaName}</strong>
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setMediaType('image');
-                    setMediaSrc('https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80');
-                    setMediaName('Imagen de muestra');
+                    setMediaType("image");
+                    setMediaSrc(
+                      "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80",
+                    );
+                    setMediaName("Imagen de muestra");
                   }}
                   className="text-neutral-400 hover:text-white transition-colors cursor-pointer text-[11px] underline"
                 >
@@ -2697,7 +3007,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {photoCaption && (
                   <button
                     type="button"
-                    onClick={() => setPhotoCaption('')}
+                    onClick={() => setPhotoCaption("")}
                     className="text-[11px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
                   >
                     Borrar
@@ -2705,7 +3015,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-neutral-400 font-light">
-                Aparece en la base de la foto a la misma altura del logo BlackNews (a la izquierda), compacto y alineado a la derecha. Dejar vacío si no hay personaje.
+                Aparece en la base de la foto a la misma altura del logo
+                BlackNews (a la izquierda), compacto y alineado a la derecha.
+                Dejar vacío si no hay personaje.
               </p>
               <input
                 type="text"
@@ -2732,11 +3044,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setFilter('bw-high')}
+                  onClick={() => setFilter("bw-high")}
                   className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    filter === 'bw-high'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10'
+                    filter === "bw-high"
+                      ? "bg-white text-black font-bold shadow-md"
+                      : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>B&N Contraste</span>
@@ -2745,11 +3057,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setFilter('bw-smooth')}
+                  onClick={() => setFilter("bw-smooth")}
                   className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    filter === 'bw-smooth'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10'
+                    filter === "bw-smooth"
+                      ? "bg-white text-black font-bold shadow-md"
+                      : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>Sin Color Suave</span>
@@ -2757,11 +3069,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setFilter('noir')}
+                  onClick={() => setFilter("noir")}
                   className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    filter === 'noir'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10'
+                    filter === "noir"
+                      ? "bg-white text-black font-bold shadow-md"
+                      : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>Noir Profundo</span>
@@ -2769,11 +3081,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setFilter('color')}
+                  onClick={() => setFilter("color")}
                   className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    filter === 'color'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10'
+                    filter === "color"
+                      ? "bg-white text-black font-bold shadow-md"
+                      : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>Color Original</span>
@@ -2781,11 +3093,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setFilter('muted-color')}
+                  onClick={() => setFilter("muted-color")}
                   className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer col-span-2 sm:col-span-1 ${
-                    filter === 'muted-color'
-                      ? 'bg-white text-black font-bold shadow-md'
-                      : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10'
+                    filter === "muted-color"
+                      ? "bg-white text-black font-bold shadow-md"
+                      : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>Color Desaturado</span>
@@ -2794,20 +3106,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             {/* Video Audio Control & Social Networks Optimization */}
-            {mediaType === 'video' && (
+            {mediaType === "video" && (
               <div className="space-y-3.5 p-4 bg-neutral-900/90 border border-white/15 rounded-xl">
                 {/* Audio row */}
                 <div className="flex items-center justify-between pb-3 border-b border-white/5">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/10 rounded-xl text-white">
-                      {isMuted ? <VolumeX className="w-5 h-5 text-amber-400" /> : <Volume2 className="w-5 h-5 text-emerald-400" />}
+                      {isMuted ? (
+                        <VolumeX className="w-5 h-5 text-amber-400" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 text-emerald-400" />
+                      )}
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white uppercase tracking-wider">
                         Audio del Video
                       </h4>
                       <p className="text-[11px] text-neutral-400 font-light">
-                        {isMuted ? 'El video se exportará sin audio (silenciado).' : 'El video conservará su pista de audio original.'}
+                        {isMuted
+                          ? "El video se exportará sin audio (silenciado)."
+                          : "El video conservará su pista de audio original."}
                       </p>
                     </div>
                   </div>
@@ -2822,11 +3140,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     }}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
                       isMuted
-                        ? 'bg-neutral-900 text-neutral-400 border border-white/15 hover:text-white'
-                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        ? "bg-neutral-900 text-neutral-400 border border-white/15 hover:text-white"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                     }`}
                   >
-                    {isMuted ? '🔇 Silenciado' : '🔊 Con Audio (Activo)'}
+                    {isMuted ? "🔇 Silenciado" : "🔊 Con Audio (Activo)"}
                   </button>
                 </div>
 
@@ -2838,18 +3156,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>Formato de Video</span>
                     </label>
                     <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 font-bold">
-                      {videoFormat === 'mp4' ? 'MP4 (H.264 / AAC) · 100% X (Twitter) & Meta' : 'WebM (VP9) · Web abierta'}
+                      {videoFormat === "mp4"
+                        ? "MP4 (H.264 / AAC) · 100% X (Twitter) & Meta"
+                        : "WebM (VP9) · Web abierta"}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setVideoFormat('mp4')}
+                      onClick={() => setVideoFormat("mp4")}
                       className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoFormat === 'mp4'
-                          ? 'bg-white text-black border-white shadow-md'
-                          : 'bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20'
+                        videoFormat === "mp4"
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                       }`}
                     >
                       <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
@@ -2858,23 +3178,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           PARA X / TWITTER
                         </span>
                       </div>
-                      <div className={`text-[10px] mt-1 ${videoFormat === 'mp4' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
-                        Compatible con X, Instagram, Facebook y WhatsApp sin errores de formato
+                      <div
+                        className={`text-[10px] mt-1 ${videoFormat === "mp4" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                      >
+                        Compatible con X, Instagram, Facebook y WhatsApp sin
+                        errores de formato
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setVideoFormat('webm')}
+                      onClick={() => setVideoFormat("webm")}
                       className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoFormat === 'webm'
-                          ? 'bg-white text-black border-white shadow-md'
-                          : 'bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20'
+                        videoFormat === "webm"
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                       }`}
                     >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">WebM (.webm)</div>
-                      <div className={`text-[10px] mt-1 ${videoFormat === 'webm' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
-                        Formato web abierto para Chrome o navegadores de escritorio
+                      <div className="text-[11px] font-bold uppercase tracking-wider">
+                        WebM (.webm)
+                      </div>
+                      <div
+                        className={`text-[10px] mt-1 ${videoFormat === "webm" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                      >
+                        Formato web abierto para Chrome o navegadores de
+                        escritorio
                       </div>
                     </button>
                   </div>
@@ -2888,52 +3216,68 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>Optimización para X, Instagram & Meta</span>
                     </label>
                     <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-                      {videoQuality === 'social' ? '3 Mbps · ~4 MB / 10 s' : videoQuality === 'compact' ? '1.5 Mbps · ~2 MB / 10 s' : '6 Mbps · ~7.5 MB / 10 s'}
+                      {videoQuality === "social"
+                        ? "3 Mbps · ~4 MB / 10 s"
+                        : videoQuality === "compact"
+                          ? "1.5 Mbps · ~2 MB / 10 s"
+                          : "6 Mbps · ~7.5 MB / 10 s"}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      onClick={() => setVideoQuality('social')}
+                      onClick={() => setVideoQuality("social")}
                       className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === 'social'
-                          ? 'bg-white text-black border-white shadow-md'
-                          : 'bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20'
+                        videoQuality === "social"
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                       }`}
                     >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">Redes Sociales</div>
-                      <div className={`text-[10px] ${videoQuality === 'social' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
+                      <div className="text-[11px] font-bold uppercase tracking-wider">
+                        Redes Sociales
+                      </div>
+                      <div
+                        className={`text-[10px] ${videoQuality === "social" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                      >
                         Equilibrado (X / Insta)
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setVideoQuality('compact')}
+                      onClick={() => setVideoQuality("compact")}
                       className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === 'compact'
-                          ? 'bg-white text-black border-white shadow-md'
-                          : 'bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20'
+                        videoQuality === "compact"
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                       }`}
                     >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">Ultra Ligero</div>
-                      <div className={`text-[10px] ${videoQuality === 'compact' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
+                      <div className="text-[11px] font-bold uppercase tracking-wider">
+                        Ultra Ligero
+                      </div>
+                      <div
+                        className={`text-[10px] ${videoQuality === "compact" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                      >
                         WhatsApp / Web rápida
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setVideoQuality('hq')}
+                      onClick={() => setVideoQuality("hq")}
                       className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === 'hq'
-                          ? 'bg-white text-black border-white shadow-md'
-                          : 'bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20'
+                        videoQuality === "hq"
+                          ? "bg-white text-black border-white shadow-md"
+                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                       }`}
                     >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">Master HQ</div>
-                      <div className={`text-[10px] ${videoQuality === 'hq' ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
+                      <div className="text-[11px] font-bold uppercase tracking-wider">
+                        Master HQ
+                      </div>
+                      <div
+                        className={`text-[10px] ${videoQuality === "hq" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                      >
                         Bitrate alto (6M)
                       </div>
                     </button>
@@ -2948,7 +3292,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>Velocidad de Video</span>
                     </label>
                     <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 font-bold">
-                      {videoSpeed === 1.0 ? '1.0x (Normal)' : videoSpeed < 1.0 ? `${videoSpeed}x (Lento)` : `${videoSpeed}x (Rápido)`}
+                      {videoSpeed === 1.0
+                        ? "1.0x (Normal)"
+                        : videoSpeed < 1.0
+                          ? `${videoSpeed}x (Lento)`
+                          : `${videoSpeed}x (Rápido)`}
                     </span>
                   </div>
 
@@ -2966,8 +3314,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         }}
                         className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border text-center ${
                           videoSpeed === speed
-                            ? 'bg-white text-black font-bold border-white shadow-sm'
-                            : 'bg-neutral-950 text-neutral-400 border-white/10 hover:text-white'
+                            ? "bg-white text-black font-bold border-white shadow-sm"
+                            : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
                         }`}
                       >
                         {speed}x
@@ -2984,7 +3332,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>Recorte del Video (Rango de Reproducción)</span>
                     </label>
                     <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
-                      {videoDuration > 0 ? `Total: ${videoDuration}s` : 'Video cargado'}
+                      {videoDuration > 0
+                        ? `Total: ${videoDuration}s`
+                        : "Video cargado"}
                     </span>
                   </div>
 
@@ -2993,13 +3343,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {/* Trim Start */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-neutral-400">Punto de Inicio:</span>
-                        <span className="font-mono text-white font-bold">{trimStart.toFixed(1)}s</span>
+                        <span className="text-neutral-400">
+                          Punto de Inicio:
+                        </span>
+                        <span className="font-mono text-white font-bold">
+                          {trimStart.toFixed(1)}s
+                        </span>
                       </div>
                       <input
                         type="range"
                         min={0}
-                        max={Math.max(0.1, (trimEnd > 0 ? trimEnd - 0.5 : (videoDuration || 30)))}
+                        max={Math.max(
+                          0.1,
+                          trimEnd > 0 ? trimEnd - 0.5 : videoDuration || 30,
+                        )}
                         step={0.1}
                         value={trimStart}
                         onChange={(e) => {
@@ -3015,7 +3372,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         type="button"
                         onClick={() => {
                           if (videoRef.current) {
-                            const cur = Math.round(videoRef.current.currentTime * 10) / 10;
+                            const cur =
+                              Math.round(videoRef.current.currentTime * 10) /
+                              10;
                             if (cur < (trimEnd > 0 ? trimEnd : 999)) {
                               setTrimStart(cur);
                               showToast(`Inicio fijado en ${cur}s`);
@@ -3032,14 +3391,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-neutral-400">Punto de Fin:</span>
-                        <span className="font-mono text-white font-bold">{trimEnd > 0 ? trimEnd.toFixed(1) : (videoDuration || 10).toFixed(1)}s</span>
+                        <span className="font-mono text-white font-bold">
+                          {trimEnd > 0
+                            ? trimEnd.toFixed(1)
+                            : (videoDuration || 10).toFixed(1)}
+                          s
+                        </span>
                       </div>
                       <input
                         type="range"
                         min={Math.max(0.5, trimStart + 0.5)}
                         max={videoDuration > 0 ? videoDuration : 60}
                         step={0.1}
-                        value={trimEnd > 0 ? trimEnd : (videoDuration || 10)}
+                        value={trimEnd > 0 ? trimEnd : videoDuration || 10}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setTrimEnd(val);
@@ -3053,7 +3417,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         type="button"
                         onClick={() => {
                           if (videoRef.current) {
-                            const cur = Math.round(videoRef.current.currentTime * 10) / 10;
+                            const cur =
+                              Math.round(videoRef.current.currentTime * 10) /
+                              10;
                             if (cur > trimStart) {
                               setTrimEnd(cur);
                               showToast(`Fin fijado en ${cur}s`);
@@ -3070,7 +3436,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   {/* Summary badge & presets */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px]">
                     <span className="text-neutral-300 font-medium">
-                      ✂️ Clip: <strong className="text-white">{(Math.max(0, (trimEnd > 0 ? trimEnd : (videoDuration || 10)) - trimStart)).toFixed(1)}s</strong> {videoSpeed !== 1.0 && <span className="text-neutral-400 font-normal">(con {videoSpeed}x dura {(((Math.max(0, (trimEnd > 0 ? trimEnd : (videoDuration || 10)) - trimStart))) / videoSpeed).toFixed(1)}s)</span>}
+                      ✂️ Clip:{" "}
+                      <strong className="text-white">
+                        {Math.max(
+                          0,
+                          (trimEnd > 0 ? trimEnd : videoDuration || 10) -
+                            trimStart,
+                        ).toFixed(1)}
+                        s
+                      </strong>{" "}
+                      {videoSpeed !== 1.0 && (
+                        <span className="text-neutral-400 font-normal">
+                          (con {videoSpeed}x dura{" "}
+                          {(
+                            Math.max(
+                              0,
+                              (trimEnd > 0 ? trimEnd : videoDuration || 10) -
+                                trimStart,
+                            ) / videoSpeed
+                          ).toFixed(1)}
+                          s)
+                        </span>
+                      )}
                     </span>
 
                     <div className="flex items-center gap-1">
@@ -3079,7 +3466,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 10, 5));
-                          if (videoRef.current) videoRef.current.currentTime = 0;
+                          if (videoRef.current)
+                            videoRef.current.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -3090,7 +3478,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 10, 10));
-                          if (videoRef.current) videoRef.current.currentTime = 0;
+                          if (videoRef.current)
+                            videoRef.current.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -3101,7 +3490,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 30, 30));
-                          if (videoRef.current) videoRef.current.currentTime = 0;
+                          if (videoRef.current)
+                            videoRef.current.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -3112,7 +3502,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(videoDuration || 15);
-                          if (videoRef.current) videoRef.current.currentTime = 0;
+                          if (videoRef.current)
+                            videoRef.current.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -3125,9 +3516,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {/* Duration Limiter */}
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-300 font-medium">Duración máxima del clip de noticia:</span>
+                    <span className="text-neutral-300 font-medium">
+                      Duración máxima del clip de noticia:
+                    </span>
                     <span className="text-[11px] font-mono text-neutral-400">
-                      {maxVideoDuration > 0 ? `${maxVideoDuration} segundos` : 'Video completo'}
+                      {maxVideoDuration > 0
+                        ? `${maxVideoDuration} segundos`
+                        : "Video completo"}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
@@ -3138,16 +3533,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setMaxVideoDuration(dur)}
                         className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border ${
                           maxVideoDuration === dur
-                            ? 'bg-white text-black font-bold border-white'
-                            : 'bg-neutral-950 text-neutral-400 border-white/10 hover:text-white'
+                            ? "bg-white text-black font-bold border-white"
+                            : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
                         }`}
                       >
-                        {dur === 0 ? 'Completo' : `${dur}s`}
+                        {dur === 0 ? "Completo" : `${dur}s`}
                       </button>
                     ))}
                   </div>
                   <p className="text-[10.5px] text-neutral-400 font-light pt-0.5">
-                    💡 <strong>Tip para X e Instagram:</strong> Los clips de 10 segundos en bucle consiguen alta retención y evitan que el algoritmo de compresión de Meta destruya la calidad del video.
+                    💡 <strong>Tip para X e Instagram:</strong> Los clips de 10
+                    segundos en bucle consiguen alta retención y evitan que el
+                    algoritmo de compresión de Meta destruya la calidad del
+                    video.
                   </p>
                 </div>
               </div>
@@ -3193,7 +3591,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   Desvanecimiento superior hacia negro (Gradient Mask)
                 </span>
                 <span className="text-[11px] text-neutral-400 font-light">
-                  Difumina sutilmente el horizonte de la imagen contra el fondo negro superior.
+                  Difumina sutilmente el horizonte de la imagen contra el fondo
+                  negro superior.
                 </span>
               </div>
               <input
@@ -3208,7 +3607,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
         {/* RIGHT COLUMN: Live Interactive 4:5 Preview (5 cols) */}
         <div className="lg:col-span-5 sticky top-8 space-y-4">
-          
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5 text-white" />
@@ -3220,71 +3618,80 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
 
           {/* THE 4:5 CARD CONTAINER */}
-          <div 
+          <div
             ref={previewContainerRef}
             className="w-full max-w-[420px] mx-auto aspect-[4/5] bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl flex flex-col justify-between select-none"
-            style={{ backgroundColor: '#000000' }}
+            style={{ backgroundColor: "#000000" }}
           >
             {/* Top Text Content Area (1:1 with canvas metrics) */}
-            <div 
+            <div
               style={{
                 paddingTop: `${previewPadTop}px`,
                 paddingLeft: `${previewPadX}px`,
-                paddingRight: `${previewPadX}px`
+                paddingRight: `${previewPadX}px`,
               }}
               className="z-20 relative select-none"
             >
               {/* Category + Country Single-line Bar */}
               <div className="flex items-center gap-2 w-full overflow-hidden whitespace-nowrap min-w-0">
-                <span 
-                  style={{ 
-                    fontSize: `${previewHeaderSize}px`, 
-                    letterSpacing: previewHeaderTracking 
+                <span
+                  style={{
+                    fontSize: `${previewHeaderSize}px`,
+                    letterSpacing: previewHeaderTracking,
                   }}
                   className="font-semibold uppercase text-white font-['Lexend'] shrink-0 select-none"
                 >
-                  {category || 'GEOPOLÍTICA'}
+                  {category || "GEOPOLÍTICA"}
                 </span>
 
-                {countryPlacement === 'line' && selectedCountries.length > 0 && (
-                  <>
-                    <span 
-                      style={{ fontSize: `${previewHeaderSize}px` }} 
-                      className="text-neutral-500 shrink-0 font-mono px-0.5"
-                    >
-                      ·
-                    </span>
-                    <div 
-                      style={{ 
-                        fontSize: `${previewHeaderSize}px`, 
-                        letterSpacing: previewHeaderTracking 
-                      }}
-                      className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
-                    >
-                      {selectedCountries.map((c, idx) => (
-                        <React.Fragment key={c.code}>
-                          {idx > 0 && <span className="text-neutral-500 text-[10px]">·</span>}
-                          <span className="inline-flex items-center gap-1 shrink-0">
-                            {countryFormat !== 'names' && (
-                              <CountryFlag 
-                                code={c.code} 
-                                className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs" 
-                              />
+                {countryPlacement === "line" &&
+                  selectedCountries.length > 0 && (
+                    <>
+                      <span
+                        style={{ fontSize: `${previewHeaderSize}px` }}
+                        className="text-neutral-500 shrink-0 font-mono px-0.5"
+                      >
+                        ·
+                      </span>
+                      <div
+                        style={{
+                          fontSize: `${previewHeaderSize}px`,
+                          letterSpacing: previewHeaderTracking,
+                        }}
+                        className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
+                      >
+                        {selectedCountries.map((c, idx) => (
+                          <React.Fragment key={c.code}>
+                            {idx > 0 && (
+                              <span className="text-neutral-500 text-[10px]">
+                                ·
+                              </span>
                             )}
-                            <span>{countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase()}</span>
-                          </span>
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </>
-                )}
+                            <span className="inline-flex items-center gap-1 shrink-0">
+                              {countryFormat !== "names" && (
+                                <CountryFlag
+                                  code={c.code}
+                                  className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
+                                />
+                              )}
+                              <span>
+                                {countryFormat === "flags-codes"
+                                  ? c.code
+                                  : c.name.toUpperCase()}
+                              </span>
+                            </span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                 <span className="flex-1 max-w-[50px] min-w-[16px] h-[1.5px] bg-white inline-block shrink-0"></span>
               </div>
 
               {/* Country Badge (if badge placement is selected) */}
-              {countryPlacement === 'badge' && selectedCountries.length > 0 && (
-                <div 
+              {countryPlacement === "badge" && selectedCountries.length > 0 && (
+                <div
                   style={{ marginTop: `${Math.round(14 * previewScale)}px` }}
                   className="flex flex-wrap items-center gap-1.5"
                 >
@@ -3293,7 +3700,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       key={c.code}
                       className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
                     >
-                      <CountryFlag code={c.code} className="w-3.5 h-2.5 object-cover rounded-[1px]" />
+                      <CountryFlag
+                        code={c.code}
+                        className="w-3.5 h-2.5 object-cover rounded-[1px]"
+                      />
                       <span>{c.name.toUpperCase()}</span>
                     </span>
                   ))}
@@ -3301,24 +3711,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               )}
 
               {/* Title with dynamic Real-time Font Size and Spacing */}
-              <h1 
-                style={{ 
+              <h1
+                style={{
                   marginTop: `${previewGapCatTitle}px`,
-                  fontSize: `${previewTitleSize}px`, 
-                  lineHeight: titleLineHeightRatio 
+                  fontSize: `${previewTitleSize}px`,
+                  lineHeight: titleLineHeightRatio,
                 }}
                 className="font-bold text-white font-['Lexend'] whitespace-pre-line tracking-tight drop-shadow-sm transition-[font-size,margin]"
               >
-                {title || 'Escribe un titular impactante...'}
+                {title || "Escribe un titular impactante..."}
               </h1>
 
               {/* Description with dynamic Real-time Font Size and Spacing */}
               {description && (
-                <p 
-                  style={{ 
+                <p
+                  style={{
                     marginTop: `${previewGapTitleDesc}px`,
-                    fontSize: `${previewDescSize}px`, 
-                    lineHeight: descLineHeightRatio 
+                    fontSize: `${previewDescSize}px`,
+                    lineHeight: descLineHeightRatio,
                   }}
                   className="text-neutral-300 font-normal font-['Lexend'] line-clamp-5 transition-[font-size,margin]"
                 >
@@ -3329,11 +3739,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             {/* Media Container (Occupies bottom half with smooth fade) */}
             <div className="absolute inset-0 top-[40%] overflow-hidden z-0">
-              {mediaType === 'video' ? (
+              {mediaType === "video" ? (
                 <video
                   ref={videoRef}
                   src={mediaSrc}
-                  crossOrigin={mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:') ? undefined : 'anonymous'}
+                  crossOrigin={
+                    mediaSrc.startsWith("blob:") || mediaSrc.startsWith("data:")
+                      ? undefined
+                      : "anonymous"
+                  }
                   autoPlay
                   loop
                   muted={isMuted}
@@ -3341,7 +3755,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   style={{ filter: getFilterCss() }}
                   className="w-full h-full object-cover"
                   onLoadedMetadata={(e) => {
-                    const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
+                    const dur =
+                      Math.round((e.currentTarget.duration || 0) * 10) / 10;
                     if (dur > 0) {
                       setVideoDuration(dur);
                       if (trimEnd === 0 || trimEnd > dur) {
@@ -3391,7 +3806,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {/* Right-aligned compact photo caption / character text (Only if present, at same height) */}
               <div className="flex items-center gap-2.5 justify-end flex-1 min-w-0 pl-3">
                 {photoCaption && photoCaption.trim() ? (
-                  <span 
+                  <span
                     className="text-[10px] sm:text-[11.5px] font-normal text-neutral-300 font-['Lexend'] tracking-wide truncate block text-right drop-shadow-md select-none max-w-[280px] sm:max-w-[400px]"
                     title={photoCaption.trim()}
                   >
@@ -3400,7 +3815,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 ) : null}
 
                 {/* Video control overlay button in preview */}
-                {mediaType === 'video' && (
+                {mediaType === "video" && (
                   <button
                     type="button"
                     onClick={() => {
@@ -3417,7 +3832,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     className="p-1.5 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm transition-colors cursor-pointer border border-white/20 shrink-0"
                     title="Pausar / Reproducir video"
                   >
-                    {isVideoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    {isVideoPlaying ? (
+                      <Pause className="w-3.5 h-3.5" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5" />
+                    )}
                   </button>
                 )}
               </div>
@@ -3426,9 +3845,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
           {/* Export Action Buttons */}
           <div className="space-y-2.5 pt-2">
-            
             {/* Primary: Export Video or Export PNG depending on mediaType */}
-            {mediaType === 'video' ? (
+            {mediaType === "video" ? (
               // La exportación se compone íntegramente en el navegador (MediaRecorder
               // sobre el canvas compositor): sin servidor, sin subir el archivo.
               <button
@@ -3442,7 +3860,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span>
                   {isRecordingVideo
                     ? `Exportando video… ${recordingProgress}%`
-                    : 'Exportar Video 4:5 (en tu navegador)'}
+                    : "Exportar Video 4:5 (en tu navegador)"}
                 </span>
               </button>
             ) : (
@@ -3454,14 +3872,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               >
                 <Download className="w-4 h-4" />
                 <span>
-                  {isExporting ? 'Procesando imagen 4:5...' : 'Descargar Imagen PNG (1080×1350)'}
+                  {isExporting
+                    ? "Procesando imagen 4:5..."
+                    : "Descargar Imagen PNG (1080×1350)"}
                 </span>
               </button>
             )}
 
             {/* Secondary actions */}
             <div className="grid grid-cols-2 gap-2">
-              {mediaType === 'video' ? (
+              {mediaType === "video" ? (
                 <>
                   <button
                     type="button"
@@ -3477,8 +3897,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     onClick={handleCopyToClipboard}
                     className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copySuccess ? '¡Copiado!' : 'Copiar PNG'}</span>
+                    {copySuccess ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{copySuccess ? "¡Copiado!" : "Copiar PNG"}</span>
                   </button>
                 </>
               ) : (
@@ -3488,23 +3912,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     onClick={handleCopyToClipboard}
                     className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copySuccess ? '¡Copiado!' : 'Copiar PNG'}</span>
+                    {copySuccess ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{copySuccess ? "¡Copiado!" : "Copiar PNG"}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setTitle('Oriente Medio,\nen una nueva fase\nde incertidumbre');
-                      setDescription('La escalada de tensiones entre Israel e Irán reconfigura el tablero regional y pone a prueba la estabilidad global.');
-                      setCategory('GEOPOLÍTICA');
+                      setTitle(
+                        "Oriente Medio,\nen una nueva fase\nde incertidumbre",
+                      );
+                      setDescription(
+                        "La escalada de tensiones entre Israel e Irán reconfigura el tablero regional y pone a prueba la estabilidad global.",
+                      );
+                      setCategory("GEOPOLÍTICA");
                       setSelectedCountries([
-                        { name: 'Israel', code: 'IL', flag: '🇮🇱' },
-                        { name: 'Irán', code: 'IR', flag: '🇮🇷' }
+                        { name: "Israel", code: "IL", flag: "🇮🇱" },
+                        { name: "Irán", code: "IR", flag: "🇮🇷" },
                       ]);
-                      setFilter('bw-high');
+                      setFilter("bw-high");
                       setFontSizeTitle(62);
                       setFontSizeDesc(30);
-                      showToast('Diseño restablecido al ejemplo oficial de referencia');
+                      showToast(
+                        "Diseño restablecido al ejemplo oficial de referencia",
+                      );
                     }}
                     className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-neutral-400 hover:text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
@@ -3516,18 +3950,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
-              {mediaType === 'video' && exportClipSeconds !== null && (
+              {mediaType === "video" && exportClipSeconds !== null && (
                 <>
-                  Se exportarán <strong className="text-white font-semibold">{exportClipSeconds} s</strong> de
-                  video{maxVideoDuration > 0 ? ` (duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»)` : ''}.
+                  Se exportarán{" "}
+                  <strong className="text-white font-semibold">
+                    {exportClipSeconds} s
+                  </strong>{" "}
+                  de video
+                  {maxVideoDuration > 0
+                    ? ` (duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»)`
+                    : ""}
+                  .
                   <br />
                 </>
               )}
-              Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp.
-              {mediaType === 'video' && ' El video se compone en tu navegador: no se sube a ningún servidor.'}
+              Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter /
+              X y estados de WhatsApp.
+              {mediaType === "video" &&
+                " El video se compone en tu navegador: no se sube a ningún servidor."}
             </p>
           </div>
-
         </div>
       </div>
 
@@ -3544,23 +3986,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 Exportando Video BlackNews 4:5
               </h3>
               <p className="text-xs text-neutral-400">
-                {recordingPaused
-                  ? '⏸ Pausada: vuelve a la pestaña de BlackNews para continuar.'
-                  : (
+                {recordingPaused ? (
+                  "⏸ Pausada: vuelve a la pestaña de BlackNews para continuar."
+                ) : (
                   <>
-                    {recordingProgress < 30 && 'Preparando overlay tipográfico 1080×1350...'}
-                    {recordingProgress >= 30 && recordingProgress < 65 && (fastExport ? 'Codificando con aceleración de hardware…' : 'Componiendo fotogramas en tu navegador...')}
-                    {recordingProgress >= 65 && recordingProgress < 90 && (fastExport ? 'Codificando audio y empaquetando el MP4…' : 'Grabando video y audio en tiempo real...')}
-                    {recordingProgress >= 90 && 'Finalizando archivo y descargando...'}
+                    {recordingProgress < 30 &&
+                      "Preparando overlay tipográfico 1080×1350..."}
+                    {recordingProgress >= 30 &&
+                      recordingProgress < 65 &&
+                      (fastExport
+                        ? "Codificando con aceleración de hardware…"
+                        : "Componiendo fotogramas en tu navegador...")}
+                    {recordingProgress >= 65 &&
+                      recordingProgress < 90 &&
+                      (fastExport
+                        ? "Codificando audio y empaquetando el MP4…"
+                        : "Grabando video y audio en tiempo real...")}
+                    {recordingProgress >= 90 &&
+                      "Finalizando archivo y descargando..."}
                   </>
-                  )}
+                )}
               </p>
             </div>
 
             {/* Progress bar */}
             <div className="space-y-1.5">
               <div className="w-full bg-neutral-900 rounded-full h-2.5 overflow-hidden border border-white/10">
-                <div 
+                <div
                   ref={recBarRef}
                   className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-300 rounded-full"
                   style={{ width: `${Math.max(5, recordingProgress)}%` }}
@@ -3568,17 +4020,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
               <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
                 <span>
-                  1080 × 1350 px{exportClipSeconds !== null ? ` · ${exportClipSeconds} s` : ''} · grabación local
+                  1080 × 1350 px
+                  {exportClipSeconds !== null
+                    ? ` · ${exportClipSeconds} s`
+                    : ""}{" "}
+                  · grabación local
                 </span>
-                <span ref={recPctRef} className="font-bold text-white">{recordingProgress}%</span>
+                <span ref={recPctRef} className="font-bold text-white">
+                  {recordingProgress}%
+                </span>
               </div>
             </div>
 
-            <p className="text-[11px] text-neutral-500 leading-snug">
-              {fastExport
-                ? 'Procesado acelerado en tu equipo: puedes cambiar de pestaña o minimizar, la exportación continúa en segundo plano. El video no se sube a ningún servidor.'
-                : 'Se compone y graba en tu equipo: el video no se sube a ningún servidor y no consume recursos de la web. La duración es la real del clip.'}
+            <p className="text-[11px] text-neutral-400 leading-snug">
+              Puedes minimizar el navegador o cambiar de pestaña: la exportación
+              continúa procesándose en segundo plano sin detenerse.
             </p>
+
+            <button
+              type="button"
+              onClick={handleCancelVideoExport}
+              className="w-full py-2.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all border border-red-500/30 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <X className="w-4 h-4" />
+              <span>Cancelar Exportación</span>
+            </button>
           </div>
         </div>
       )}
@@ -3594,10 +4060,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    {exportedVideoUrl ? '¡Video 4:5 Optimizado!' : '¡Post 4:5 Exportado!'}
+                    {exportedVideoUrl
+                      ? "¡Video 4:5 Optimizado!"
+                      : "¡Post 4:5 Exportado!"}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-neutral-400 font-mono">1080 × 1350 px</span>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      1080 × 1350 px
+                    </span>
                     {exportedVideoSize && (
                       <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
                         Peso: {exportedVideoSize}
@@ -3606,7 +4076,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </div>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setExportedImageUrl(null);
@@ -3622,32 +4092,40 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Generated media preview */}
             <div className="aspect-[4/5] max-h-[50vh] mx-auto rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
               {exportedVideoUrl ? (
-                <video 
-                  src={exportedVideoUrl} 
-                  controls 
-                  autoPlay 
-                  loop 
-                  className="w-full h-full object-contain" 
+                <video
+                  src={exportedVideoUrl}
+                  controls
+                  autoPlay
+                  loop
+                  className="w-full h-full object-contain"
                 />
               ) : (
-                <img 
-                  src={exportedImageUrl!} 
-                  alt="Post Exportado" 
-                  className="w-full h-full object-contain" 
+                <img
+                  src={exportedImageUrl!}
+                  alt="Post Exportado"
+                  className="w-full h-full object-contain"
                 />
               )}
             </div>
 
             {/* Action buttons */}
             <div className="grid grid-cols-2 gap-2 pt-1">
-              <a 
-                href={exportedVideoUrl || exportedImageUrl!} 
-                download={exportedVideoUrl ? exportVideoFileName : exportFileName} 
-                onClick={() => showToast(`Descargando ${exportedVideoUrl ? 'video' : 'imagen'}...`)}
+              <a
+                href={exportedVideoUrl || exportedImageUrl!}
+                download={
+                  exportedVideoUrl ? exportVideoFileName : exportFileName
+                }
+                onClick={() =>
+                  showToast(
+                    `Descargando ${exportedVideoUrl ? "video" : "imagen"}...`,
+                  )
+                }
                 className="py-2.5 px-4 bg-white text-black text-xs font-bold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>{exportedVideoUrl ? 'Descargar Video' : 'Descargar PNG'}</span>
+                <span>
+                  {exportedVideoUrl ? "Descargar Video" : "Descargar PNG"}
+                </span>
               </a>
 
               {exportedVideoUrl ? (
@@ -3665,14 +4143,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   onClick={handleCopyToClipboard}
                   className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copySuccess ? 'Copiado' : 'Copiar Imagen'}</span>
+                  {copySuccess ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copySuccess ? "Copiado" : "Copiar Imagen"}</span>
                 </button>
               )}
             </div>
 
             <p className="text-[11px] text-neutral-400 text-center font-light leading-snug">
-              Tu navegador ya inició la descarga automática. Si tu navegador bloquea descargas en ventanas emergentes, pulsa el botón blanco de arriba o haz clic derecho sobre el archivo y selecciona <strong>"Guardar {exportedVideoUrl ? 'video' : 'imagen'} como..."</strong>.
+              Tu navegador ya inició la descarga automática. Si tu navegador
+              bloquea descargas en ventanas emergentes, pulsa el botón blanco de
+              arriba o haz clic derecho sobre el archivo y selecciona{" "}
+              <strong>
+                "Guardar {exportedVideoUrl ? "video" : "imagen"} como..."
+              </strong>
+              .
             </p>
           </div>
         </div>
@@ -3696,12 +4184,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </span>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   setIsJsonModalOpen(false);
                   setJsonError(null);
-                  setJsonInputText('');
+                  setJsonInputText("");
                 }}
                 className="text-neutral-400 hover:text-white p-1.5 rounded-lg transition-colors cursor-pointer bg-white/5 hover:bg-white/10"
               >
@@ -3710,7 +4198,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             <p className="text-xs text-neutral-300 font-light leading-relaxed">
-              Pega aquí el código JSON de un post previamente copiado, o sube un archivo <code className="text-cyan-400 font-mono">.json</code> para restaurar al instante todos los campos, textos, selecciones geográficas, filtros y configuraciones.
+              Pega aquí el código JSON de un post previamente copiado, o sube un
+              archivo <code className="text-cyan-400 font-mono">.json</code>{" "}
+              para restaurar al instante todos los campos, textos, selecciones
+              geográficas, filtros y configuraciones.
             </p>
 
             {jsonError && (
@@ -3730,10 +4221,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       if (text) {
                         setJsonInputText(text);
                         setJsonError(null);
-                        showToast('✓ Texto pegado desde el portapapeles');
+                        showToast("✓ Texto pegado desde el portapapeles");
                       }
                     } catch {
-                      showToast('Usa Ctrl+V para pegar en el cuadro');
+                      showToast("Usa Ctrl+V para pegar en el cuadro");
                     }
                   }}
                   className="text-cyan-400 hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
