@@ -133,13 +133,13 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
 
   return (
     <section className="border-t border-white/10 bg-black font-sans">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-10 sm:py-12">
         <div className="flex flex-col lg:flex-row">
           {/* Mapa de puntos (sin fondo: la tierra son puntos sobre negro) */}
           <div className="lg:flex-1 min-w-0 flex items-center justify-center py-2 lg:py-0 lg:pr-8">
             <svg
               viewBox="-180 -90 360 180"
-              className="w-full h-auto max-w-[640px] mx-auto"
+              className="w-full h-auto"
               role="img"
               aria-label="Mapa de cobertura de BLACKNEWS"
             >
