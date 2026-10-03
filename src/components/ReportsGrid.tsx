@@ -2,6 +2,8 @@ import React from 'react';
 import { Share2, Bookmark, ArrowUpRight, Newspaper } from 'lucide-react';
 import { Report, CategoryId } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
+import { readTimeOf } from '../utils/readTime';
+import { ResumeBadge } from './ResumeBadge';
 
 interface ReportsGridProps {
   reports: Report[];
@@ -149,7 +151,8 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                           <div className="flex items-center gap-2 text-xs font-sans text-neutral-400 font-medium mb-2.5">
                             <span>{report.publishedAt}</span>
                             <span>·</span>
-                            <span>{report.readTime}</span>
+                            <span>{readTimeOf(report)}</span>
+                            <ResumeBadge reportId={report.id} />
                           </div>
 
                           {/* Title with Editorial Serif */}
@@ -258,7 +261,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
 
                           {/* Metadata */}
                           <div className="text-xs font-sans text-neutral-400 font-medium mb-2">
-                            {report.readTime} · {report.publishedAt}
+                            <ResumeBadge reportId={report.id} /> {readTimeOf(report)} · {report.publishedAt}
                           </div>
 
                           {/* Title with Editorial Serif */}
@@ -385,7 +388,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                     >
                       <div>
                         <div className="text-xs font-sans text-neutral-400 font-medium mb-1.5">
-                          {report.category} · {report.readTime}
+                          {report.category} · {readTimeOf(report)} <ResumeBadge reportId={report.id} />
                         </div>
                         <h4 className="font-headline text-base font-normal text-white group-hover:text-neutral-200 transition-colors line-clamp-2 leading-snug">
                           {report.title}

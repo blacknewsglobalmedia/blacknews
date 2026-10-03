@@ -64,3 +64,71 @@
   font-weight: 600;
   color: #FFFFFF;
 }
+
+/* Subrayados del lector */
+.bn-mark {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  padding: 0 2px;
+  border-radius: 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Glosario: término resaltado con tooltip al pasar el cursor */
+.gloss-term {
+  position: relative;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.45);
+  cursor: help;
+  outline: none;
+}
+.gloss-term:hover {
+  border-bottom-color: #ffffff;
+}
+.gloss-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: min(300px, 72vw);
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #d4d4d4;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 300;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  z-index: 70;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+.gloss-term:hover .gloss-tip,
+.gloss-term:focus-visible .gloss-tip {
+  opacity: 1;
+  visibility: visible;
+}
+.gloss-tip-below {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+/* Modo ligero: solo texto (se ocultan las imágenes, nunca los anuncios) */
+body.bn-lite .bn-media {
+  display: none !important;
+}
+body.bn-lite div:has(> .bn-media) {
+  display: none !important;
+}
+body.bn-lite figure:has(.bn-media) {
+  display: none !important;
+}
+body.bn-lite main video {
+  display: none !important;
+}

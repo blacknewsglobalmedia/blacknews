@@ -2,6 +2,8 @@ import React from 'react';
 import { Share2, Bookmark, ArrowRight, Sparkles, TrendingUp } from 'lucide-react';
 import { Report } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
+import { readTimeOf } from '../utils/readTime';
+import { ResumeBadge } from './ResumeBadge';
 
 interface LeadStoryProps {
   report: Report;
@@ -33,7 +35,8 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
             <span>·</span>
             <span>{report.publishedAt}</span>
             <span>·</span>
-            <span className="text-white font-medium">{report.readTime}</span>
+            <span className="text-white font-medium">{readTimeOf(report)}</span>
+            <ResumeBadge reportId={report.id} />
           </div>
         </div>
 

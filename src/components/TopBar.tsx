@@ -4,6 +4,7 @@ import {
   Bookmark,
   Share2,
   Radio,
+  ImageOff,
   PenTool,
   Menu,
   X,
@@ -27,6 +28,8 @@ interface TopBarProps {
   isStudioOpen: boolean;
   currentUser?: RedactorProfile;
   onOpenGoogleAuth?: () => void;
+  liteMode: boolean;
+  onToggleLite: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -43,6 +46,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   isStudioOpen,
   currentUser,
   onOpenGoogleAuth,
+  liteMode,
+  onToggleLite,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -134,6 +139,20 @@ export const TopBar: React.FC<TopBarProps> = ({
             <span className="hidden sm:inline">TELETIPO</span>
           </button>
           <span className="text-neutral-700">·</span>
+          <button
+            onClick={onToggleLite}
+            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
+              liteMode ? "text-white font-medium" : "text-neutral-500"
+            }`}
+            title={
+              liteMode
+                ? "Modo ligero activo: pulsar para volver a mostrar las imágenes"
+                : "Modo ligero: leer solo texto (sin imágenes)"
+            }
+          >
+            <ImageOff className="w-3 h-3" />
+            <span className="hidden sm:inline">LIGERO</span>
+          </button>
           <button
             onClick={onShareSite}
             className="hover:text-white transition-colors cursor-pointer hidden sm:inline"

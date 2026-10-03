@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Share2, 
@@ -8,12 +8,19 @@ import {
   ArrowLeft, 
   ChevronRight,
   Sparkles,
-  Check
+  Check,
+  Highlighter,
+  Trash2,
+  Copy
 } from 'lucide-react';
 import { Report } from '../types/news';
 import { AdCampaign } from '../types/ads';
 import { AdBanner } from './AdBanner';
 import { OptimizedPicture } from './OptimizedPicture';
+import { RichText } from './RichText';
+import { readTimeOf } from '../utils/readTime';
+import { getReadPct, setReadPct } from '../utils/readProgress';
+import { Highlight, getHighlights, addHighlight, removeHighlight } from '../utils/highlights';
 
 interface ReportDetailModalProps {
   report: Report | null;
@@ -45,6 +52,18 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   const [fontSizeScale, setFontSizeScale] = useState<'normal' | 'large' | 'huge'>('normal');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [resumePct, setResumePct] = useState<number | null>(null);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [selPill, setSelPill] = useState<{ text: string; x: number; y: number; below: boolean } | null>(null);
+  const [copiedHl, setCopiedHl] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
+  const pctRef = useRef(0);
+  const reportIdRef = useRef<string | null>(null);
+  const lastSaveRef = useRef(0);
+  const restoredRef = useRef<string | null>(null);
+  const selTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -52,7 +71,47 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         window.speechSynthesis.cancel();
       }
       setIsPlayingAudio(false);
+      if (reportIdRef.current) {
+        setReadPct(reportIdRef.current, pctRef.current);
+      }
+      restoredRef.current = null;
+      setSelPill(null);
     }
+  }, [isOpen, report?.id]);
+
+  // Subrayados guardados del artículo actual
+  useEffect(() => {
+    if (isOpen && report) {
+      reportIdRef.current = report.id;
+      setHighlights(getHighlights(report.id));
+    }
+  }, [isOpen, report?.id]);
+
+  // Retomar la lectura donde se quedó (y arrancar arriba al cambiar de informe)
+  useEffect(() => {
+    if (!isOpen || !report) return;
+    const id = report.id;
+    const timer = window.setTimeout(() => {
+      if (restoredRef.current === id) return;
+      restoredRef.current = id;
+      const container = scrollRef.current;
+      const art = articleRef.current;
+      if (!container || !art) return;
+      const pct = getReadPct(id);
+      const max = art.offsetTop + art.offsetHeight - container.clientHeight;
+      if (pct && max > 0) {
+        container.scrollTop = pct * max;
+        setProgress(pct);
+        pctRef.current = pct;
+        setResumePct(pct);
+        window.setTimeout(() => setResumePct(null), 3500);
+      } else {
+        container.scrollTop = 0;
+        setProgress(0);
+        pctRef.current = 0;
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
   }, [isOpen, report?.id]);
 
   if (!isOpen || !report) return null;
@@ -85,9 +144,90 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
     } catch {}
   };
 
+  const handleScroll = () => {
+    const container = scrollRef.current;
+    const art = articleRef.current;
+    if (!container || !art || !report) return;
+    const max = art.offsetTop + art.offsetHeight - container.clientHeight;
+    const pct = max > 0 ? Math.min(1, Math.max(0, container.scrollTop / max)) : 0;
+    pctRef.current = pct;
+    setProgress((prev) => (Math.abs(prev - pct) < 0.004 ? prev : pct));
+    const now = Date.now();
+    if (now - lastSaveRef.current > 500) {
+      lastSaveRef.current = now;
+      setReadPct(report.id, pct);
+    }
+    if (selPill) setSelPill(null);
+  };
+
+  const detectSelection = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !report) {
+      setSelPill(null);
+      return;
+    }
+    const text = sel.toString().trim();
+    const art = articleRef.current;
+    if (
+      text.length < 4 ||
+      text.length > 500 ||
+      !art ||
+      !sel.anchorNode ||
+      !art.contains(sel.anchorNode)
+    ) {
+      setSelPill(null);
+      return;
+    }
+    const belongs =
+      report.lead.includes(text) ||
+      report.sections.some((s) => (s.text || '').includes(text));
+    if (!belongs) {
+      setSelPill(null);
+      return;
+    }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    setSelPill({
+      text,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      below: rect.top < 72,
+    });
+  };
+
+  const scheduleSelection = (delay: number) => {
+    if (selTimerRef.current) window.clearTimeout(selTimerRef.current);
+    selTimerRef.current = window.setTimeout(detectSelection, delay);
+  };
+
+  const saveSelection = () => {
+    if (!selPill || !report) return;
+    addHighlight(report.id, selPill.text);
+    setHighlights(getHighlights(report.id));
+    window.getSelection()?.removeAllRanges();
+    setSelPill(null);
+  };
+
+  const copyHighlight = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedHl(id);
+      window.setTimeout(() => setCopiedHl(null), 1500);
+    } catch {}
+  };
+
+  // Mejores relacionados: misma categoría y etiquetas compartidas primero
   const relatedReports = allReports
     .filter((r) => r.id !== report.id)
-    .slice(0, 3);
+    .map((r) => ({
+      r,
+      score:
+        (r.category === report.category ? 3 : 0) +
+        r.tags.filter((t) => report.tags.includes(t)).length * 2 +
+        (r.trending ? 0.5 : 0),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((item) => item.r);
 
   const fontSizeClass = {
     normal: 'text-base sm:text-[1.08rem] leading-[1.8]',
@@ -95,10 +235,18 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
     huge: 'text-xl sm:text-[1.38rem] leading-[1.9]',
   }[fontSizeScale];
 
+  // Términos del glosario ya resaltados en este render (1ª aparición por informe)
+  const seenTerms = new Set<string>();
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black flex flex-col justify-start font-['Lexend',sans-serif]">
+    <div ref={scrollRef} onScroll={handleScroll} className="fixed inset-0 z-50 overflow-y-auto bg-black flex flex-col justify-start font-['Lexend',sans-serif]">
       {/* Top Reader Bar: Minimalist & Refined */}
       <div className="sticky top-0 z-30 w-full bg-black/95 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+        {/* Barra de progreso de lectura */}
+        <div
+          className="absolute top-0 left-0 h-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)] transition-[width] duration-150 ease-out"
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
@@ -211,15 +359,62 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         </div>
       </div>
 
+      {/* Aviso de reanudación de lectura */}
+      {resumePct !== null && (
+        <div className="fixed left-1/2 top-16 z-40 bg-white text-black text-[11px] font-semibold uppercase tracking-wider px-3.5 py-2 rounded-md shadow-xl flex items-center gap-2 pointer-events-none"
+          style={{ transform: 'translateX(-50%)' }}
+        >
+          <Bookmark className="w-3.5 h-3.5" />
+          Retomamos tu lectura · {Math.round(resumePct * 100)}%
+        </div>
+      )}
+
+      {/* Menú flotante de subrayado */}
+      {selPill && (
+        <div
+          className="fixed z-[60] flex items-center gap-1 bg-white text-black rounded-md shadow-xl px-1 py-1"
+          style={{
+            left: selPill.x,
+            top: selPill.y,
+            transform: `translate(-50%, ${selPill.below ? '14px' : 'calc(-100% - 10px)'})`,
+          }}
+        >
+          <button
+            onClick={saveSelection}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider hover:bg-neutral-200 rounded cursor-pointer"
+          >
+            <Highlighter className="w-3.5 h-3.5" />
+            SUBRAYAR
+          </button>
+          <button
+            onClick={() => {
+              setSelPill(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="p-1.5 hover:bg-neutral-200 rounded cursor-pointer"
+            title="Cancelar selección"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Main Article Container */}
-      <article className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-16 w-full">
+      <article
+        ref={articleRef}
+        onMouseDown={() => setSelPill(null)}
+        onMouseUp={() => scheduleSelection(10)}
+        onKeyUp={() => scheduleSelection(10)}
+        onTouchEnd={() => scheduleSelection(400)}
+        className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-16 w-full"
+      >
         {/* Unboxed Metadata */}
         <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-sans tracking-wide text-neutral-400 uppercase mb-4 font-medium">
           <span className="text-white font-semibold">{report.category}</span>
           <span>·</span>
           <span>{report.publishedAt}</span>
           <span>·</span>
-          <span>{report.readTime}</span>
+          <span>{readTimeOf(report)}</span>
           {report.exclusive && (
             <>
               <span>·</span>
@@ -278,7 +473,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         {/* Lead with drop cap */}
         <div className="mb-10">
           <p className={`${fontSizeClass} text-neutral-100 font-light editorial-drop-cap font-sans`}>
-            {report.lead}
+            <RichText text={report.lead} seen={seenTerms} highlights={highlights} />
           </p>
         </div>
 
@@ -295,7 +490,9 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
                   <span className="font-mono text-xs sm:text-sm font-medium text-neutral-400 mt-0.5 tabular-nums">
                     0{idx + 1}.
                   </span>
-                  <span className="font-light">{point}</span>
+                  <span className="font-light">
+                    <RichText text={point} seen={seenTerms} highlights={highlights} />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -357,7 +554,11 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             }
             return (
               <p key={idx} className={`${fontSizeClass} font-light text-neutral-200`}>
-                {sec.text}
+                <RichText
+                  text={sec.text || ''}
+                  seen={seenTerms}
+                  highlights={highlights}
+                />
               </p>
             );
           })}
@@ -379,6 +580,49 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Subrayados del lector */}
+        {highlights.length > 0 && (
+          <div className="mt-10 border border-white/10 rounded-lg p-5 font-sans">
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-white uppercase mb-4">
+              <Highlighter className="w-4 h-4 text-neutral-300" />
+              TUS SUBRAYADOS · {highlights.length}
+            </div>
+            <ul className="space-y-3">
+              {highlights.map((h) => (
+                <li
+                  key={h.id}
+                  className="flex items-start justify-between gap-3 text-sm border-b border-white/5 pb-3 last:border-0 last:pb-0"
+                >
+                  <span className="bn-mark flex-1 font-light">{h.text}</span>
+                  <span className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => copyHighlight(h.text, h.id)}
+                      className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                      title="Copiar subrayado"
+                    >
+                      {copiedHl === h.id ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        removeHighlight(h.id);
+                        setHighlights(getHighlights(report.id));
+                      }}
+                      className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                      title="Eliminar subrayado"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Sponsor Banner at Article Conclusion */}
         <AdBanner

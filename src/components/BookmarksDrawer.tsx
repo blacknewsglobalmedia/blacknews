@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Trash2, ArrowUpRight, Bookmark } from 'lucide-react';
 import { Report } from '../types/news';
+import { readTimeOf } from '../utils/readTime';
 
 interface BookmarksDrawerProps {
   isOpen: boolean;
@@ -62,7 +63,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                     }}
                   >
                     <div className="text-xs font-sans text-neutral-400 font-medium mb-1">
-                      {rep.category} · {rep.readTime}
+                      {rep.category} · {readTimeOf(rep)}
                     </div>
                     <h3 className="font-headline text-base sm:text-lg font-normal text-white group-hover:text-neutral-200 transition-colors leading-snug">
                       {rep.title}

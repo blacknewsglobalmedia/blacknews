@@ -69,7 +69,7 @@ export const OptimizedPicture: React.FC<OptimizedPictureProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`relative overflow-hidden bg-neutral-950 select-none ${className}`}
+      className={`relative overflow-hidden bg-neutral-950 select-none bn-media ${className}`}
       style={{ aspectRatio }}
     >
       {/* 20px Tiny Blur Placeholder (Instant visual feedback & zero CLS) */}

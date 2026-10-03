@@ -297,6 +297,17 @@ export default function App() {
     }
   });
 
+  // Modo ligero: ocultar imágenes para leer solo texto (conexiones lentas)
+  const [liteMode, setLiteMode] = useState(
+    () => localStorage.getItem("blacknews_lite") === "1",
+  );
+  useEffect(() => {
+    document.body.classList.toggle("bn-lite", liteMode);
+    try {
+      localStorage.setItem("blacknews_lite", liteMode ? "1" : "0");
+    } catch {}
+  }, [liteMode]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -778,6 +789,8 @@ export default function App() {
         isStudioOpen={currentView === "redaccion" && canAccessInternalMedia}
         currentUser={currentUser}
         onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
+        liteMode={liteMode}
+        onToggleLite={() => setLiteMode((v) => !v)}
       />
 
       {/* Real-time breaking ticker */}

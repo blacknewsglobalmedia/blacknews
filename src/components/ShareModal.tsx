@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Share2, MessageSquare, Send, Globe, Sparkles } from 'lucide-react';
 import { Report } from '../types/news';
+import { readTimeOf } from '../utils/readTime';
 
 interface ShareModalProps {
   report: Report | null;
@@ -135,7 +136,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         {report ? (
           <div className="mb-6 pb-4 border-b border-white/10">
             <div className="text-xs font-sans tracking-wide text-neutral-400 uppercase mb-1.5 font-medium">
-              {report.category} · {report.readTime}
+              {report.category} · {readTimeOf(report)}
             </div>
             <h3 className="font-headline text-lg sm:text-xl font-normal text-white line-clamp-2 leading-snug">
               {report.title}
