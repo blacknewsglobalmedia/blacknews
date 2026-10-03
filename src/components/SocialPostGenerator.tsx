@@ -207,6 +207,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
   const [recordingPaused, setRecordingPaused] = useState(false);
+  const [fastExport, setFastExport] = useState(false); // ruta WebCodecs (sin tiempo real)
   const [videoQuality, setVideoQuality] = useState<'social' | 'compact' | 'hq'>('social');
   const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm'>('mp4');
   const [maxVideoDuration, setMaxVideoDuration] = useState<number>(0); // 5s, 10s, 15s, 30s, 60s or 0 (full)
@@ -648,7 +649,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     targetCanvas: HTMLCanvasElement,
     mediaElement?: HTMLImageElement | HTMLVideoElement,
     cachedFlags?: Array<{ code: string; img: HTMLImageElement | null; text: string }>,
-    isOverlayOnly = false
+    isOverlayOnly = false,
+    // Fuente externa (p. ej. un VideoFrame de WebCodecs) con sus dimensiones y
+    // rotación declaradas: el elemento <video> aplica la rotación solo, un
+    // fotograma decodificado llega "en crudo" y hay que girarlo al dibujar.
+    frameOverride?: { source: CanvasImageSource; width: number; height: number; rotation?: number }
   ): Promise<void> => {
     const W = 1080;
     const H = 1350;
@@ -867,7 +872,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const mediaTopY = Math.round(Math.max(curY, 520));
     const mediaHeight = H - mediaTopY;
 
-    if (mediaElement && !isOverlayOnly) {
+    if ((mediaElement || frameOverride) && !isOverlayOnly) {
       ctx.save();
       const canvasFilter = getCanvasFilterString();
       // Identidad (brillo/contraste al 100%): saltarnos ctx.filter acelera mucho
@@ -876,26 +881,59 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ctx.filter = canvasFilter;
       }
 
-      const elW = (mediaElement as HTMLVideoElement).videoWidth || (mediaElement as HTMLImageElement).naturalWidth || 1280;
-      const elH = (mediaElement as HTMLVideoElement).videoHeight || (mediaElement as HTMLImageElement).naturalHeight || 720;
+      let elW: number;
+      let elH: number;
+      if (frameOverride) {
+        elW = frameOverride.width;
+        elH = frameOverride.height;
+      } else {
+        elW = (mediaElement as HTMLVideoElement).videoWidth || (mediaElement as HTMLImageElement).naturalWidth || 1280;
+        elH = (mediaElement as HTMLVideoElement).videoHeight || (mediaElement as HTMLImageElement).naturalHeight || 720;
+      }
+      const rot = frameOverride?.rotation ?? 0;
+      // Con giro, las dimensiones vistas por el usuario intercambian ancho/alto
+      const dispW = rot % 180 === 90 ? elH : elW;
+      const dispH = rot % 180 === 90 ? elW : elH;
 
       const targetRatio = W / mediaHeight;
-      const sourceRatio = elW / elH;
+      const sourceRatio = dispW / dispH;
 
-      let sx = 0, sy = 0, sw = elW, sh = elH;
+      let sx = 0, sy = 0, sw = dispW, sh = dispH;
       if (sourceRatio > targetRatio) {
-        sw = elH * targetRatio;
-        sx = (elW - sw) / 2;
+        sw = dispH * targetRatio;
+        sx = (dispW - sw) / 2;
       } else {
-        sh = elW / targetRatio;
-        sy = (elH - sh) / 2;
+        sh = dispW / targetRatio;
+        sy = (dispH - sh) / 2;
       }
 
-      ctx.drawImage(
-        mediaElement,
-        sx, sy, sw, sh,
-        0, mediaTopY, W, mediaHeight
-      );
+      const src = (frameOverride ? frameOverride.source : mediaElement!) as CanvasImageSource;
+      if (!rot) {
+        ctx.drawImage(src, sx, sy, sw, sh, 0, mediaTopY, W, mediaHeight);
+      } else {
+        // El recorte se expresa en píxeles del origen sin girar y el dibujo se
+        // hace girando el sistema al centro del rectángulo destino.
+        let csx = sx, csy = sy, csw = sw, csh = sh;
+        if (rot === 90) {
+          csx = sy;
+          csy = dispW - sx - sw;
+          csw = sh;
+          csh = sw;
+        } else if (rot === 180) {
+          csx = dispW - sx - sw;
+          csy = dispH - sy - sh;
+        } else if (rot === 270) {
+          csx = dispH - sy - sh;
+          csy = sx;
+          csw = sh;
+          csh = sw;
+        }
+        ctx.translate(W / 2, mediaTopY + mediaHeight / 2);
+        ctx.rotate((rot * Math.PI) / 180);
+        const dw = rot % 180 === 90 ? mediaHeight : W;
+        const dh = rot % 180 === 90 ? W : mediaHeight;
+        ctx.drawImage(src, csx, csy, csw, csh, -dw / 2, -dh / 2, dw, dh);
+      }
       ctx.restore();
     }
 
@@ -1092,10 +1130,491 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // ─── Exportación de video 4:5 100% en el navegador ─────────────────────────
-  // El post (frame del video + overlay tipográfico) se graba directamente desde
-  // el canvas compositor con MediaRecorder. Nada se sube a un servidor: el video
-  // original no sale del equipo del usuario y el proceso no consume recursos
-  // serverless (el antiguo endpoint FFmpeg /api/video/* sigue retirado → 410).
+  // El post (frame del video + overlay tipográfico) se compone en un canvas y se
+  // exporta en el equipo del usuario: nada se sube a un servidor (el antiguo
+  // endpoint FFmpeg /api/video/* sigue retirado → 410). Hay dos rutas:
+  //   1) RUTA RÁPIDA (WebCodecs): mp4box demuxea el MP4, se decodifica y compone
+  //      cada fotograma en un canvas dedicado y se re-codifica H.264+AAC con el
+  //      acelerador de hardware. No usa requestAnimationFrame ni MediaRecorder,
+  //      así que CONTINÚA aunque la pestaña pase a segundo plano o la ventana
+  //      esté tapada, y va más rápido que el tiempo real.
+  //   2) RUTA CLÁSICA (MediaRecorder): grabación en tiempo real con sus
+  //      protecciones de segundo plano. Es el respaldo para WebM, archivos no
+  //      MP4 y navegadores sin WebCodecs.
+  const exportVideoFast = async (): Promise<'done' | 'unsupported'> => {
+    if (
+      typeof VideoDecoder === 'undefined' ||
+      typeof VideoEncoder === 'undefined' ||
+      typeof AudioEncoder === 'undefined'
+    ) {
+      return 'unsupported';
+    }
+
+    // Bytes originales del vídeo: el archivo subido o, si no, su object URL.
+    let raw: ArrayBuffer | null = null;
+    try {
+      const uploaded = uploadedVideoFileRef.current;
+      if (uploaded) {
+        raw = await uploaded.arrayBuffer();
+      } else if (mediaSrc) {
+        raw = await (await fetch(mediaSrc)).arrayBuffer();
+      }
+    } catch {
+      raw = null;
+    }
+    if (!raw || raw.byteLength < 256) return 'unsupported';
+    // Solo MP4/MOV (primer átomo "ftyp"). WebM y demás → ruta clásica.
+    try {
+      if (new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== 'ftyp') return 'unsupported';
+    } catch {
+      return 'unsupported';
+    }
+
+    setIsRecordingVideo(true);
+    setFastExport(true);
+    setRecordingPaused(false);
+    setRecordingProgress(4);
+    isRecordingRef.current = true;
+    try {
+      videoRef.current?.pause();
+    } catch {}
+    setIsVideoPlaying(false);
+
+    let decoder: VideoDecoder | null = null;
+    let encoder: VideoEncoder | null = null;
+    let audioEncoder: AudioEncoder | null = null;
+    // Tiempos por fase: visibles en DevTools con nivel "Verbose" ([export-rapida])
+    const tStart = performance.now();
+    const snap = (label: string) =>
+      console.debug(`[export-rapida] ${label}: ${Math.round(performance.now() - tStart)}ms`);
+
+    try {
+      const { createFile } = await import('mp4box');
+      const { Muxer, ArrayBufferTarget } = await import('mp4-muxer');
+
+      // ── 1. Demux: muestras de vídeo en orden de decodificación ──
+      const mp4 = createFile(true);
+      const samples: Array<{ cts: number; duration: number; is_sync: boolean; data: Uint8Array }> = [];
+      let readyInfo: any = null;
+      let demuxError: string | null = null;
+      mp4.onError = (e) => {
+        demuxError = String(e);
+      };
+      mp4.onReady = (ready) => {
+        readyInfo = ready;
+        const vt = (ready as any).tracks?.find((t: any) => t.type === 'video');
+        if (vt) {
+          // Extrae todas las muestras de golpe (se dispara dentro de appendBuffer)
+          mp4.setExtractionOptions(vt.id, null, { nbSamples: 1000000 });
+          mp4.start();
+        }
+      };
+      mp4.onSamples = (_id, _user, batch) => {
+        for (const s of batch as any[]) samples.push(s);
+      };
+      const buf = raw as ArrayBuffer & { fileStart: number };
+      buf.fileStart = 0;
+      mp4.appendBuffer(buf);
+      if (typeof (mp4 as any).flush === 'function') (mp4 as any).flush();
+      if (demuxError) throw new Error(demuxError);
+      snap('demux');
+
+      const vTrack = readyInfo?.tracks?.find((t: any) => t.type === 'video');
+      if (!vTrack || samples.length < 2 || !/^avc1/.test(String(vTrack.codec))) return 'unsupported';
+
+      // avcC → descripción binaria que necesita VideoDecoder (ISO 14496-15)
+      const stsd = (mp4.getTrackById(vTrack.id) as any)?.mdia?.minf?.stbl?.stsd;
+      const avcCBox = stsd?.entries?.[0]?.avcC;
+      // mp4box v2 envuelve cada NALU en { length, data } donde data son los bytes
+      const toNalBytes = (nal: unknown): Uint8Array => {
+        const anyNal = nal as any;
+        const src = anyNal instanceof Uint8Array || Array.isArray(anyNal) ? anyNal : anyNal?.data;
+        if (src instanceof Uint8Array) return src;
+        if (Array.isArray(src)) return Uint8Array.from(src);
+        if (src && typeof src === 'object') return Uint8Array.from(Object.values(src));
+        return new Uint8Array(0);
+      };
+      const spsList = ((avcCBox?.SPS ?? []) as unknown[]).map(toNalBytes).filter((b) => b.length > 0);
+      const ppsList = ((avcCBox?.PPS ?? []) as unknown[]).map(toNalBytes).filter((b) => b.length > 0);
+      if (spsList.length === 0) return 'unsupported';
+      const descSize =
+        7 + spsList.reduce((n, s) => n + 2 + s.length, 0) + ppsList.reduce((n, p) => n + 2 + p.length, 0);
+      const description = new Uint8Array(descSize);
+      let dOff = 0;
+      description[dOff++] = 1; // configurationVersion
+      description[dOff++] = avcCBox.AVCProfileIndication ?? 0x4d;
+      description[dOff++] = avcCBox.profile_compatibility ?? 0x00;
+      description[dOff++] = avcCBox.AVCLevelIndication ?? 0x1f;
+      description[dOff++] = 0xff; // reservado + lengthSizeMinusOne = 3
+      description[dOff++] = 0xe0 | spsList.length;
+      for (const nal of spsList) {
+        description[dOff++] = (nal.length >> 8) & 0xff;
+        description[dOff++] = nal.length & 0xff;
+        description.set(nal, dOff);
+        dOff += nal.length;
+      }
+      description[dOff++] = ppsList.length;
+      for (const nal of ppsList) {
+        description[dOff++] = (nal.length >> 8) & 0xff;
+        description[dOff++] = nal.length & 0xff;
+        description.set(nal, dOff);
+        dOff += nal.length;
+      }
+
+      // Rotación declarada en tkhd: los móviles guardan el vídeo "acostado" y el
+      // <video> la aplica solo; los fotogramas decodificados llegan en crudo.
+      const norm = (v: number) => (v > 0x7fffffff ? v - 0x100000000 : v);
+      const m: ArrayLike<number> | undefined = (mp4.getTrackById(vTrack.id) as any)?.tkhd?.matrix;
+      let rot = 0;
+      if (m && m.length >= 5) {
+        const a = norm(Number(m[0]));
+        const b = norm(Number(m[1]));
+        const c = norm(Number(m[3]));
+        const d = norm(Number(m[4]));
+        // ISO 14496: x' = a·x + c·y ; y' = b·x + d·y (píxeles que ve el <video>).
+        // b=−1,c=+1 ⇒ la derecha del origen queda arriba = giro antihorario ⇒
+        // ctx.rotate(270°); b=+1 es el sentido contrario ⇒ ctx.rotate(90°).
+        if (a === 0 && b === -65536 && c === 65536 && d === 0) rot = 270;
+        else if (a === -65536 && b === 0 && c === 0 && d === -65536) rot = 180;
+        else if (a === 0 && b === 65536 && c === -65536 && d === 0) rot = 90;
+      }
+
+      // ── 2. Ventana de exportación (mismo criterio que la ruta clásica) ──
+      const ts = Number(vTrack.timescale) || 90000;
+      const srcDur = Number(vTrack.duration) / ts;
+      const duration = Number.isFinite(srcDur) && srcDur > 0 ? srcDur : videoDuration;
+      const start = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
+      let end = trimEnd > start && duration > 0 ? Math.min(trimEnd, duration) : duration;
+      if (maxVideoDuration > 0) end = Math.min(end, start + maxVideoDuration * videoSpeed);
+      if (!(end > start)) {
+        throw new Error('El recorte de video no es válido: revisa inicio y fin.');
+      }
+      const speed = videoSpeed > 0 ? videoSpeed : 1;
+      const outDur = (end - start) / speed;
+
+      const inRange = samples.filter((s) => {
+        const t = s.cts / ts;
+        return t >= start - 0.05 && t <= end + 0.05;
+      });
+      if (inRange.length < 2) throw new Error('No hay fotogramas en el rango seleccionado.');
+      const outUs = (s: (typeof inRange)[number]) =>
+        Math.max(0, Math.round((s.cts / ts - start) * (1 / speed) * 1e6));
+      // Con B-frames el orden de llegada no es el de presentación: se reordena
+      // por timestamp para que el archivo final no salga con fotogramas trocados.
+      const sortedPts = inRange.map(outUs).sort((a, b) => a - b);
+      const syncPts = new Set<number>();
+      for (const s of inRange) if (s.is_sync) syncPts.add(outUs(s));
+      syncPts.add(sortedPts[0]);
+
+      // ── 3. Audio: decodificación completa + corte/velocidad en modo offline ──
+      let renderedAudio: AudioBuffer | null = null;
+      if (!isMuted) {
+        try {
+          const decoderCtx = new OfflineAudioContext(1, 1, 44100);
+          const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
+          const outRate = 48000;
+          const oac = new OfflineAudioContext(2, Math.max(1, Math.ceil(outDur * outRate)), outRate);
+          const srcNode = oac.createBufferSource();
+          srcNode.buffer = fullAudio;
+          srcNode.playbackRate.value = speed;
+          srcNode.connect(oac.destination);
+          srcNode.start(0, start);
+          renderedAudio = await oac.startRendering();
+        } catch {
+          renderedAudio = null; // sin audio exportable → el MP4 sale mudo
+        }
+      }
+      const hasAudio = !!renderedAudio && renderedAudio.length > 0;
+      snap('audio');
+
+      // Primer error capturado (codificadores, muxer, decoder…): se propaga a
+      // todas las esperas y aborta el bucle para caer a la ruta clásica.
+      let fail: Error | null = null;
+      const failWith = (e: unknown) => {
+        if (!fail) fail = e instanceof Error ? e : new Error(String(e));
+      };
+
+      // Esperas orientadas a EVENTOS: nunca a timers, porque Chrome limita los
+      // temporizadores a 1 Hz con la pestaña oculta y eso paralizaría la
+      // exportación en segundo plano. Los eventos decodificador/codificador
+      // despiertan al instante; el timer solo es salvaguarda.
+      const waiters: Array<() => void> = [];
+      const notify = () => {
+        while (waiters.length) waiters.shift()!();
+      };
+      const hardStop = performance.now() + Math.max(45000, outDur * 1000 + 45000);
+      const waitWhile = async (cond: () => boolean): Promise<void> => {
+        while (cond()) {
+          if (fail) throw fail;
+          if (performance.now() > hardStop) {
+            throw new Error('La exportación acelerada superó su tiempo máximo.');
+          }
+          await new Promise<void>((resolve) => {
+            const timer = window.setTimeout(resolve, 250);
+            waiters.push(() => {
+              window.clearTimeout(timer);
+              resolve();
+            });
+          });
+        }
+        if (fail) throw fail;
+      };
+
+      // ── 4. Muxer + codificadores por hardware ──
+      const target = new ArrayBufferTarget();
+      const muxer = new Muxer({
+        target,
+        video: { codec: 'avc', width: 1080, height: 1350, frameRate: 30 },
+        ...(hasAudio ? { audio: { codec: 'aac' as const, sampleRate: 48000, numberOfChannels: 2 } } : {}),
+        fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
+      });
+
+      const bitrate = videoQuality === 'hq' ? 6_000_000 : videoQuality === 'compact' ? 1_500_000 : 3_000_000;
+      let videoConfig: VideoEncoderConfig | null = null;
+      for (const codecName of ['avc1.640028', 'avc1.4D4028', 'avc1.64002A']) {
+        try {
+          const candidate: VideoEncoderConfig = {
+            codec: codecName,
+            width: 1080,
+            height: 1350,
+            bitrate,
+            framerate: 30,
+            latencyMode: 'realtime',
+            avc: { format: 'avc' },
+          };
+          const support = await VideoEncoder.isConfigSupported(candidate);
+          if (support.supported) {
+            videoConfig = support.config;
+            break;
+          }
+        } catch {
+          // probamos el siguiente códec
+        }
+      }
+      if (!videoConfig) return 'unsupported';
+
+      encoder = new VideoEncoder({
+        output: (chunk, meta) => {
+          try {
+            muxer.addVideoChunk(chunk, meta);
+          } catch (e) {
+            failWith(e);
+          }
+          notify();
+        },
+        error: failWith,
+      });
+      encoder.configure(videoConfig);
+
+      if (hasAudio) {
+        audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => {
+            try {
+              muxer.addAudioChunk(chunk, meta);
+            } catch (e) {
+              failWith(e);
+            }
+            notify();
+          },
+          error: failWith,
+        });
+        audioEncoder.configure({
+          codec: 'mp4a.40.2',
+          sampleRate: 48000,
+          numberOfChannels: 2,
+          bitrate: 96_000,
+        });
+      }
+
+      // ── 5. Canvas dedicado (no pisa la vista previa) + calentamiento ──
+      const canvas = document.createElement('canvas');
+      canvas.width = 1080;
+      canvas.height = 1350;
+      const cachedFlags = await Promise.all(
+        selectedCountries.map(async (c) => ({
+          code: c.code,
+          img: countryFormat !== 'names' ? await loadFlagImage(c.code) : null,
+          text: countryFormat === 'flags-codes' ? c.code : c.name.toUpperCase(),
+        }))
+      );
+      await renderToCanvas(canvas, undefined, cachedFlags); // fuentes y overlay base
+      setRecordingProgress(10);
+      snap('warmup');
+
+      // ── 6. Bucle decodificar → componer → codificar (reordenando B-frames) ──
+      let encoded = 0;
+      let nextIdx = 0;
+      let draining = false;
+      const pending = new Map<number, VideoFrame[]>();
+      const progress = { at: 0, pct: 10, phase: 0 };
+      const updateProgress = () => {
+        const pct = Math.min(99, 10 + Math.round((encoded / inRange.length) * 85));
+        const now = performance.now();
+        if (pct > progress.pct && now - progress.at > 200) {
+          progress.at = now;
+          progress.pct = pct;
+          if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
+          if (recBarRef.current) recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+          const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
+          if (phase !== progress.phase) {
+            progress.phase = phase;
+            setRecordingProgress(pct);
+          }
+        }
+      };
+
+      const encodeFrame = async (frame: VideoFrame) => {
+        if (fail) throw fail;
+        await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 10);
+        const frameTs = frame.timestamp;
+        await renderToCanvas(canvas, undefined, cachedFlags, false, {
+          source: frame,
+          // Dimensiones EN CRUDO (sin girar): renderToCanvas hace el swap de
+          // dispW/dispH él mismo cuando rotation es 90/270 (evita doble giro).
+          width: frame.displayWidth,
+          height: frame.displayHeight,
+          rotation: rot,
+        });
+        const out = new VideoFrame(canvas, {
+          timestamp: frameTs,
+          duration: Math.max(1, Math.round(frame.duration ?? 33333)),
+        });
+        try {
+          (encoder as VideoEncoder).encode(out, { keyFrame: syncPts.has(frameTs) });
+        } finally {
+          out.close();
+          frame.close();
+        }
+        encoded += 1;
+        updateProgress();
+      };
+
+      const pump = () => {
+        if (draining) return;
+        draining = true;
+        void (async () => {
+          try {
+            while (nextIdx < sortedPts.length) {
+              const key = sortedPts[nextIdx];
+              const arr = pending.get(key);
+              if (!arr || arr.length === 0) break; // aún no llega el siguiente pts
+              const frame = arr.shift()!;
+              if (arr.length === 0) pending.delete(key);
+              nextIdx += 1;
+              await encodeFrame(frame);
+            }
+          } catch (e) {
+            failWith(e);
+          } finally {
+            draining = false;
+            notify();
+            if (nextIdx < sortedPts.length && pending.has(sortedPts[nextIdx])) pump();
+          }
+        })();
+      };
+
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          const key = frame.timestamp;
+          const arr = pending.get(key);
+          if (arr) arr.push(frame);
+          else pending.set(key, [frame]);
+          pump();
+          notify();
+        },
+        error: failWith,
+      });
+      decoder.configure({ codec: String(vTrack.codec), description });
+
+      for (const s of inRange) {
+        await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
+        (decoder as VideoDecoder).decode(
+          new EncodedVideoChunk({
+            type: s.is_sync ? 'key' : 'delta',
+            timestamp: outUs(s),
+            duration: Math.max(1, Math.round((s.duration / ts) * (1 / speed) * 1e6)),
+            data: s.data,
+          })
+        );
+        pump();
+      }
+      await (decoder as VideoDecoder).flush();
+      snap('feed');
+      await waitWhile(() => nextIdx < sortedPts.length || draining || (encoder as VideoEncoder).encodeQueueSize > 0);
+      snap('encode');
+
+      // ── 7. Audio → AAC (rápido: el búfer ya está renderizado) ──
+      const ra = renderedAudio;
+      const ae = audioEncoder;
+      if (ra && ae) {
+        const ch0 = ra.getChannelData(0);
+        const ch1 = ra.numberOfChannels > 1 ? ra.getChannelData(1) : ch0;
+        const frameSize = 1024;
+        for (let i = 0; i < ra.length; i += frameSize) {
+          await waitWhile(() => ae.encodeQueueSize > 8);
+          const n = Math.min(frameSize, ra.length - i);
+          const data = new Float32Array(n * 2);
+          data.set(ch0.subarray(i, i + n), 0);
+          data.set(ch1.subarray(i, i + n), n);
+          ae.encode(
+            new AudioData({
+              format: 'f32-planar',
+              sampleRate: 48000,
+              numberOfFrames: n,
+              numberOfChannels: 2,
+              timestamp: Math.round((i / 48000) * 1e6),
+              data,
+            })
+          );
+        }
+        await ae.flush();
+      }
+      snap('audio-encode');
+
+      await (encoder as VideoEncoder).flush();
+      if (fail) throw fail;
+      snap('flush');
+      muxer.finalize();
+
+      // ── 8. Resultado ──
+      const blob = new Blob([target.buffer], { type: 'video/mp4' });
+      const slug = title.slice(0, 20).toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const filename = `blacknews-video-${slug || '4x5'}-${Date.now()}.mp4`;
+      setExportVideoFileName(filename);
+      const url = URL.createObjectURL(blob);
+      const sizeFormatted =
+        blob.size < 1024 * 1024
+          ? `${Math.round(blob.size / 1024)} KB`
+          : `${(blob.size / (1024 * 1024)).toFixed(1)} MB`;
+      setExportedVideoSize(sizeFormatted);
+      setExportedVideoUrl(url);
+      setRecordingProgress(100);
+      triggerDownload(url, filename);
+      showToast(`¡Video 4:5 exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`);
+      snap('finalize');
+      return 'done';
+    } finally {
+      try {
+        if (decoder && decoder.state !== 'closed') decoder.close();
+      } catch {}
+      try {
+        if (encoder && encoder.state !== 'closed') encoder.close();
+      } catch {}
+      try {
+        if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
+      } catch {}
+      try {
+        if (videoRef.current) videoRef.current.loop = true;
+      } catch {}
+      isRecordingRef.current = false;
+      setIsRecordingVideo(false);
+      setRecordingProgress(0);
+      setRecordingPaused(false);
+      setFastExport(false);
+    }
+  };
+
   const handleExportVideo = async () => {
     if (mediaType !== 'video') return;
     const video = videoRef.current;
@@ -1103,6 +1622,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (!video || !canvas) {
       showToast('Carga un video antes de exportar.');
       return;
+    }
+    // Ruta rápida primero (solo cuando se pidió MP4). Si el archivo o el
+    // navegador no la admiten, o falla a mitad, se cae a la ruta clásica.
+    if (videoFormat === 'mp4') {
+      try {
+        const result = await exportVideoFast();
+        if (result === 'done') return;
+      } catch (fastErr) {
+        console.error('Exportación acelerada falló; se usa el método clásico:', fastErr);
+        showToast('Modo rápido no disponible: exportando con el método clásico.');
+      }
     }
     if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
       showToast('Tu navegador no admite exportación de video. Prueba con Chrome o Edge.');
@@ -3019,8 +3549,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   : (
                   <>
                     {recordingProgress < 30 && 'Preparando overlay tipográfico 1080×1350...'}
-                    {recordingProgress >= 30 && recordingProgress < 65 && 'Componiendo fotogramas en tu navegador...'}
-                    {recordingProgress >= 65 && recordingProgress < 90 && 'Grabando video y audio en tiempo real...'}
+                    {recordingProgress >= 30 && recordingProgress < 65 && (fastExport ? 'Codificando con aceleración de hardware…' : 'Componiendo fotogramas en tu navegador...')}
+                    {recordingProgress >= 65 && recordingProgress < 90 && (fastExport ? 'Codificando audio y empaquetando el MP4…' : 'Grabando video y audio en tiempo real...')}
                     {recordingProgress >= 90 && 'Finalizando archivo y descargando...'}
                   </>
                   )}
@@ -3045,7 +3575,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             <p className="text-[11px] text-neutral-500 leading-snug">
-              Se compone y graba en tu equipo: el video no se sube a ningún servidor y no consume recursos de la web. La duración es la real del clip.
+              {fastExport
+                ? 'Procesado acelerado en tu equipo: puedes cambiar de pestaña o minimizar, la exportación continúa en segundo plano. El video no se sube a ningún servidor.'
+                : 'Se compone y graba en tu equipo: el video no se sube a ningún servidor y no consume recursos de la web. La duración es la real del clip.'}
             </p>
           </div>
         </div>
