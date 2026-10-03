@@ -47,7 +47,8 @@ import {
   Menu,
   X,
   Megaphone,
-  DollarSign
+  DollarSign,
+  MapPin
 } from 'lucide-react';
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
@@ -58,7 +59,7 @@ import { AdCampaign } from '../types/ads';
 import { FrontPageManager } from './FrontPageManager';
 import { ImageOptimizationStudio } from './ImageOptimizationStudio';
 import { CategoryManager } from './CategoryManager';
-import { SocialPostGenerator } from './SocialPostGenerator';
+import { SocialPostGenerator, POPULAR_COUNTRIES, CountryFlag } from './SocialPostGenerator';
 import { ImportArticleModal } from './ImportArticleModal';
 import { DraftsModal, ArticleDraft } from './DraftsModal';
 import { RedactorFloatingBar } from './RedactorFloatingBar';
@@ -171,6 +172,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [category, setCategory] = useState<CategoryId>(() => {
     return categories.find((c) => c !== 'TODAS') || 'ECONOMÍA & MERCADOS';
   });
+  // Países del acontecimiento: aparecen en el mapa de cobertura de portada.
+  const [articleCountries, setArticleCountries] = useState<string[]>([]);
+  const [countryQuery, setCountryQuery] = useState('');
+  const [customCountryName, setCustomCountryName] = useState('');
   const [selectedImage, setSelectedImage] = useState(PRESET_IMAGES[0].url);
   const [imageCaption, setImageCaption] = useState('');
   const [customImageUrl, setCustomImageUrl] = useState('');
@@ -279,6 +284,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       title: title.trim(),
       subtitle: subtitle.trim(),
       category,
+      countries: articleCountries,
       selectedImage: customImageUrl.trim() ? customImageUrl.trim() : selectedImage,
       imageCaption: imageCaption.trim(),
       customImageUrl: customImageUrl.trim(),
@@ -314,10 +320,42 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     }, 4000);
   };
 
+  // — Países del acontecimiento: filtro, selección y alta manual —
+  const countryQueryTrimmed = countryQuery.trim().toLowerCase();
+  const filteredCountryItems = countryQueryTrimmed
+    ? POPULAR_COUNTRIES.filter(
+        (c) =>
+          c.name.toLowerCase().includes(countryQueryTrimmed) ||
+          c.code.toLowerCase().includes(countryQueryTrimmed),
+      )
+    : POPULAR_COUNTRIES;
+
+  const toggleArticleCountry = (name: string) => {
+    setArticleCountries((prev) =>
+      prev.includes(name)
+        ? prev.filter((c) => c !== name)
+        : [...prev, name],
+    );
+  };
+
+  const addCustomArticleCountry = (raw: string) => {
+    const name = raw.trim();
+    if (!name) return;
+    setArticleCountries((prev) =>
+      prev.some((c) => c.toLowerCase() === name.toLowerCase())
+        ? prev
+        : [...prev, name],
+    );
+    setCustomCountryName('');
+  };
+
   const handleLoadDraft = (draft: ArticleDraft) => {
     setTitle(draft.title || '');
     setSubtitle(draft.subtitle || '');
     setCategory(draft.category || 'ECONOMÍA & MERCADOS');
+    setArticleCountries(Array.isArray(draft.countries) ? draft.countries : []);
+    setCountryQuery('');
+    setCustomCountryName('');
     if (draft.selectedImage) setSelectedImage(draft.selectedImage);
     if (draft.customImageUrl) setCustomImageUrl(draft.customImageUrl);
     setImageCaption(draft.imageCaption || '');
@@ -356,6 +394,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setTakeawayInputs(['', '']);
     setTagString('');
     setCustomImageUrl('');
+    setArticleCountries([]);
+    setCountryQuery('');
+    setCustomCountryName('');
     setCurrentDraftId(null);
     setEditingReportId(null);
     setPreviewMode(false);
@@ -417,6 +458,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setTitle(report.title);
     setSubtitle(report.subtitle);
     setCategory(report.category);
+    setArticleCountries(report.countries || []);
+    setCountryQuery('');
+    setCustomCountryName('');
     setSelectedImage(report.image);
     setSelectedOptimizedImage(report.optimizedImage);
     setImageCaption(report.imageCaption || '');
@@ -433,6 +477,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const handleCancelEdit = () => {
     setEditingReportId(null);
     setSelectedOptimizedImage(undefined);
+    setArticleCountries([]);
     setTitle('');
     setSubtitle('');
     setLead('');
@@ -597,6 +642,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         title: title.trim(),
         subtitle: subtitle.trim(),
         category,
+        countries: articleCountries.length > 0 ? articleCountries : undefined,
         image: finalImage,
         optimizedImage: selectedOptimizedImage || original.optimizedImage,
         imageCaption: imageCaption.trim(),
@@ -625,6 +671,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       title: title.trim(),
       subtitle: subtitle.trim(),
       category,
+      countries: articleCountries.length > 0 ? articleCountries : undefined,
       author: {
         name: currentUser.name,
         bureau: currentUser.bureau,
@@ -2026,6 +2073,123 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                             {CATEGORY_DESCRIPTIONS[category]}
                           </p>
                         )}
+                      </div>
+
+                      {/* Países del acontecimiento (mapa de cobertura) */}
+                      <div>
+                        <label className="block text-sm font-semibold tracking-wide text-neutral-200 uppercase mb-2">
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-white" />
+                            Países del acontecimiento
+                          </span>
+                        </label>
+                        <p className="text-[11px] text-neutral-500 font-light mb-2">
+                          Se muestran en el mapa de cobertura de portada. Sin
+                          países, la noticia se atribuye a «Internacional».
+                        </p>
+
+                        {articleCountries.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {articleCountries.map((name) => {
+                              const item = POPULAR_COUNTRIES.find(
+                                (c) => c.name === name,
+                              );
+                              return (
+                                <span
+                                  key={name}
+                                  className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-lg bg-white text-black text-xs font-semibold"
+                                >
+                                  <CountryFlag
+                                    code={item?.code || ''}
+                                    fallback="📍"
+                                    className="w-3.5 h-2.5 object-cover rounded-[1px]"
+                                  />
+                                  {name}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleArticleCountry(name)}
+                                    className="p-0.5 rounded hover:bg-black/15 cursor-pointer"
+                                    title="Quitar país"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              onClick={() => setArticleCountries([])}
+                              className="text-[11px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer self-center"
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mb-2 p-2.5 bg-neutral-900/40 rounded-xl border border-dashed border-white/10 text-[11px] text-neutral-500 text-center">
+                            Ningún país asignado todavía.
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          value={countryQuery}
+                          onChange={(e) => setCountryQuery(e.target.value)}
+                          placeholder="Filtrar países (Israel, Irán, EE.UU...)"
+                          className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 mb-2"
+                        />
+
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/5">
+                          {filteredCountryItems.map((c) => {
+                            const isSelected = articleCountries.includes(c.name);
+                            return (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => toggleArticleCountry(c.name)}
+                                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-white text-black font-bold'
+                                    : 'bg-neutral-900 text-neutral-300 hover:text-white border border-white/5'
+                                }`}
+                              >
+                                <CountryFlag
+                                  code={c.code}
+                                  fallback="📍"
+                                  className="w-3.5 h-2.5 object-cover rounded-[1px]"
+                                />
+                                <span>{c.name}</span>
+                              </button>
+                            );
+                          })}
+                          {filteredCountryItems.length === 0 && (
+                            <span className="text-[11px] text-neutral-500 px-2 py-1">
+                              Sin resultados — añádelo con «Otro país».
+                            </span>
+                          )}
+                        </div>
+
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            addCustomArticleCountry(customCountryName);
+                          }}
+                          className="flex items-center gap-1 mt-2"
+                        >
+                          <input
+                            type="text"
+                            value={customCountryName}
+                            onChange={(e) => setCustomCountryName(e.target.value)}
+                            placeholder="Otro país..."
+                            className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+                          />
+                          <button
+                            type="submit"
+                            className="p-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl cursor-pointer transition-colors"
+                            title="Añadir país personalizado"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </form>
                       </div>
 
                       {/* Fotografía Editorial con Conversión AVIF */}

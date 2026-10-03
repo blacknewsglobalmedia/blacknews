@@ -3,11 +3,43 @@ import { Report } from "../types/news";
 import { WORLD_DOTS_PATH } from "../data/worldDots";
 
 /** Coordenadas del centroide de los países donde ocurren noticias de la portada. */
+// Coordenadas [lon, lat] de los países seleccionables en el editor y en el
+// generador de posts. Los grupos sin coordenadas se muestran en el panel del
+// mapa pero no dibujan pin (p. ej. «Internacional» o países personalizados).
 const COUNTRY_COORDS: Record<string, [number, number]> = {
   Suiza: [8.2, 46.8],
   Noruega: [10.0, 61.0],
   Chile: [-71.0, -35.0],
   Bolivia: [-64.5, -16.5],
+  Israel: [34.9, 31.4],
+  'Irán': [53.7, 32.4],
+  'EE.UU.': [-98.6, 39.8],
+  China: [104.2, 35.9],
+  Rusia: [95.0, 62.0],
+  Ucrania: [31.2, 48.4],
+  'Arabia Saudí': [45.1, 23.9],
+  Líbano: [35.9, 33.9],
+  Siria: [38.5, 34.8],
+  Yemen: [47.6, 15.6],
+  'Taiwán': [121.0, 23.7],
+  'Corea del Sur': [127.8, 36.4],
+  'Corea del Norte': [127.5, 40.3],
+  'España': [-3.7, 40.4],
+  'Reino Unido': [-3.4, 55.4],
+  Francia: [2.2, 46.6],
+  Alemania: [10.4, 51.2],
+  Argentina: [-64.2, -34.6],
+  Venezuela: [-66.6, 6.4],
+  Brasil: [-51.9, -14.2],
+  'México': [-102.5, 23.6],
+  Colombia: [-74.3, 4.6],
+  'Perú': [-75.0, -9.2],
+  'Japón': [138.3, 36.2],
+  India: [79.0, 20.6],
+  'Turquía': [35.2, 38.9],
+  Egipto: [30.8, 26.8],
+  Qatar: [51.2, 25.3],
+  'Unión Europea': [10.0, 50.0],
 };
 
 /** Cubo de informes sin país (alcance global). */

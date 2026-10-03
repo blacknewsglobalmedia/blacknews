@@ -18,6 +18,7 @@ export interface ArticleDraft {
   title: string;
   subtitle: string;
   category: CategoryId;
+  countries?: string[];
   selectedImage: string;
   imageCaption: string;
   customImageUrl: string;
