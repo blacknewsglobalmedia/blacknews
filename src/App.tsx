@@ -17,6 +17,7 @@ import { BookmarksDrawer } from "./components/BookmarksDrawer";
 import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
+import { CreateAdModal } from "./components/CreateAdModal";
 import { REPORTS, CATEGORIES, FLASH_NEWS } from "./data/newsData";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
@@ -102,6 +103,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -899,6 +901,7 @@ export default function App() {
           setCurrentView("portada");
         }}
         onShareSite={() => handleOpenShare(null)}
+        onOpenAdModal={() => setIsAdModalOpen(true)}
       />
 
       {/* Deep Report Reader Modal */}
@@ -949,6 +952,20 @@ export default function App() {
         onLoginWithGoogle={handleLoginWithGoogle}
         onLogout={handleLogout}
         onOpenStudio={handleToggleStudio}
+      />
+
+      {/* Self-Service Advertising Modal */}
+      <CreateAdModal
+        isOpen={isAdModalOpen}
+        onClose={() => setIsAdModalOpen(false)}
+        currentUser={currentUser}
+        onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
+        onSubmitAdCampaign={(campaign) => {
+          handleSaveCampaign(campaign);
+          showToast(
+            "Tu anuncio fue enviado a revisión. El equipo lo aprobará en breve.",
+          );
+        }}
       />
     </div>
   );

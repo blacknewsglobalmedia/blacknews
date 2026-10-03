@@ -7,9 +7,18 @@ export type AdPlacement =
   | 'ARTICLE_FOOTER'      // Horizontal 728x90 (Al pie de artículos)
   | 'GRID_CARD';          // Vertical 4:5 integrado como card en la cuadrícula
 
-export type AdStatus = 'ACTIVE' | 'PAUSED' | 'SCHEDULED' | 'EXPIRED';
+export type AdStatus = 
+  | 'ACTIVE' 
+  | 'PAUSED' 
+  | 'SCHEDULED' 
+  | 'EXPIRED' 
+  | 'PENDIENTE_PAGO' 
+  | 'PENDIENTE_APROBACION' 
+  | 'RECHAZADA';
 
 export type AdPricingModel = 'FIXED_PERIOD' | 'CPM' | 'CPC';
+
+export type AdPaymentMethod = 'MERCADO_PAGO' | 'BANK_TRANSFER' | 'STRIPE';
 
 export interface AdCampaign {
   id: string;
@@ -25,13 +34,85 @@ export interface AdCampaign {
   endDate: string;   // YYYY-MM-DD
   status: AdStatus;
   price: number;
-  currency: 'USD' | 'CHF' | 'EUR';
+  currency: 'USD' | 'UYU' | 'CHF' | 'EUR';
   pricingModel: AdPricingModel;
   impressions: number;
   clicks: number;
   createdAt: string;
   notes?: string;
+  // Self-service & Approval fields
+  applicantEmail?: string;
+  applicantName?: string;
+  paymentMethod?: AdPaymentMethod;
+  paymentReceiptUrl?: string;
+  rejectionReason?: string;
+  targetImpressionsBudget?: number;
 }
+
+export interface AdPricingPlan {
+  id: string;
+  name: string;
+  description: string;
+  pricingModel: AdPricingModel;
+  durationDays?: number;
+  targetImpressions?: number;
+  priceUyu: number;
+  priceUsd: number;
+  badge: string;
+}
+
+export const AD_PRICING_PLANS: AdPricingPlan[] = [
+  {
+    id: 'plan-flash-7d',
+    name: 'Plan Rápido (7 Días)',
+    description: '7 días de visibilidad continua. Ideal para eventos, lanzamientos y promociones PyME.',
+    pricingModel: 'FIXED_PERIOD',
+    durationDays: 7,
+    priceUyu: 650,
+    priceUsd: 15,
+    badge: 'ACCESIBLE',
+  },
+  {
+    id: 'plan-fortnight-15d',
+    name: 'Plan Quincenal (15 Días)',
+    description: '15 días de presencia destacada en la portada y artículos.',
+    pricingModel: 'FIXED_PERIOD',
+    durationDays: 15,
+    priceUyu: 1200,
+    priceUsd: 28,
+    badge: 'POPULAR',
+  },
+  {
+    id: 'plan-monthly-30d',
+    name: 'Plan Mensual (30 Días)',
+    description: '30 días de exposición máxima continua en todas las ubicaciones principales.',
+    pricingModel: 'FIXED_PERIOD',
+    durationDays: 30,
+    priceUyu: 2100,
+    priceUsd: 49,
+    badge: 'RECOMENDADO',
+  },
+  {
+    id: 'plan-cpm-10k',
+    name: '10.000 Impresiones Garantizadas',
+    description: 'Exhibición hasta alcanzar 10.000 vistas reales medidas en la plataforma.',
+    pricingModel: 'CPM',
+    targetImpressions: 10000,
+    priceUyu: 500,
+    priceUsd: 12,
+    badge: 'MEDICIÓN REAL',
+  },
+  {
+    id: 'plan-cpm-50k',
+    name: '50.000 Impresiones Garantizadas',
+    description: 'Exhibición extendida hasta alcanzar 50.000 vistas garantizadas.',
+    pricingModel: 'CPM',
+    targetImpressions: 50000,
+    priceUyu: 1900,
+    priceUsd: 45,
+    badge: 'ALTO ALCANCE',
+  },
+];
 
 export interface AdPlacementInfo {
   id: AdPlacement;

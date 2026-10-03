@@ -1,5 +1,12 @@
 import React from "react";
-import { Share2, ArrowUp, Scale, ShieldCheck, Mail } from "lucide-react";
+import {
+  Share2,
+  ArrowUp,
+  Scale,
+  ShieldCheck,
+  Mail,
+  Megaphone,
+} from "lucide-react";
 import { CategoryId } from "../types/news";
 import { LegalModal, LegalTab } from "./LegalModal";
 
@@ -7,12 +14,14 @@ interface FooterProps {
   categories: readonly CategoryId[];
   onSelectCategory: (cat: CategoryId) => void;
   onShareSite: () => void;
+  onOpenAdModal?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   categories,
   onSelectCategory,
   onShareSite,
+  onOpenAdModal,
 }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -91,6 +100,16 @@ export const Footer: React.FC<FooterProps> = ({
                 <Share2 className="w-3.5 h-3.5" />
                 <span>COMPARTIR MEDIO</span>
               </button>
+
+              {onOpenAdModal && (
+                <button
+                  onClick={onOpenAdModal}
+                  className="mt-3 px-4 py-2 border border-white/20 text-white hover:bg-white/10 font-semibold text-xs uppercase tracking-wider rounded-md transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Megaphone className="w-3.5 h-3.5 text-amber-400" />
+                  <span>ANUNCIAR EN BLACKNEWS</span>
+                </button>
+              )}
             </div>
 
             {/* Categories Links */}
