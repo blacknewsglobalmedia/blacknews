@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
-import { 
-  Search, 
-  Bookmark, 
-  Share2, 
-  Radio, 
-  PenTool, 
-  Menu, 
-  X, 
-  User, 
-  ChevronRight 
-} from 'lucide-react';
-import { CategoryId } from '../types/news';
-import { RedactorProfile, GUEST_USER_ID } from '../types/auth';
+import React, { useState } from "react";
+import {
+  Search,
+  Bookmark,
+  Share2,
+  Radio,
+  PenTool,
+  Menu,
+  X,
+  User,
+  ChevronRight,
+} from "lucide-react";
+import { CategoryId } from "../types/news";
+import { RedactorProfile, GUEST_USER_ID } from "../types/auth";
 
 interface TopBarProps {
   categories?: string[];
@@ -46,22 +46,25 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const rawList = propCategories && propCategories.length > 0
-    ? propCategories
-    : [
-        'TODAS',
-        'ECONOMÍA & MERCADOS',
-        'GEOPOLÍTICA',
-        'TECNOLOGÍA & INNOVACIÓN',
-        'DERECHO & PROPIEDAD',
-        'ENERGÍA & INDUSTRIA',
-        'DOSSIERS',
-      ];
+  const rawList =
+    propCategories && propCategories.length > 0
+      ? propCategories
+      : [
+          "TODAS",
+          "ECONOMÍA & MERCADOS",
+          "GEOPOLÍTICA",
+          "TECNOLOGÍA & INNOVACIÓN",
+          "DERECHO & PROPIEDAD",
+          "ENERGÍA & INDUSTRIA",
+          "DOSSIERS",
+        ];
 
-  const categories: { id: CategoryId; label: string }[] = rawList.map((cat) => ({
-    id: cat,
-    label: cat === 'TODAS' ? 'PORTADA' : cat,
-  }));
+  const categories: { id: CategoryId; label: string }[] = rawList.map(
+    (cat) => ({
+      id: cat,
+      label: cat === "TODAS" ? "PORTADA" : cat,
+    }),
+  );
 
   const handleCategoryClick = (catId: CategoryId) => {
     onSelectCategory(catId);
@@ -69,18 +72,21 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   // Basic readers (LECTOR) and visitors must NOT see the redacción button or internal tools
-  const canAccessEditorialStudio = Boolean(currentUser && currentUser.role !== 'LECTOR');
+  const canAccessEditorialStudio = Boolean(
+    currentUser && currentUser.role !== "LECTOR",
+  );
 
   // Account chip: never shows role jargon to readers — guests see "ACCEDER"
   const isSignedIn = Boolean(currentUser && currentUser.id !== GUEST_USER_ID);
   const accountLabel = !isSignedIn
-    ? 'ACCEDER'
-    : currentUser && currentUser.role !== 'LECTOR'
+    ? "ACCEDER"
+    : currentUser && currentUser.role !== "LECTOR"
       ? currentUser.role
-      : 'MI CUENTA';
-  const accountTitle = isSignedIn && currentUser
-    ? `Cuenta: ${currentUser.name} (${currentUser.role})`
-    : 'Acceder con tu cuenta de Google';
+      : "MI CUENTA";
+  const accountTitle =
+    isSignedIn && currentUser
+      ? `Cuenta: ${currentUser.name} (${currentUser.role})`
+      : "Acceder con tu cuenta de Google";
 
   const googleIconSvg = (
     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
@@ -120,7 +126,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={onToggleLiveTicker}
             className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
-              liveTickerActive ? 'text-white font-medium' : 'text-neutral-500'
+              liveTickerActive ? "text-white font-medium" : "text-neutral-500"
             }`}
             title="Alternar teletipo"
           >
@@ -144,7 +150,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Left: Brand with Editorial Authority */}
         <div className="flex items-center shrink-0">
           <button
-            onClick={() => handleCategoryClick('TODAS')}
+            onClick={() => handleCategoryClick("TODAS")}
             className="font-headline text-2xl sm:text-[1.85rem] font-semibold tracking-tight text-white hover:text-neutral-200 transition-colors flex items-baseline cursor-pointer"
           >
             BLACKNEWS
@@ -160,13 +166,15 @@ export const TopBar: React.FC<TopBarProps> = ({
               onClick={onOpenStudio}
               className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
                 isStudioOpen
-                  ? 'bg-white text-black border-white font-semibold shadow-sm'
-                  : 'border-white/20 text-white bg-white/5 hover:bg-white hover:text-black hover:border-white'
+                  ? "bg-white text-black border-white font-semibold shadow-sm"
+                  : "border-white/20 text-white bg-white/5 hover:bg-white hover:text-black hover:border-white"
               }`}
               title="Panel Interno: Redacción, Portada, Imágenes y Gestión"
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isStudioOpen ? 'VER PORTADA' : 'PANEL INTERNO'}</span>
+              <span className="hidden sm:inline">
+                {isStudioOpen ? "VER PORTADA" : "PANEL INTERNO"}
+              </span>
               <span className="sm:hidden">PANEL</span>
             </button>
           )}
@@ -179,7 +187,9 @@ export const TopBar: React.FC<TopBarProps> = ({
               title={accountTitle}
             >
               {googleIconSvg}
-              <span className="text-[11px] font-semibold text-neutral-200">{accountLabel}</span>
+              <span className="text-[11px] font-semibold text-neutral-200">
+                {accountLabel}
+              </span>
             </button>
           )}
 
@@ -208,45 +218,49 @@ export const TopBar: React.FC<TopBarProps> = ({
             )}
           </button>
 
-          {/* Mobile Menu Hamburger Toggle (Visible on screens below xl) */}
+          {/* Mobile Menu Hamburger Toggle (Visible on screens below lg) */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="xl:hidden p-1.5 text-neutral-300 hover:text-white transition-colors cursor-pointer ml-1"
+            className="lg:hidden p-1.5 text-neutral-300 hover:text-white transition-colors cursor-pointer ml-1"
             aria-label="Menú"
             title="Menú de secciones"
           >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isMobileMenuOpen ? (
+              <X className="w-5 h-5" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
           </button>
         </div>
       </div>
 
-      {/* Desktop category strip: its own row, spanning exactly the same width as
-          the page content (max-w-7xl + px-4/6). Centred when it fits, horizontally
-          scrollable when there are many categories — it can never overflow. */}
-      <nav className="hidden xl:block border-t border-white/5" aria-label="Secciones editoriales">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="no-scrollbar overflow-x-auto">
-            <div className="flex items-center gap-5 2xl:gap-7 w-max mx-auto h-10 text-xs font-sans font-medium tracking-wide">
-              {categories.map((cat) => {
-                const isActive = selectedCategory === cat.id && !isStudioOpen;
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => handleCategoryClick(cat.id)}
-                    className={`h-full flex items-center transition-colors cursor-pointer relative whitespace-nowrap ${
-                      isActive
-                        ? 'text-white font-semibold'
-                        : 'text-neutral-400 hover:text-white'
-                    }`}
-                  >
-                    {cat.label}
-                    {isActive && (
-                      <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+      {/* Desktop category strip: strictly contained within max-w-7xl width.
+          Scrolls horizontally if categories exceed available width without breaking layout. */}
+      <nav
+        className="hidden lg:block border-t border-white/5 w-full overflow-hidden"
+        aria-label="Secciones editoriales"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
+          <div className="flex items-center gap-5 xl:gap-7 h-10 text-xs font-sans font-medium tracking-wide overflow-x-auto no-scrollbar scroll-smooth w-full justify-start xl:justify-center">
+            {categories.map((cat) => {
+              const isActive = selectedCategory === cat.id && !isStudioOpen;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategoryClick(cat.id)}
+                  className={`h-full flex items-center transition-colors cursor-pointer relative whitespace-nowrap shrink-0 ${
+                    isActive
+                      ? "text-white font-semibold"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  {cat.label}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </nav>
@@ -268,8 +282,8 @@ export const TopBar: React.FC<TopBarProps> = ({
                     onClick={() => handleCategoryClick(cat.id)}
                     className={`py-2 px-3 text-left text-xs font-medium uppercase tracking-wider transition-colors flex items-center justify-between cursor-pointer border ${
                       isActive
-                        ? 'border-white bg-white text-black font-semibold'
-                        : 'border-white/5 text-neutral-300 hover:border-white/30 hover:text-white'
+                        ? "border-white bg-white text-black font-semibold"
+                        : "border-white/5 text-neutral-300 hover:border-white/30 hover:text-white"
                     }`}
                   >
                     <span>{cat.label}</span>
@@ -285,7 +299,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
               <span>USUARIO ACTIVO:</span>
               <span className="text-white font-medium">
-                {currentUser ? `${currentUser.name} [${currentUser.role}]` : 'NO CONECTADO'}
+                {currentUser
+                  ? `${currentUser.name} [${currentUser.role}]`
+                  : "NO CONECTADO"}
               </span>
             </div>
 
@@ -299,7 +315,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                   className="flex-1 py-2.5 px-3 border border-white/30 bg-white/5 hover:border-white text-xs font-semibold uppercase tracking-wider text-white flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <PenTool className="w-3.5 h-3.5" />
-                  <span>{isStudioOpen ? 'VER PORTADA' : 'PANEL INTERNO (REDACCIÓN)'}</span>
+                  <span>
+                    {isStudioOpen ? "VER PORTADA" : "PANEL INTERNO (REDACCIÓN)"}
+                  </span>
                 </button>
               )}
 
@@ -312,7 +330,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                   className="flex-1 py-2.5 px-3 bg-white text-black text-xs font-medium uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer hover:bg-neutral-200 transition-colors"
                 >
                   {googleIconSvg}
-                  <span>{currentUser ? 'MI CUENTA & PERMISOS' : 'ACCESO CON GOOGLE'}</span>
+                  <span>
+                    {currentUser ? "MI CUENTA & PERMISOS" : "ACCESO CON GOOGLE"}
+                  </span>
                 </button>
               )}
             </div>
