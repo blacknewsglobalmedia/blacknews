@@ -1,4 +1,5 @@
 import { Report, ReportSection, CategoryId } from '../types/news';
+import { CATEGORIES } from '../data/newsData';
 
 export interface BlacknewsArticleJsonPayload {
   _meta?: {
@@ -61,7 +62,7 @@ export const SAMPLE_ARTICLE_JSON: BlacknewsArticleJsonPayload = {
     limitaciones_del_documento: {
       title: "Titular principal de la investigación. Extensión recomendada: entre 50 y 90 caracteres (máximo estricto: 110 caracteres). Debe ser directo, asertivo y de peso intelectual.",
       subtitle: "Bajada o deck de portada. Extensión recomendada: entre 120 y 220 caracteres (máximo: 260 caracteres). Debe actuar como resumen ejecutivo con la tesis o hallazgo nuclear.",
-      category: "Sección editorial temática. Debe ser exactamente UNA de las siguientes categorías válidas: 'ECONOMÍA & MERCADOS' | 'GEOPOLÍTICA' | 'TECNOLOGÍA & INNOVACIÓN' | 'DERECHO & PROPIEDAD' | 'ENERGÍA & INDUSTRIA' | 'DOSSIERS'.",
+      category: `Sección editorial temática. Debe ser exactamente UNA de las siguientes categorías válidas: ${CATEGORIES.filter((c) => c !== 'TODAS').map((c) => `'${c}'`).join(' | ')}.`,
       lead: "Párrafo de entrada principal (Lead periodístico). Extensión recomendada: entre 280 y 450 caracteres (máximo: 550 caracteres). Debe responder de inmediato al qué, quién, cuándo y por qué con máxima densidad informativa.",
       readTime: "Tiempo estimado de lectura para el usuario. Formato: '[N] min de lectura' (ejemplo: '4 min de lectura', '6 min de lectura').",
       imageCaption: "Pie de foto descriptivo y contextual. Extensión recomendada: entre 60 y 140 caracteres. Debe contextualizar la fotografía o gráfico con precisión técnica.",
@@ -198,14 +199,9 @@ export function parseAndValidateArticleJson(jsonString: string): {
       return { success: false, error: 'El campo "lead" (entrada principal) es obligatorio en el JSON.' };
     }
 
-    const VALID_CATEGORIES: CategoryId[] = [
-      'ECONOMÍA & MERCADOS',
-      'GEOPOLÍTICA',
-      'TECNOLOGÍA & INNOVACIÓN',
-      'DERECHO & PROPIEDAD',
-      'ENERGÍA & INDUSTRIA',
-      'DOSSIERS'
-    ];
+    const VALID_CATEGORIES: CategoryId[] = CATEGORIES.filter(
+      (c) => c !== 'TODAS',
+    );
 
     let category: CategoryId = 'ECONOMÍA & MERCADOS';
     if (root.category && VALID_CATEGORIES.includes(root.category)) {

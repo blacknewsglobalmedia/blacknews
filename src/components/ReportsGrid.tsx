@@ -331,46 +331,42 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
               </div>
             )}
 
-            {/* BLOQUE III: DOSSIER DESTACADO */}
-            <div className="pt-10 border-t border-white/10">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-neutral-950/60 border border-white/10 rounded-xl p-6 sm:p-8">
-                <div className="max-w-3xl">
-                  <div className="text-xs font-sans uppercase tracking-widest text-neutral-400 mb-2 font-semibold">
-                    DOSSIER EDITORIAL DESTACADO · {configuredDossier ? configuredDossier.category : 'SOBERANÍA Y PROPIEDAD'}
+            {/* BLOQUE III: INVESTIGACIÓN DESTACADA (solo si hay artículo asignado) */}
+            {configuredDossier && (
+              <div className="pt-10 border-t border-white/10">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-neutral-950/60 border border-white/10 rounded-xl p-6 sm:p-8">
+                  <div className="max-w-3xl">
+                    <div className="text-xs font-sans uppercase tracking-widest text-neutral-400 mb-2 font-semibold">
+                      INVESTIGACIÓN DESTACADA · {configuredDossier.category}
+                    </div>
+                    <h3
+                      onClick={() => onReadReport(configuredDossier)}
+                      className="font-headline text-2xl sm:text-3xl font-normal text-white tracking-tight leading-snug mb-2.5 hover:text-neutral-200 transition-colors cursor-pointer"
+                    >
+                      {configuredDossier.title}
+                    </h3>
+                    <p className="font-sans text-xs sm:text-sm text-neutral-300 leading-relaxed font-light">
+                      {configuredDossier.subtitle}
+                    </p>
                   </div>
-                  <h3 
-                    onClick={() => configuredDossier && onReadReport(configuredDossier)}
-                    className="font-headline text-2xl sm:text-3xl font-normal text-white tracking-tight leading-snug mb-2.5 hover:text-neutral-200 transition-colors cursor-pointer"
-                  >
-                    {configuredDossier 
-                      ? configuredDossier.title 
-                      : 'La defensa irrestricta de la iniciativa privada frente al intervencionismo estatal'}
-                  </h3>
-                  <p className="font-sans text-xs sm:text-sm text-neutral-300 leading-relaxed font-light">
-                    {configuredDossier 
-                      ? configuredDossier.subtitle 
-                      : 'Nuestra redacción audita continuamente las políticas públicas y su impacto sobre el cálculo económico, la inflación, la seguridad jurídica y los derechos inalienables de los ciudadanos.'}
-                  </p>
-                </div>
 
-                <div className="shrink-0 flex items-center gap-3">
-                  {configuredDossier && (
+                  <div className="shrink-0 flex items-center gap-3">
                     <button
                       onClick={() => onReadReport(configuredDossier)}
                       className="px-5 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors cursor-pointer shadow-sm"
                     >
-                      LEER ESTE DOSSIER
+                      LEER LA INVESTIGACIÓN
                     </button>
-                  )}
-                  <button
-                    onClick={() => onSelectCategory('DOSSIERS')}
-                    className="px-4 py-2.5 border border-white/20 text-neutral-200 hover:text-white font-medium text-xs uppercase tracking-wider rounded-md hover:border-white transition-colors cursor-pointer"
-                  >
-                    EXPLORAR TODOS
-                  </button>
+                    <button
+                      onClick={() => onSelectCategory('INVESTIGACIÓN')}
+                      className="px-4 py-2.5 border border-white/20 text-neutral-200 hover:text-white font-medium text-xs uppercase tracking-wider rounded-md hover:border-white transition-colors cursor-pointer"
+                    >
+                      EXPLORAR TODOS
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* ADDITIONAL REPORTS IF ANY */}
             {additionalReports.length > 0 && (

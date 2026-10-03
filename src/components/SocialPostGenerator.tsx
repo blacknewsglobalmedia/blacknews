@@ -35,6 +35,7 @@ import {
   User,
 } from "lucide-react";
 import { Report } from "../types/news";
+import { CATEGORIES } from "../data/newsData";
 import fixWebmDuration from "fix-webm-duration";
 
 interface SocialPostGeneratorProps {
@@ -82,24 +83,11 @@ export const POPULAR_COUNTRIES: CountryItem[] = [
   { name: "Internacional", code: "GLOBAL", flag: "🌐" },
 ];
 
-export const EXPANDED_CATEGORIES: string[] = [
-  "GEOPOLÍTICA",
-  "ECONOMÍA & MERCADOS",
-  "TECNOLOGÍA & INNOVACIÓN",
-  "DEFENSA & INTELIGENCIA",
-  "DERECHO & PROPIEDAD",
-  "ENERGÍA & PETRÓLEO",
-  "CRIPTOACTIVOS & SOBERANÍA",
-  "RELACIONES EXTERIORES",
-  "COMERCIO GLOBAL",
-  "POLÍTICA MONETARIA",
-  "CADENAS DE SUMINISTRO",
-  "INFRAESTRUCTURA & INDUSTRIA",
-  "FINANZAS & BANCA",
-  "SEGURIDAD & CIBERDEFENSA",
-  "DOSSIERS",
-  "EDITORIAL",
-];
+// Categorías canónicas del sitio: fuente única en data/newsData.ts.
+// El selector y los chips usan exactamente la misma lista que la portada.
+export const EXPANDED_CATEGORIES: string[] = CATEGORIES.filter(
+  (c) => c !== "TODAS",
+);
 
 // In-memory cache for loaded flag images for canvas rendering
 const flagImageCache = new Map<string, HTMLImageElement>();
@@ -2696,15 +2684,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
               {/* Quick Category Chips */}
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {[
-                  "GEOPOLÍTICA",
-                  "ECONOMÍA & MERCADOS",
-                  "DEFENSA & INTELIGENCIA",
-                  "TECNOLOGÍA & INNOVACIÓN",
-                  "ENERGÍA & PETRÓLEO",
-                  "CRIPTOACTIVOS & SOBERANÍA",
-                  "COMERCIO GLOBAL",
-                ].map((c) => (
+                {allAvailableCategories.map((c) => (
                   <button
                     key={c}
                     type="button"

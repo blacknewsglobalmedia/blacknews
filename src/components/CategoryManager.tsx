@@ -20,6 +20,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { Report } from '../types/news';
+import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
 
 interface CategoryManagerProps {
   categories: string[];
@@ -149,16 +150,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   // Reset to default categories
   const handleResetDefaults = () => {
     if (window.confirm('¿Deseas restablecer las categorías predeterminadas de BLACKNEWS?')) {
-      const defaults = [
-        'TODAS',
-        'ECONOMÍA & MERCADOS',
-        'GEOPOLÍTICA',
-        'TECNOLOGÍA & INNOVACIÓN',
-        'DERECHO & PROPIEDAD',
-        'ENERGÍA & INDUSTRIA',
-        'DOSSIERS',
-      ];
-      onUpdateCategories(defaults);
+      onUpdateCategories([...CATEGORIES]);
       showSuccess('Catálogo de categorías restablecido a los valores oficiales.');
     }
   };
@@ -289,15 +281,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
   const loadExampleJson = () => {
     const example = JSON.stringify(
       {
-        categories: [
-          'ECONOMÍA & MERCADOS',
-          'GEOPOLÍTICA',
-          'TECNOLOGÍA & INNOVACIÓN',
-          'DERECHO & PROPIEDAD',
-          'ENERGÍA & INDUSTRIA',
-          'CRIPTOACTIVOS & SOBERANÍA',
-          'DOSSIERS'
-        ]
+        categories: CATEGORIES.filter((c) => c !== 'TODAS'),
       },
       null,
       2
@@ -464,9 +448,16 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                     </div>
                   ) : (
                     <div className="flex items-center gap-2.5">
-                      <span className={`text-xs sm:text-sm font-semibold tracking-wide ${isTodas ? 'text-white' : 'text-neutral-200'}`}>
-                        {cat}
-                      </span>
+                      <div className="min-w-0">
+                        <span className={`text-xs sm:text-sm font-semibold tracking-wide ${isTodas ? 'text-white' : 'text-neutral-200'}`}>
+                          {cat}
+                        </span>
+                        {!isTodas && CATEGORY_DESCRIPTIONS[cat] && (
+                          <p className="text-[11px] text-neutral-500 font-light mt-0.5">
+                            {CATEGORY_DESCRIPTIONS[cat]}
+                          </p>
+                        )}
+                      </div>
                       {isTodas && (
                         <span className="text-[10px] bg-white/10 text-neutral-300 uppercase px-2 py-0.5 rounded font-mono font-medium">
                           Fija / Portada General
@@ -674,7 +665,7 @@ export const CategoryManager: React.FC<CategoryManagerProps> = ({
                 rows={6}
                 value={jsonInput}
                 onChange={(e) => handleJsonInputChange(e.target.value)}
-                placeholder='["ECONOMÍA & MERCADOS", "GEOPOLÍTICA", "CRIPTO & WEB3", "DEFENSA"]'
+                placeholder='["ECONOMÍA & MERCADOS", "GEOPOLÍTICA", "DEFENSA & SEGURIDAD", "EDITORIAL"]'
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-xs font-mono text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-white/30 resize-y leading-relaxed"
               />
             </div>

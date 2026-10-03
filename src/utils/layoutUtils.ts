@@ -1,5 +1,6 @@
 import { Report } from '../types/news';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
+import { CATEGORIES } from '../data/newsData';
 
 export const DEFAULT_LAYOUT_CONFIG: FrontPageLayoutConfig = {
   leadReportId: 'rep-001',
@@ -36,7 +37,7 @@ export function computeLayoutPreset(
     const b2_1 = reports[3]?.id || lead;
     const b2_2 = reports[4]?.id || lead;
     const b2_3 = reports[5]?.id || lead;
-    const dossier = reports.find((r) => r.category === 'DOSSIERS')?.id || reports[reports.length - 1]?.id || lead;
+    const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || reports[reports.length - 1]?.id || lead;
 
     return {
       leadReportId: lead,
@@ -66,7 +67,7 @@ export function computeLayoutPreset(
     const b2_1 = uniquePool[3]?.id || reports[3]?.id || lead;
     const b2_2 = uniquePool[4]?.id || reports[4]?.id || lead;
     const b2_3 = uniquePool[5]?.id || reports[5]?.id || lead;
-    const dossier = reports.find((r) => r.category === 'DOSSIERS')?.id || uniquePool[6]?.id || lead;
+    const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || uniquePool[6]?.id || lead;
 
     return {
       leadReportId: lead,
@@ -84,14 +85,7 @@ export function computeLayoutPreset(
 
   if (preset === 'auto-diversity') {
     // Pick from distinct categories
-    const categoriesWanted = [
-      'ECONOMÍA & MERCADOS',
-      'GEOPOLÍTICA',
-      'TECNOLOGÍA & INNOVACIÓN',
-      'DERECHO & PROPIEDAD',
-      'ENERGÍA & INDUSTRIA',
-      'DOSSIERS',
-    ];
+    const categoriesWanted = CATEGORIES.filter((c) => c !== 'TODAS');
 
     const pickedIds: string[] = [];
     categoriesWanted.forEach((cat) => {
@@ -112,7 +106,7 @@ export function computeLayoutPreset(
     const b2_1 = pickedIds[3] || reports[3]?.id || lead;
     const b2_2 = pickedIds[4] || reports[4]?.id || lead;
     const b2_3 = pickedIds[5] || reports[5]?.id || lead;
-    const dossier = reports.find((r) => r.category === 'DOSSIERS')?.id || pickedIds[6] || lead;
+    const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || pickedIds[6] || lead;
 
     return {
       leadReportId: lead,

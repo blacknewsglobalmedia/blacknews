@@ -50,6 +50,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
+import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
 import { RedactorProfile, RedactorRole, ROLE_PERMISSIONS } from '../types/auth';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
@@ -146,15 +147,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   const categories = propCategories && propCategories.length > 0
     ? propCategories
-    : [
-        'TODAS',
-        'ECONOMÍA & MERCADOS',
-        'GEOPOLÍTICA',
-        'TECNOLOGÍA & INNOVACIÓN',
-        'DERECHO & PROPIEDAD',
-        'ENERGÍA & INDUSTRIA',
-        'DOSSIERS',
-      ];
+    : [...CATEGORIES];
   const onUpdateCategories = propOnUpdateCategories || (() => {});
 
   // Default tab based on role
@@ -1483,6 +1476,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
           <FrontPageManager
             reports={publishedReports}
+            categories={categories}
             layoutConfig={layoutConfig}
             onUpdateLayoutConfig={onUpdateLayoutConfig}
             flashNews={flashNews}
@@ -2027,6 +2021,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                               </option>
                             ))}
                         </select>
+                        {CATEGORY_DESCRIPTIONS[category] && (
+                          <p className="mt-1.5 text-[11px] text-neutral-500 font-light leading-snug">
+                            {CATEGORY_DESCRIPTIONS[category]}
+                          </p>
+                        )}
                       </div>
 
                       {/* Fotografía Editorial con Conversión AVIF */}

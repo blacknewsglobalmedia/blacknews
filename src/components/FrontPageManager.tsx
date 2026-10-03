@@ -28,6 +28,7 @@ import { UserPermissions } from '../types/auth';
 
 interface FrontPageManagerProps {
   reports: Report[];
+  categories: readonly string[];
   layoutConfig: FrontPageLayoutConfig;
   onUpdateLayoutConfig: (newConfig: FrontPageLayoutConfig) => void;
   flashNews: FlashNews[];
@@ -46,6 +47,7 @@ interface DragPayload {
 
 export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
   reports,
+  categories,
   layoutConfig,
   onUpdateLayoutConfig,
   flashNews,
@@ -240,7 +242,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
       case 'b2_0': return 'Posición 3A (Bloque II - Columna 1)';
       case 'b2_1': return 'Posición 3B (Bloque II - Columna 2)';
       case 'b2_2': return 'Posición 3C (Bloque II - Columna 3)';
-      case 'dossier': return 'Posición 4 (Dossier Permanente)';
+      case 'dossier': return 'Posición 4 (Investigación destacada)';
     }
   };
 
@@ -370,7 +372,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
   }, [reports, selectedCategoryFilter, searchQuery]);
 
   // Categories list for filter
-  const allCategories = ['TODAS', 'ECONOMÍA & MERCADOS', 'GEOPOLÍTICA', 'TECNOLOGÍA & INNOVACIÓN', 'DERECHO & PROPIEDAD', 'ENERGÍA & INDUSTRIA', 'DOSSIERS'];
+  const allCategories = [...categories];
 
   // Current slot reports
   const leadReport = getReportById(slotReportIds.lead);
@@ -615,7 +617,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
 
           {/* Category filter pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-[10px]">
-            {allCategories.slice(0, 5).map((cat) => (
+            {allCategories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategoryFilter(cat)}
@@ -625,7 +627,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
                     : 'bg-neutral-900 text-neutral-400 hover:text-white'
                 }`}
               >
-                {cat === 'ECONOMÍA & MERCADOS' ? 'ECONOMÍA' : cat === 'TECNOLOGÍA & INNOVACIÓN' ? 'TECNOLOGÍA' : cat}
+                {cat.split(' & ')[0]}
               </button>
             ))}
           </div>
@@ -695,7 +697,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
                           <option value="b2_0">Pos. 3A · Bloque II (Col 1)</option>
                           <option value="b2_1">Pos. 3B · Bloque II (Col 2)</option>
                           <option value="b2_2">Pos. 3C · Bloque II (Col 3)</option>
-                          <option value="dossier">Pos. 4 · Dossier</option>
+                          <option value="dossier">Pos. 4 · Investigación</option>
                         </select>
                       </div>
                     </div>
@@ -1005,14 +1007,14 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
             </div>
 
             {/* ======================================================== */}
-            {/* RANURA 4: BLOQUE III — DOSSIER DE INVESTIGACIÓN           */}
+            {/* RANURA 4: BLOQUE III — INVESTIGACIÓN DESTACADA           */}
             {/* ======================================================== */}
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <Star className="w-4 h-4 text-white" />
                   <span className="font-bold uppercase tracking-wider text-white">
-                    POSICIÓN 4 · BLOQUE III: DOSSIER DE INVESTIGACIÓN (FRANJA INFERIOR)
+                    POSICIÓN 4 · BLOQUE III: INVESTIGACIÓN DESTACADA (FRANJA INFERIOR)
                   </span>
                 </div>
                 <span className="text-[11px] text-amber-300 uppercase font-semibold">
@@ -1044,7 +1046,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
                       </div>
                       <div className="min-w-0">
                         <div className="text-[10px] uppercase font-bold text-amber-300 mb-0.5">
-                          DOSSIER SELECCIONADO · {dossierReport.category}
+                          INVESTIGACIÓN SELECCIONADA · {dossierReport.category}
                         </div>
                         <h4 className="font-headline text-base font-normal text-white truncate">
                           {dossierReport.title}
@@ -1071,7 +1073,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
                   </div>
                 ) : (
                   <div className="py-6 text-center text-neutral-500 text-xs">
-                    Suelta un artículo aquí para el Dossier
+                    Suelta un artículo aquí para Investigación
                   </div>
                 )}
               </div>
@@ -1111,11 +1113,13 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
             onChange={(e) => setNewFlashCategory(e.target.value)}
             className="bg-neutral-900 border border-white/15 rounded-xl px-3 py-2 text-xs font-sans text-white focus:outline-none"
           >
-            <option value="ECONOMÍA & MERCADOS">ECONOMÍA & MERCADOS</option>
-            <option value="GEOPOLÍTICA">GEOPOLÍTICA</option>
-            <option value="TECNOLOGÍA & INNOVACIÓN">TECNOLOGÍA & INNOVACIÓN</option>
-            <option value="DERECHO & PROPIEDAD">DERECHO & PROPIEDAD</option>
-            <option value="ENERGÍA & INDUSTRIA">ENERGÍA & INDUSTRIA</option>
+            {categories
+              .filter((c) => c !== 'TODAS')
+              .map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
           </select>
           <button
             type="submit"

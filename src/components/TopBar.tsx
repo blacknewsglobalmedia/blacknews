@@ -11,6 +11,7 @@ import {
   User,
   ChevronRight,
 } from "lucide-react";
+import { CATEGORIES } from "../data/newsData";
 import { CategoryId } from "../types/news";
 import { RedactorProfile, GUEST_USER_ID } from "../types/auth";
 
@@ -54,15 +55,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const rawList =
     propCategories && propCategories.length > 0
       ? propCategories
-      : [
-          "TODAS",
-          "ECONOMÍA & MERCADOS",
-          "GEOPOLÍTICA",
-          "TECNOLOGÍA & INNOVACIÓN",
-          "DERECHO & PROPIEDAD",
-          "ENERGÍA & INDUSTRIA",
-          "DOSSIERS",
-        ];
+      : [...CATEGORIES];
 
   const categories: { id: CategoryId; label: string }[] = rawList.map(
     (cat) => ({

@@ -23,7 +23,7 @@ import { GlossaryShowcase } from "./components/GlossaryShowcase";
 import { InstallPromo } from "./components/InstallPromo";
 import { TrustSection } from "./components/TrustSection";
 import { SubscriptionModal } from "./components/SubscriptionModal";
-import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS } from "./data/newsData";
+import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS, OLD_CATEGORY_ALIASES } from "./data/newsData";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
@@ -126,10 +126,16 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           // Depura los posts de muestra de versiones anteriores: solo queda contenido real.
-          const cleaned = parsed.filter(
-            (r: Report) => r && !MOCK_REPORT_IDS.includes(r.id),
-          );
-          if (cleaned.length !== parsed.length) {
+          let categoryChanged = false;
+          const cleaned = parsed
+            .filter((r: Report) => r && !MOCK_REPORT_IDS.includes(r.id))
+            .map((r: Report) => {
+              const renamed = OLD_CATEGORY_ALIASES[r.category] ?? r.category;
+              if (renamed === r.category) return r;
+              categoryChanged = true;
+              return { ...r, category: renamed };
+            });
+          if (categoryChanged || cleaned.length !== parsed.length) {
             localStorage.setItem("blacknews_reports", JSON.stringify(cleaned));
           }
           return cleaned;
@@ -183,7 +189,41 @@ export default function App() {
       const saved = localStorage.getItem("blacknews_categories");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Catálogo antiguo sin personalizar → se sustituye por el estándar vigente.
+          const legacyDefaults = [
+            "TODAS",
+            "ECONOMÍA & MERCADOS",
+            "GEOPOLÍTICA",
+            "TECNOLOGÍA & INNOVACIÓN",
+            "DERECHO & PROPIEDAD",
+            "ENERGÍA & INDUSTRIA",
+            "DOSSIERS",
+          ];
+          const untouchedLegacy =
+            parsed.length === legacyDefaults.length &&
+            legacyDefaults.every((c) => parsed.includes(c));
+          if (untouchedLegacy) {
+            const fresh = [...CATEGORIES];
+            try {
+              localStorage.setItem("blacknews_categories", JSON.stringify(fresh));
+            } catch {}
+            return fresh;
+          }
+          // Lista personalizada: aplica renombres y descarta duplicados.
+          const renamed = parsed
+            .map((c: string) => OLD_CATEGORY_ALIASES[c] ?? c)
+            .filter((c: string, i: number, arr: string[]) => arr.indexOf(c) === i);
+          if (renamed.length > 0) {
+            const next = JSON.stringify(renamed);
+            if (next !== saved) {
+              try {
+                localStorage.setItem("blacknews_categories", next);
+              } catch {}
+            }
+            return renamed;
+          }
+        }
       }
     } catch {}
     return [...CATEGORIES];
