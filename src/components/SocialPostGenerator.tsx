@@ -1669,92 +1669,73 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingProgress(10);
       snap("warmup");
 
-      // ── 6. Bucle decodificar → componer → codificar (reordenando B-frames) ──
+      // ── 6. Bucle decodificar → componer → codificar con cola FIFO sin bloqueos ──
       let encoded = 0;
-      let nextIdx = 0;
       let draining = false;
-      const pending = new Map<number, VideoFrame[]>();
-      const progress = { at: 0, pct: 10, phase: 0 };
+      const decodedQueue: VideoFrame[] = [];
+      const targetFps = 30;
+      const targetFrameDurationUs = Math.round(1_000_000 / targetFps);
+
       const updateProgress = () => {
+        const totalEstimate = Math.max(1, inRange.length);
         const pct = Math.min(
           99,
-          10 + Math.round((encoded / inRange.length) * 85),
+          10 + Math.round((encoded / totalEstimate) * 85),
         );
-        const now = performance.now();
-        if (pct > progress.pct && now - progress.at > 200) {
-          progress.at = now;
-          progress.pct = pct;
-          if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
-          if (recBarRef.current)
-            recBarRef.current.style.width = `${Math.max(5, pct)}%`;
-          const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
-          if (phase !== progress.phase) {
-            progress.phase = phase;
-            setRecordingProgress(pct);
-          }
-        }
+        if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
+        if (recBarRef.current)
+          recBarRef.current.style.width = `${Math.max(5, pct)}%`;
       };
 
-      const encodeFrame = async (frame: VideoFrame) => {
-        if (fail) throw fail;
-        await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 10);
-        const frameTs = frame.timestamp;
-        await renderToCanvas(canvas, undefined, cachedFlags, false, {
-          source: frame,
-          // Dimensiones EN CRUDO (sin girar): renderToCanvas hace el swap de
-          // dispW/dispH él mismo cuando rotation es 90/270 (evita doble giro).
-          width: frame.displayWidth,
-          height: frame.displayHeight,
-          rotation: rot,
-        });
-        const out = new VideoFrame(canvas, {
-          timestamp: frameTs,
-          duration: Math.max(1, Math.round(frame.duration ?? 33333)),
-        });
-        try {
-          (encoder as VideoEncoder).encode(out, {
-            keyFrame: syncPts.has(frameTs),
-          });
-        } finally {
-          out.close();
-          frame.close();
-        }
-        encoded += 1;
-        updateProgress();
-      };
-
-      const pump = () => {
+      const processQueue = async () => {
         if (draining) return;
         draining = true;
-        void (async () => {
-          try {
-            while (nextIdx < sortedPts.length) {
-              const key = sortedPts[nextIdx];
-              const arr = pending.get(key);
-              if (!arr || arr.length === 0) break; // aún no llega el siguiente pts
-              const frame = arr.shift()!;
-              if (arr.length === 0) pending.delete(key);
-              nextIdx += 1;
-              await encodeFrame(frame);
+        try {
+          while (decodedQueue.length > 0) {
+            if (isCancelledRef.current) break;
+            const frame = decodedQueue.shift()!;
+            const frameTimeSec = frame.timestamp / 1e6;
+
+            // Procesar fotogramas dentro del rango [start, end]
+            if (frameTimeSec >= start - 0.03 && frameTimeSec <= end + 0.05) {
+              await waitWhile(
+                () => (encoder as VideoEncoder).encodeQueueSize > 10,
+              );
+              await renderToCanvas(canvas, undefined, cachedFlags, false, {
+                source: frame,
+                width: frame.displayWidth,
+                height: frame.displayHeight,
+                rotation: rot,
+              });
+
+              const outPtsUs = Math.round(encoded * targetFrameDurationUs);
+              const out = new VideoFrame(canvas, {
+                timestamp: outPtsUs,
+                duration: targetFrameDurationUs,
+              });
+
+              const isKey = encoded % 60 === 0;
+              (encoder as VideoEncoder).encode(out, { keyFrame: isKey });
+              out.close();
+
+              encoded += 1;
+              updateProgress();
             }
-          } catch (e) {
-            failWith(e);
-          } finally {
-            draining = false;
-            notify();
-            if (nextIdx < sortedPts.length && pending.has(sortedPts[nextIdx]))
-              pump();
+            frame.close();
           }
-        })();
+        } catch (e) {
+          failWith(e);
+        } finally {
+          draining = false;
+          notify();
+          if (decodedQueue.length > 0) void processQueue();
+        }
       };
 
       decoder = new VideoDecoder({
         output: (frame) => {
-          const key = frame.timestamp;
-          const arr = pending.get(key);
-          if (arr) arr.push(frame);
-          else pending.set(key, [frame]);
-          pump();
+          decodedQueue.push(frame);
+          void processQueue();
           notify();
         },
         error: failWith,
@@ -1774,13 +1755,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             data: s.data,
           }),
         );
-        pump();
       }
       await (decoder as VideoDecoder).flush();
       snap("feed");
       await waitWhile(
         () =>
-          nextIdx < sortedPts.length ||
+          decodedQueue.length > 0 ||
           draining ||
           (encoder as VideoEncoder).encodeQueueSize > 0,
       );
@@ -2053,7 +2033,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       let stopped = false;
       let lastPct = 14;
-      let lastProgressAt = 0;
+      // Arranca ya consumido: el primer setRecordingProgress en caliente dispara
+      // un re-render del generador y provoca un tirón visible al inicio.
+      let lastProgressAt = performance.now();
       let hardDeadline =
         performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
 
@@ -2097,51 +2079,123 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       isRecordingRef.current = true;
       recorder.start(100);
-      video.currentTime = start;
 
-      const frameStep = (1 / 30) * videoSpeed;
-      let currentFrameTime = start;
-      const totalFrames = Math.ceil((end - start) / frameStep);
-      let renderedFrames = 0;
-      let lastPhase = 0;
+      const targetFps = 30;
+      const vTrack = stream.getVideoTracks()[0] as
+        | CanvasCaptureMediaStreamTrack
+        | undefined;
 
-      timerWorker.onmessage = (e) => {
-        if (e.data !== "tick" || stopped) return;
-        if (isCancelledRef.current) {
-          stopRecording();
-          return;
-        }
-
-        const now = performance.now();
-        if (currentFrameTime <= end && renderedFrames < totalFrames) {
-          video.currentTime = currentFrameTime;
-          currentFrameTime += frameStep;
-          renderedFrames++;
-          void renderToCanvas(canvas, video, cachedFlags);
-
-          const pct = Math.min(
-            99,
-            Math.round((renderedFrames / Math.max(1, totalFrames)) * 100),
-          );
-          if (pct > lastPct && now - lastProgressAt > 100) {
-            lastPct = pct;
+      // Reproducción en tiempo real + requestVideoFrameCallback: el navegador
+      // decodifica la fuente de forma fluida (WebM incluido) y cada fotograma
+      // presentado se compone y se captura en su instante real. La búsqueda
+      // fotograma a fotograma anterior era lenta en WebM (sin índice de cues el
+      // navegador tarda más de 150 ms en buscar) y el timeout de 150 ms dibujaba
+      // fotogramas caducos: el vídeo exportado salía entrecortado y sin audio.
+      const frameStats = { n: 0, sum: 0, max: 0, slow: 0, lastMediaT: start };
+      const reportProgress = () => {
+        const dur = Math.max(end - start, 0.001);
+        const frac = Math.min(
+          1,
+          Math.max(0, (video.currentTime - start) / dur),
+        );
+        const pct = Math.min(99, Math.max(lastPct, Math.round(14 + frac * 85)));
+        if (pct > lastPct) {
+          lastPct = pct;
+          if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
+          if (recBarRef.current)
+            recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+          // setRecordingProgress re-renderiza el generador entero: hacerlo en
+          // cada fotograma frena el bucle de captura y el vídeo sale cortado.
+          // Se estrangula a un refresco de estado como máximo cada1,5 s.
+          const now = performance.now();
+          if (now - lastProgressAt > 1500 || pct >= 99) {
             lastProgressAt = now;
-            if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
-            if (recBarRef.current)
-              recBarRef.current.style.width = `${Math.max(5, pct)}%`;
-            const phase = pct < 30 ? 0 : pct < 65 ? 1 : pct < 90 ? 2 : 3;
-            if (phase !== lastPhase) {
-              lastPhase = phase;
-              setRecordingProgress(pct);
-            }
+            setRecordingProgress(pct);
           }
-        } else {
-          setRecordingProgress(99);
-          stopRecording();
         }
       };
 
-      timerWorker.postMessage("start");
+      await new Promise<void>((resolve) => {
+        let active = true;
+        let deadlineTimer = 0;
+        const finish = (reason: string) => {
+          if (!active) return;
+          active = false;
+          video.removeEventListener("ended", onEnded);
+          window.clearTimeout(deadlineTimer);
+          const summary =
+            `${reason} frames=${frameStats.n} ` +
+            `avgMs=${frameStats.n ? (frameStats.sum / frameStats.n).toFixed(1) : 0} ` +
+            `maxMs=${frameStats.max.toFixed(1)} slow>33ms=${frameStats.slow} ` +
+            `capturado=${frameStats.lastMediaT.toFixed(2)}/${(end - start).toFixed(2)}s`;
+          console.debug(`[export-clasica] ${summary}`);
+          // Resumen diagnóstico accesible desde DevTools y desde el DOM.
+          document.documentElement.setAttribute("data-export-clasica", summary);
+          resolve();
+        };
+        const onEnded = () => finish("ended-del-video");
+        const doneReason = () =>
+          isCancelledRef.current
+            ? "cancelado"
+            : stopped
+              ? "detenido"
+              : video.ended
+                ? "fin-del-video"
+                : video.currentTime >= end - 0.02
+                  ? "llego-al-trim"
+                  : null;
+        const schedule = () => {
+          if (!active) return;
+          const anyVideo = video as unknown as {
+            requestVideoFrameCallback?: (cb: () => void) => number;
+          };
+          if (typeof anyVideo.requestVideoFrameCallback === "function") {
+            anyVideo.requestVideoFrameCallback(() => void step());
+          } else {
+            // Respaldo sin rVFC: muestreo fijo a targetFps
+            window.setTimeout(() => void step(), Math.round(1000 / targetFps));
+          }
+        };
+        const step = async () => {
+          if (!active) return;
+          const early = doneReason();
+          if (early) return finish(early);
+          const tRender = performance.now();
+          await renderToCanvas(canvas, video, cachedFlags);
+          const ms = performance.now() - tRender;
+          frameStats.n++;
+          frameStats.sum += ms;
+          if (ms > frameStats.max) frameStats.max = ms;
+          if (ms > 33) frameStats.slow++;
+          frameStats.lastMediaT = video.currentTime;
+          if (!active) return;
+          if (vTrack && typeof (vTrack as any).requestFrame === "function") {
+            (vTrack as any).requestFrame();
+          }
+          reportProgress();
+          const late = doneReason();
+          if (late) return finish(late);
+          schedule();
+        };
+
+        video.addEventListener("ended", onEnded);
+        // Red de seguridad: si rVFC no vuelve a disparar (vídeo detenido por
+        // política de reproducción, pestaña oculta…), se cierra igualmente.
+        deadlineTimer = window.setTimeout(
+          () => finish("plazo-de-seguridad"),
+          ((end - start) / Math.max(videoSpeed, 0.01)) * 1000 + 6000,
+        );
+        video
+          .play()
+          .then(() => schedule())
+          .catch((playErr) => finish(`play-error ${playErr}`));
+      });
+
+      setRecordingProgress(99);
+      if (recorder.state !== "inactive") recorder.stop();
+      video.pause();
+      video.loop = true;
+      setIsVideoPlaying(false);
 
       const blob = await finished;
       if (isCancelledRef.current) return;
