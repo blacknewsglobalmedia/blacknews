@@ -409,7 +409,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-16 w-full"
       >
         {/* Unboxed Metadata */}
-        <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-sans tracking-wide text-neutral-400 uppercase mb-4 font-medium">
+        <div className="flex flex-wrap items-center justify-center gap-2.5 text-xs sm:text-sm font-sans tracking-wide text-neutral-400 uppercase mb-4 font-medium">
           <span className="text-white font-semibold">{report.category}</span>
           <span>·</span>
           <span>{report.publishedAt}</span>
@@ -424,12 +424,12 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         </div>
 
         {/* Big Headline in Lexend */}
-        <h1 className="font-headline text-3xl sm:text-4xl md:text-5xl lg:text-[3.6rem] font-normal text-white tracking-tight leading-[1.12] mb-6 text-balance">
+        <h1 className="font-headline text-3xl sm:text-4xl md:text-5xl lg:text-[3.6rem] font-normal text-white tracking-tight leading-[1.12] mb-6 text-balance text-center">
           {report.title}
         </h1>
 
         {/* Subtitle / Deck */}
-        <p className="font-sans text-lg sm:text-xl lg:text-2xl text-neutral-300 font-light leading-relaxed mb-8">
+        <p className="font-sans text-lg sm:text-xl lg:text-2xl text-neutral-300 font-light leading-relaxed mb-8 text-center">
           {report.subtitle}
         </p>
 
