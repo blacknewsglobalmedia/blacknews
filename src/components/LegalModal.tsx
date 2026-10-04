@@ -1,14 +1,100 @@
 import React, { useState } from "react";
-import { X, ShieldCheck, Scale, Cookie, FileText } from "lucide-react";
+import {
+  X,
+  ShieldCheck,
+  Scale,
+  Cookie,
+  FileText,
+  Newspaper,
+  Copyright,
+  Megaphone,
+  Gavel,
+} from "lucide-react";
 import { APP_VERSION, BUILD_STAMP } from "../version";
+import {
+  LegalTab,
+  LegalBlock,
+  LEGAL_META,
+  LEGAL_TABS_CONTENT,
+} from "../data/legalDocs";
 
-export type LegalTab = "terms" | "privacy" | "cookies";
+export type { LegalTab };
 
 interface LegalModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: LegalTab;
 }
+
+/** Configuración de pestañas (orden del documento oficial). */
+const TABS: Array<{ id: LegalTab; label: string; icon: React.ReactNode }> = [
+  { id: "terms", label: "Términos y Condiciones", icon: <Scale className="w-3.5 h-3.5" /> },
+  { id: "content", label: "Contenidos", icon: <Newspaper className="w-3.5 h-3.5" /> },
+  { id: "ip", label: "Propiedad Intelectual", icon: <Copyright className="w-3.5 h-3.5" /> },
+  { id: "ads", label: "Publicidad", icon: <Megaphone className="w-3.5 h-3.5" /> },
+  { id: "privacy", label: "Privacidad", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+  { id: "claims", label: "Reclamos", icon: <Gavel className="w-3.5 h-3.5" /> },
+  { id: "cookies", label: "Cookies", icon: <Cookie className="w-3.5 h-3.5" /> },
+];
+
+/** Negritas con markdown ligero (**texto**). */
+const renderText = (text: string): React.ReactNode =>
+  text.split(/\*\*(.+?)\*\*/g).map((seg, i) =>
+    i % 2 === 1 ? (
+      <strong key={i} className="text-white font-medium">
+        {seg}
+      </strong>
+    ) : (
+      <React.Fragment key={i}>{seg}</React.Fragment>
+    ),
+  );
+
+const renderBlock = (block: LegalBlock, i: number): React.ReactNode => {
+  if (block.h) {
+    return (
+      <h4
+        key={i}
+        className="text-[13px] font-bold text-white uppercase tracking-wider pt-3 pb-0.5"
+      >
+        {block.h}
+      </h4>
+    );
+  }
+  if (block.p) {
+    return <p key={i}>{renderText(block.p)}</p>;
+  }
+  if (block.list) {
+    return (
+      <ul key={i} className="list-disc pl-5 space-y-1 text-neutral-400">
+        {block.list.map((item, j) => (
+          <li key={j}>{renderText(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (block.num) {
+    return (
+      <ol key={i} className="list-decimal pl-5 space-y-1 text-neutral-400">
+        {block.num.map((item, j) => (
+          <li key={j}>{renderText(item)}</li>
+        ))}
+      </ol>
+    );
+  }
+  if (block.note) {
+    return (
+      <div
+        key={i}
+        className="p-3 bg-neutral-950 border border-white/10 rounded-lg"
+      >
+        <p className="text-white font-mono text-xs sm:text-sm break-all">
+          {block.note}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
 
 export const LegalModal: React.FC<LegalModalProps> = ({
   isOpen,
@@ -18,6 +104,13 @@ export const LegalModal: React.FC<LegalModalProps> = ({
   const [activeTab, setActiveTab] = useState<LegalTab>(initialTab);
 
   if (!isOpen) return null;
+
+  const sections =
+    activeTab === "cookies" ? null : LEGAL_TABS_CONTENT[activeTab];
+  const activeIcon =
+    TABS.find((t) => t.id === activeTab)?.icon ?? (
+      <FileText className="w-4 h-4 text-emerald-400" />
+    );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
@@ -40,122 +133,56 @@ export const LegalModal: React.FC<LegalModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-white/10 gap-2 mt-4 shrink-0 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setActiveTab("privacy")}
-            className={`py-2.5 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "privacy"
-                ? "border-white text-white"
-                : "border-transparent text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Políticas de Privacidad</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("terms")}
-            className={`py-2.5 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "terms"
-                ? "border-white text-white"
-                : "border-transparent text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            <Scale className="w-3.5 h-3.5" />
-            <span>Términos y Condiciones</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("cookies")}
-            className={`py-2.5 px-4 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "cookies"
-                ? "border-white text-white"
-                : "border-transparent text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            <Cookie className="w-3.5 h-3.5" />
-            <span>Política de Cookies</span>
-          </button>
+        <div className="flex border-b border-white/10 gap-1 mt-4 shrink-0 overflow-x-auto no-scrollbar">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2.5 px-3 text-xs font-semibold uppercase tracking-wider transition-colors border-b-2 cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                activeTab === tab.id
+                  ? "border-white text-white"
+                  : "border-transparent text-neutral-400 hover:text-neutral-200"
+              }`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto py-6 space-y-4 text-xs sm:text-sm text-neutral-300 font-light leading-relaxed pr-2">
-          {activeTab === "privacy" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <span>1. Protección de Datos y Privacidad de Usuarios</span>
-              </h3>
-              <p>
-                En <strong className="text-white font-medium">BLACKNEWS</strong>{" "}
-                asumimos un compromiso absoluto con la privacidad, la
-                certidumbre jurídica y la protección de los datos de nuestros
-                lectores y miembros del equipo editorial.
-              </p>
-              <div className="p-3.5 bg-neutral-950 border border-white/10 rounded-lg space-y-2 text-xs">
-                <p className="font-medium text-white">
-                  ● Cero rastreo invasivo:
-                </p>
-                <p className="text-neutral-400">
-                  No comercializamos, cedemos ni compartimos datos personales
-                  con redes de publicidad ni intermediarios de análisis masivo.
-                </p>
-                <p className="font-medium text-white pt-2">
-                  ● Autenticación Segura (Firebase Google Auth):
-                </p>
-                <p className="text-neutral-400">
-                  El inicio de sesión mediante Google utiliza protocolos de
-                  seguridad cifrados (OAuth 2.0 y JWT) gestionados directamente
-                  por Firebase Identity. Unicamente almacenamos tu correo y
-                  nombre para la asignación de roles editoriales.
-                </p>
+        <div className="flex-1 overflow-y-auto py-6 space-y-5 text-xs sm:text-sm text-neutral-300 font-light leading-relaxed pr-2">
+          {/* Encabezado meta del documento */}
+          <div className="p-3.5 bg-neutral-950 border border-white/10 rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1.5 text-xs">
+            {LEGAL_META.map((m) => (
+              <div key={m.label} className="flex items-baseline gap-2 min-w-0">
+                <span className="text-white font-medium shrink-0">
+                  {m.label}:
+                </span>
+                <span className="text-neutral-400 break-all">{m.value}</span>
               </div>
-              <p className="text-xs text-neutral-400 font-mono">
-                Última revisión: Octubre 2026 · Cumplimiento de estándares RGPD
-                / Ley de Protección de Datos.
-              </p>
-            </div>
-          )}
+            ))}
+          </div>
 
-          {activeTab === "terms" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Scale className="w-4 h-4 text-white" />
-                <span>2. Términos de Uso y Certidumbre Jurídica</span>
-              </h3>
-              <p>
-                Los contenidos analíticos, despachos informativos e informes
-                publicados en{" "}
-                <strong className="text-white font-medium">BLACKNEWS</strong>{" "}
-                defienden rigurosamente la libertad de expresión, la economía de
-                mercado y el estado de derecho.
-              </p>
-              <div className="p-3.5 bg-neutral-950 border border-white/10 rounded-lg space-y-2 text-xs">
-                <p className="font-medium text-white">
-                  ● Licencia de Difusión Abierta:
-                </p>
-                <p className="text-neutral-400">
-                  Se autoriza la reproducción libre de extractos y citas citando
-                  explícitamente a BLACKNEWS e incluyendo enlace a la
-                  publicación original.
-                </p>
-                <p className="font-medium text-white pt-2">
-                  ● Reserva de Responsabilidad Editorial:
-                </p>
-                <p className="text-neutral-400">
-                  Los informes y artículos de opinión reflejan el análisis
-                  técnico de sus autores y no constituyen asesoramiento
-                  financiero ni recomendaciones de inversión individualizadas.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "cookies" && (
+          {sections ? (
+            sections.map((section) => (
+              <section
+                key={section.title}
+                className="space-y-3 pt-4 border-t border-white/5 first:border-t-0 first:pt-0"
+              >
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <span className="text-emerald-400">{activeIcon}</span>
+                  <span>{section.title}</span>
+                </h3>
+                {section.blocks.map(renderBlock)}
+              </section>
+            ))
+          ) : (
+            /* Pestaña específica del sitio (no forma parte del documento oficial) */
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Cookie className="w-4 h-4 text-amber-400" />
-                <span>3. Declaración de Cookies y Almacenamiento Local</span>
+                <span>Declaración de Cookies y Almacenamiento Local</span>
               </h3>
               <p>
                 Este sitio web utiliza únicamente almacenadores esenciales
