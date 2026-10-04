@@ -415,6 +415,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setTitle(imported.title);
     setSubtitle(imported.subtitle);
     setCategory(imported.category);
+    setArticleCountries(Array.isArray(imported.countries) ? imported.countries : []);
+    setCountryQuery('');
+    setCustomCountryName('');
     setLead(imported.lead);
     setReadTime(imported.readTime);
     if (imported.imageCaption) {

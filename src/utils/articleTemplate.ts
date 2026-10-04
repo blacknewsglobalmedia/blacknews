@@ -15,8 +15,10 @@ export interface BlacknewsArticleJsonPayload {
       title: string;
       subtitle: string;
       category: string;
+      countries: string;
       lead: string;
       readTime: string;
+      image: string;
       imageCaption: string;
       tags: string;
       keyTakeaways: string;
@@ -27,6 +29,7 @@ export interface BlacknewsArticleJsonPayload {
         heading: string;
         quote: string;
         stat: string;
+        highlight: string;
       };
     };
   };
@@ -34,6 +37,8 @@ export interface BlacknewsArticleJsonPayload {
     title: string;
     subtitle: string;
     category: CategoryId;
+    /** Países del acontecimiento (pines del mapa). Sin lista = Internacional. */
+    countries?: string[];
     lead: string;
     readTime: string;
     image?: string;
@@ -52,7 +57,7 @@ export interface BlacknewsArticleJsonPayload {
 export const SAMPLE_ARTICLE_JSON: BlacknewsArticleJsonPayload = {
   _meta: {
     formato: "BLACKNEWS_EDITORIAL_ARTICLE_V1",
-    version: "1.2.0",
+    version: "1.3.0",
     descripcion: "Plantilla oficial de despacho editorial para BLACKNEWS con especificaciones estrictas de extensión, balance de párrafos y directrices para modelos de Inteligencia Artificial.",
     proposito_para_ia: "Pásale este archivo o su contenido a una IA (Gemini, ChatGPT, Claude) junto con tu tema de investigación para que genere un artículo completo que cumpla al 100% las limitaciones editoriales e impórtalo directamente en el Constructor de Artículos."
   },
@@ -63,8 +68,10 @@ export const SAMPLE_ARTICLE_JSON: BlacknewsArticleJsonPayload = {
       title: "Titular principal de la investigación. Extensión recomendada: entre 50 y 90 caracteres (máximo estricto: 110 caracteres). Debe ser directo, asertivo y de peso intelectual.",
       subtitle: "Bajada o deck de portada. Extensión recomendada: entre 120 y 220 caracteres (máximo: 260 caracteres). Debe actuar como resumen ejecutivo con la tesis o hallazgo nuclear.",
       category: `Sección editorial temática. Debe ser exactamente UNA de las siguientes categorías válidas: ${CATEGORIES.filter((c) => c !== 'TODAS').map((c) => `'${c}'`).join(' | ')}.`,
+      countries: "Países donde ocurre el acontecimiento: lista de 1 a 4 nombres EXACTOS del selector del Constructor (ej: ['Alemania', 'Chile', 'EE.UU.']). Generan los pines del mapa de cobertura; si se omite o va vacía, el artículo se clasifica como Internacional.",
       lead: "Párrafo de entrada principal (Lead periodístico). Extensión recomendada: entre 280 y 450 caracteres (máximo: 550 caracteres). Debe responder de inmediato al qué, quién, cuándo y por qué con máxima densidad informativa.",
       readTime: "Tiempo estimado de lectura para el usuario. Formato: '[N] min de lectura' (ejemplo: '4 min de lectura', '6 min de lectura').",
+      image: "URL pública de la imagen destacada (https://... o una ruta accesible del sitio como '/uploads/archivo.jpg'). Opcional: si se omite, la imagen se selecciona en el Constructor.",
       imageCaption: "Pie de foto descriptivo y contextual. Extensión recomendada: entre 60 y 140 caracteres. Debe contextualizar la fotografía o gráfico con precisión técnica.",
       tags: "Lista de 3 a 6 etiquetas clave sin almohadillas (#) para indexación y navegación temática (ej: ['Cómputo Cuántico', 'Soberanía Digital', 'Inversión Privada']).",
       keyTakeaways: "Lista de 3 a 5 puntos clave (conclusiones nucleares) sintetizados en una oración concisa. Extensión por punto: entre 60 y 130 caracteres (máximo: 150 caracteres).",
@@ -74,7 +81,8 @@ export const SAMPLE_ARTICLE_JSON: BlacknewsArticleJsonPayload = {
         paragraph: "Párrafo narrativo o analítico. Extensión recomendada: entre 200 y 420 caracteres por párrafo (máximo: 500 caracteres). REGLA FUNDAMENTAL: Evitar bloques gigantes de texto; dividir ideas complejas en párrafos ágiles y contundentes.",
         heading: "Subtítulo de sección interna. Extensión recomendada: entre 20 y 55 caracteres. Agrupa lógicamente los diferentes ángulos de la investigación.",
         quote: "Cita textual de relevancia testimonial o académica. 'text': entre 80 y 240 caracteres de cita textual directa. 'cite': nombre del emisor, cargo o entidad consultada (entre 15 y 55 caracteres).",
-        stat: "Indicador métrico o dato estadístico cardinal. 'value': cifra o porcentaje breve de 2 a 10 caracteres (ej: '+34.8%', '$4.8B', '99.94%'). 'label': descripción explicativa del dato (entre 30 y 85 caracteres)."
+        stat: "Indicador métrico o dato estadístico cardinal. 'value': cifra o porcentaje breve de 2 a 10 caracteres (ej: '+34.8%', '$4.8B', '99.94%'). 'label': descripción explicativa del dato (entre 30 y 85 caracteres).",
+        highlight: "Párrafo de realce para citas o ideas fuerza. 'text': entre 80 y 300 caracteres. Se acepta en el JSON y se importa como párrafo editable en el Constructor."
       }
     }
   },
@@ -82,9 +90,10 @@ export const SAMPLE_ARTICLE_JSON: BlacknewsArticleJsonPayload = {
     title: "La desregulación de centros de cómputo cuántico atrae 14.000 millones en capital privado",
     subtitle: "El establecimiento de marcos jurídicos estables y la exención de trabas arancelarias impulsan una nueva generación de infraestructuras críticas sin recurrir a subsidios estatales.",
     category: "TECNOLOGÍA & INNOVACIÓN",
+    countries: ["Alemania", "España", "Chile"],
     lead: "La adopción de marcos regulatorios basados en la certeza contractual y la libre transferencia de datos ha detonado una oleada de inversiones estratégicas en centros de computación de alto rendimiento en Europa y América Latina, superando las previsiones más optimistas de los analistas de mercado.",
     readTime: "5 min de lectura",
-    image: "/src/assets/images/tech_silicon_datacenter_1790285939453.jpg",
+    image: "/uploads/tech-silicon-datacenter-mug6uw9h-1200.jpg",
     imageCaption: "Interconexión criogénica de clústeres de cálculo cuántico financiados por consorcios tecnológicos internacionales.",
     exclusive: true,
     tags: [
@@ -166,6 +175,8 @@ export interface ParsedArticleImport {
   title: string;
   subtitle: string;
   category: CategoryId;
+  /** Países del acontecimiento para el mapa de cobertura (opcional). */
+  countries?: string[];
   lead: string;
   readTime: string;
   image?: string;
@@ -242,12 +253,21 @@ export function parseAndValidateArticleJson(jsonString: string): {
       keyTakeaways = root.keyTakeaways.map((t: any) => String(t).trim()).filter((t: string) => t.length > 0);
     }
 
+    // Normalizar países del acontecimiento (pines del mapa de cobertura)
+    let countries: string[] = [];
+    if (Array.isArray(root.countries)) {
+      countries = root.countries.map((c: any) => String(c).trim()).filter((c: string) => c.length > 0);
+    } else if (typeof root.countries === 'string') {
+      countries = root.countries.split(',').map((c: string) => c.trim()).filter((c: string) => c.length > 0);
+    }
+
     return {
       success: true,
       data: {
         title: String(root.title).trim(),
         subtitle: root.subtitle ? String(root.subtitle).trim() : '',
         category,
+        countries,
         lead: String(root.lead).trim(),
         readTime: root.readTime ? String(root.readTime).trim() : '5 min de lectura',
         image: root.image ? String(root.image).trim() : undefined,
