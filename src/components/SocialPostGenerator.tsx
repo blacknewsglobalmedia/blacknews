@@ -103,6 +103,11 @@ const TEXT_COLUMN_WIDTH = 1080 - 84 * 2;
  *  (line-clamp) y el export ahora respeta ese mismo tope. */
 const MAX_DESC_LINES = 5;
 
+/** Suelo de la zona de texto en 9:16: la foto arranca como pronto al 30 % del
+ *  alto (576 px de 1920) para que el formato vertical le dé más espacio. En
+ *  4:5 se mantiene el suelo clásico de 520 px sobre 1350 (38,5 %). */
+const MEDIA_FLOOR_RATIO_9X16 = 0.3;
+
 /** Reparte `text` en líneas que caben en `maxWidth` según la métrica del ctx. */
 const wrapText = (
   ctx: CanvasRenderingContext2D,
@@ -1079,8 +1084,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 5. Draw Media (Image or Video Frame)
     // Entero a propósito: una y fraccional deja una costura antialias de 1 px
     // entre el fondo negro y el video (la "raya" del borde superior).
-    // El texto ocupa la misma proporción vertical en 4:5 y en 9:16
-    const mediaTopY = Math.round(Math.max(curY, (520 * H) / 1350));
+    // Suelo de zona de texto: 38,5 % del alto en 4:5 y 30 % en 9:16 —el
+    // formato vertical lo mueve la foto, que así gana altura—.
+    const textZoneFloor =
+      postFormat === "9:16" ? H * MEDIA_FLOOR_RATIO_9X16 : (520 * H) / 1350;
+    const mediaTopY = Math.round(Math.max(curY, textZoneFloor));
     const mediaHeight = H - mediaTopY;
 
     if ((mediaElement || frameOverride) && !isOverlayOnly) {
@@ -2343,6 +2351,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ),
       )
     : [];
+
+  // Inicio de la foto: replica el recorrido de curY del export (76 → cabecera
+  // → insignia → titular → bajada → 40 px de aire) y aplica el mismo suelo
+  // (30 % del alto en 9:16). En 4:5 se conserva el 40 % fijo de siempre.
+  const previewTextEndCanvas =
+    76 +
+    (autoFitHeader ? 20 : headerSize) +
+    gapCategoryToTitle +
+    (countryPlacement === "badge" && selectedCountries.length > 0
+      ? 18 + gapCategoryToTitle
+      : 0) +
+    previewTitleLines.length * Math.round(fontSizeTitle * titleLineHeightRatio) +
+    gapTitleToDesc +
+    (description.trim()
+      ? previewDescLines.length * Math.round(fontSizeDesc * descLineHeightRatio)
+      : 0) +
+    40;
+  const previewMediaTopPct =
+    postFormat === "9:16"
+      ? (Math.max(previewTextEndCanvas, POST_H * MEDIA_FLOOR_RATIO_9X16) /
+          POST_H) *
+        100
+      : 40;
 
   // Dynamic header sizing calculation to strictly fit in ONE single line
   const countriesLineText =
@@ -3936,8 +3967,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               )}
             </div>
 
-            {/* Media Container (Occupies bottom half with smooth fade) */}
-            <div className="absolute inset-0 top-[40%] overflow-hidden z-0">
+            {/* Media Container (inicio dinámico en 9:16, 40 % fijo en 4:5) */}
+            <div
+              className="absolute inset-0 overflow-hidden z-0"
+              style={{ top: `${previewMediaTopPct}%` }}
+            >
               {mediaType === "video" ? (
                 <video
                   ref={videoRef}
