@@ -8,7 +8,6 @@ import {
   Megaphone,
 } from "lucide-react";
 import { CategoryId } from "../types/news";
-import { LegalModal, LegalTab } from "./LegalModal";
 import { APP_VERSION, BUILD_STAMP } from "../version";
 
 interface FooterProps {
@@ -16,6 +15,8 @@ interface FooterProps {
   onSelectCategory: (cat: CategoryId) => void;
   onShareSite: () => void;
   onOpenAdModal?: () => void;
+  /** Abre la página de políticas completa (§1-§10) en la sección indicada. */
+  onOpenPolicies?: (section?: number) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -23,15 +24,10 @@ export const Footer: React.FC<FooterProps> = ({
   onSelectCategory,
   onShareSite,
   onOpenAdModal,
+  onOpenPolicies,
 }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const [legalTab, setLegalTab] = React.useState<LegalTab | null>(null);
-
-  const handleOpenLegal = (tab: LegalTab) => {
-    setLegalTab(tab);
   };
 
   return (
@@ -165,36 +161,36 @@ export const Footer: React.FC<FooterProps> = ({
 
             <div className="flex items-center flex-wrap justify-center gap-3 sm:gap-4 text-neutral-400 font-medium">
               <button
-                onClick={() => handleOpenLegal("privacy")}
+                onClick={() => onOpenPolicies?.(5)}
                 className="hover:text-white transition-colors cursor-pointer"
               >
                 Políticas de Privacidad
               </button>
               <span>·</span>
               <button
-                onClick={() => handleOpenLegal("terms")}
+                onClick={() => onOpenPolicies?.(1)}
                 className="hover:text-white transition-colors cursor-pointer"
               >
                 Términos y Condiciones
               </button>
               <span>·</span>
               <button
-                onClick={() => handleOpenLegal("cookies")}
+                onClick={() => onOpenPolicies?.(10)}
                 className="hover:text-white transition-colors cursor-pointer"
               >
                 Política de Cookies
+              </button>
+              <span>·</span>
+              <button
+                onClick={() => onOpenPolicies?.()}
+                className="hover:text-white transition-colors cursor-pointer"
+              >
+                Todas las Políticas
               </button>
             </div>
           </div>
         </div>
       </footer>
-
-      {/* Legal & Compliance Modal */}
-      <LegalModal
-        isOpen={legalTab !== null}
-        onClose={() => setLegalTab(null)}
-        initialTab={legalTab || "privacy"}
-      />
     </>
   );
 };

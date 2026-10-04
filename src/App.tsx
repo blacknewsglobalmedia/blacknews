@@ -17,6 +17,8 @@ import { BookmarksDrawer } from "./components/BookmarksDrawer";
 import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
+import { PoliciesPage } from "./components/PoliciesPage";
+import { PoliciesNoticeBanner } from "./components/PoliciesNoticeBanner";
 import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
@@ -105,9 +107,18 @@ const INITIAL_REDACTORS: RedactorProfile[] = [
 let visitCountedThisLoad = false;
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<"portada" | "redaccion">(
-    "portada",
-  );
+  const [currentView, setCurrentView] = useState<
+    "portada" | "redaccion" | "politicas"
+  >(() => {
+    // Deep-link de la página de políticas (?politicas o ?politicas=<n>)
+    const params = new URLSearchParams(window.location.search);
+    return params.has("politicas") ? "politicas" : "portada";
+  });
+  const [policiesSection, setPoliciesSection] = useState<number | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("politicas");
+    const n = raw ? Number.parseInt(raw, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  });
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("TODAS");
   const [activeReport, setActiveReport] = useState<Report | null>(null);
   const [shareTargetReport, setShareTargetReport] = useState<Report | null>(
@@ -580,6 +591,29 @@ export default function App() {
     window.history.pushState({}, "", window.location.pathname);
   };
 
+  // Página de políticas (vista completa con deep-link ?politicas=<n>)
+  const handleOpenPolicies = (section?: number) => {
+    setPoliciesSection(section ?? null);
+    setCurrentView("politicas");
+    const suffix =
+      typeof section === "number" && section > 0
+        ? `?politicas=${section}`
+        : "?politicas";
+    window.history.pushState(
+      { policies: section ?? true },
+      "",
+      `${window.location.pathname}${suffix}`,
+    );
+    window.scrollTo({ top: 0 });
+  };
+
+  const handleClosePolicies = () => {
+    setPoliciesSection(null);
+    setCurrentView("portada");
+    window.history.pushState({}, "", window.location.pathname);
+    window.scrollTo({ top: 0 });
+  };
+
   // Bookmark toggling
   const handleToggleBookmark = (report: Report) => {
     setBookmarkedIds((prev) => {
@@ -914,6 +948,9 @@ export default function App() {
         </div>
       )}
 
+      {/* Aviso de políticas a todos los visitantes (si hay versión nueva) */}
+      <PoliciesNoticeBanner onOpenPolicies={() => handleOpenPolicies()} />
+
       {/* Top Navigation */}
       <TopBar
         categories={categoriesList}
@@ -951,7 +988,12 @@ export default function App() {
 
       {/* Main View Switcher */}
       <main className="flex-1">
-        {currentView === "redaccion" && canAccessInternalMedia ? (
+        {currentView === "politicas" ? (
+          <PoliciesPage
+            onBack={handleClosePolicies}
+            initialSection={policiesSection}
+          />
+        ) : currentView === "redaccion" && canAccessInternalMedia ? (
           <RedactionStudio
             onBackToNews={() => setCurrentView("portada")}
             onPublishReport={handlePublishReport}
@@ -1077,6 +1119,7 @@ export default function App() {
         }}
         onShareSite={() => handleOpenShare(null)}
         onOpenAdModal={() => setIsAdModalOpen(true)}
+        onOpenPolicies={handleOpenPolicies}
       />
 
       {/* Deep Report Reader Modal */}

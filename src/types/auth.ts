@@ -13,6 +13,8 @@ export interface UserPermissions {
   canManageBreakingTicker: boolean;
   canWritePosts: boolean;
   canEditOwnPosts: boolean;
+  /** Publicar cambios en las políticas legales (solo cuenta propietaria). */
+  canManagePolicies: boolean;
 }
 
 export interface RedactorProfile {
@@ -41,6 +43,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageBreakingTicker: true,
     canWritePosts: true,
     canEditOwnPosts: true,
+    canManagePolicies: true,
   },
   MODERADOR: {
     canAccessInternalMedia: true,
@@ -52,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageBreakingTicker: true,
     canWritePosts: true,
     canEditOwnPosts: true,
+    canManagePolicies: false,
   },
   REDACTOR: {
     canAccessInternalMedia: true,
@@ -63,6 +67,7 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageBreakingTicker: false,
     canWritePosts: true,
     canEditOwnPosts: true, // Solo sus propios artículos
+    canManagePolicies: false,
   },
   LECTOR: {
     canAccessInternalMedia: false,
@@ -74,5 +79,6 @@ export const ROLE_PERMISSIONS: Record<RedactorRole, UserPermissions> = {
     canManageBreakingTicker: false,
     canWritePosts: false,
     canEditOwnPosts: false,
+    canManagePolicies: false,
   },
 };

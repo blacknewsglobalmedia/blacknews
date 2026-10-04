@@ -7,19 +7,12 @@
  * y el orden del array es el orden de aparición en el documento original.
  */
 
-export type LegalTab =
-  | "terms"
-  | "content"
-  | "ip"
-  | "ads"
-  | "privacy"
-  | "claims"
-  | "cookies";
-
-/** Encabezado meta compartido por todos los documentos legales. */
-export const LEGAL_META: Array<{ label: string; value: string }> = [
+/**
+ * Introducción meta del documento (etiquetas **Label:** valor).
+ * La "Entrada en vigor" NO va aquí: se gestiona como campo aparte (fecha).
+ */
+export const POLICIES_INTRO: Array<{ label: string; value: string }> = [
   { label: "Versión", value: "1.0" },
-  { label: "Entrada en vigor", value: "3 de octubre de 2026" },
   { label: "Última actualización", value: "3 de octubre de 2026" },
   { label: "Entidad responsable", value: "BlackNews Global Media" },
   { label: "Marca", value: "BlackNews" },
@@ -647,15 +640,36 @@ const SECTION_ACCEPTANCE: LegalSection = {
   ],
 };
 
-/** Contenido por pestaña (la pestaña "cookies" se mantiene en JSX por ser específica del sitio). */
-export const LEGAL_TABS_CONTENT: Record<
-  Exclude<LegalTab, "cookies">,
-  LegalSection[]
-> = {
-  terms: [SECTION_TERMS, SECTION_GENERAL, SECTION_ACCEPTANCE],
-  content: [SECTION_CONTENT],
-  ip: [SECTION_IP],
-  ads: [SECTION_ADS, SECTION_ADVERTISERS],
-  privacy: [SECTION_PRIVACY],
-  claims: [SECTION_CLAIMS],
+/** §10 — declaración específica del sitio (no forma parte del documento oficial1-9). */
+const SECTION_COOKIES: LegalSection = {
+  title: "10. Cookies y Almacenamiento Local",
+  blocks: [
+    { p: "Este sitio web utiliza únicamente almacenadores esenciales locales en el navegador del usuario (**localStorage**) para mantener la sesión de usuario activa y guardar lecturas marcadas." },
+    { h: "Cookies estrictamente necesarias" },
+    { list: [
+      "**blacknews_active_user**: Mantiene tu sesión de lectura / redactor abierta al pulsar F5.",
+      "**blacknews_bookmarks**: Guarda tus artículos y lecturas destacadas.",
+      "**Firebase Auth Tokens**: Autenticación segura para miembros autorizados.",
+    ] },
+    { p: "No se instalan cookies de rastreo publicitario de terceros. Puedes limpiar estos datos en cualquier momento borrando el historial de tu navegador." },
+  ],
 };
+
+/**
+ * Secciones en orden de documento (1→10). Es la fuente para:
+ * - la página pública de políticas,
+ * - la generación del markdown por defecto (punto de partida del editor admin),
+ * - el índice de la página.
+ */
+export const ALL_LEGAL_SECTIONS: LegalSection[] = [
+  SECTION_TERMS,
+  SECTION_CONTENT,
+  SECTION_IP,
+  SECTION_ADS,
+  SECTION_PRIVACY,
+  SECTION_CLAIMS,
+  SECTION_ADVERTISERS,
+  SECTION_GENERAL,
+  SECTION_ACCEPTANCE,
+  SECTION_COOKIES,
+];
