@@ -33,7 +33,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
   configuredDossier,
 }) => {
   const getCity = (bureau: string) => {
-    return bureau.split('/')[0].trim().toUpperCase();
+    return (bureau || '').split('/')[0].trim().toUpperCase();
   };
 
   const isAll = selectedCategory === 'TODAS';

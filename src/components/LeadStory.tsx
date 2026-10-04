@@ -92,7 +92,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
                 <div className="text-xs sm:text-sm text-neutral-300 leading-relaxed space-y-4 font-sans font-normal">
                   <p>
                     <strong className="text-white font-semibold text-xs tracking-wide mr-1.5 font-sans">
-                      {report.author.bureau.split('/')[0].trim()} —
+                      {(report.author.bureau || report.author.name || '').split('/')[0].trim()} —
                     </strong>
                     {contextSection.text}
                   </p>

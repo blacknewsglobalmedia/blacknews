@@ -683,7 +683,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       countries: articleCountries.length > 0 ? articleCountries : undefined,
       author: {
         name: currentUser.name,
-        bureau: currentUser.bureau,
+        // '' en lugar de undefined: los informes guardan siempre cadena y
+        // evitan "undefined" en las busquedas y en las fichas de autor.
+        bureau: currentUser.bureau || '',
         role: currentUser.title,
         email: currentUser.email,
         id: currentUser.id,
@@ -823,7 +825,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <div className="flex items-center gap-1 text-[10px] text-neutral-400 font-mono">
                   <span className="text-neutral-300 font-semibold">{currentUser.role}</span>
                   <span>·</span>
-                  <span className="truncate">{currentUser.bureau.split('/')[0]}</span>
+                  <span className="truncate">
+                    {(currentUser.bureau || '').split('/')[0]}
+                  </span>
                 </div>
               </div>
             </div>
