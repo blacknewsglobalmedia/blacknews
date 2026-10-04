@@ -23,7 +23,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
   const exhausted = nearLimit && meter.exhausted;
 
   return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 px-3 w-full max-w-full flex justify-center pointer-events-none">
+    <div className="fixed bottom-3 right-3 z-40 flex justify-end pointer-events-none">
       <div
         className={`pointer-events-auto flex items-center gap-2 sm:gap-3 bg-neutral-950/95 backdrop-blur-md border border-white/15 rounded-full py-1.5 pr-1.5 shadow-2xl font-sans ${
           nearLimit ? "pl-3" : "pl-1.5"

@@ -36,8 +36,16 @@ import {
   computeLayoutPreset,
 } from "./utils/layoutUtils";
 import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
+import { healPublishedAt } from "./utils/publishedAt";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
-import { doc, setDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 
 /** Evento beforeinstallprompt (Chrome/Edge/Android) para instalar la PWA. */
 interface BeforeInstallPromptEvent extends Event {
@@ -146,10 +154,12 @@ export default function App() {
           const cleaned = parsed
             .filter((r: Report) => r && !MOCK_REPORT_IDS.includes(r.id))
             .map((r: Report) => {
-              const renamed = OLD_CATEGORY_ALIASES[r.category] ?? r.category;
-              if (renamed === r.category) return r;
+              // Corrige la fecha fija heredada del editor (ver utils/publishedAt)
+              const healed = healPublishedAt(r);
+              const renamed = OLD_CATEGORY_ALIASES[healed.category] ?? healed.category;
+              if (renamed === healed.category) return healed;
               categoryChanged = true;
-              return { ...r, category: renamed };
+              return { ...healed, category: renamed };
             });
           if (categoryChanged || cleaned.length !== parsed.length) {
             localStorage.setItem("blacknews_reports", JSON.stringify(cleaned));
@@ -379,6 +389,86 @@ export default function App() {
     if (readMeter.unlimited) return;
     setReadUsage((prev) => recordRead(prev, report.id));
   };
+
+  // Contenido publicado: Firestore es la fuente de verdad para todos los
+  // navegadores (en una pestaña de incógnito no existe la copia local).
+  // Se recupera en segundo plano al arrancar; si algo falla (sin red o sin
+  // permisos) se mantiene lo que haya en este dispositivo.
+  useEffect(() => {
+    let alive = true;
+
+    const pullReports = async () => {
+      try {
+        const snap = await getDocs(collection(db, "reports"));
+        if (!alive) return;
+        const remote = snap.docs
+          .map((d) => healPublishedAt({ ...(d.data() as Report), id: d.id }))
+          .filter(
+            (r) =>
+              r && typeof r.title === "string" && !MOCK_REPORT_IDS.includes(r.id),
+          )
+          // Los ids llevan marca de tiempo (rep-custom-<ms>): lo más reciente primero
+          .sort((a, b) => b.id.localeCompare(a.id));
+        if (remote.length === 0) return;
+        setReportsList(remote);
+        try {
+          localStorage.setItem("blacknews_reports", JSON.stringify(remote));
+        } catch {}
+      } catch {
+        /* sin conexión: sigue mandando la copia local */
+      }
+    };
+
+    const pullFlashNews = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "flash_news"));
+        if (!alive || !snap.exists()) return;
+        const items = (snap.data() as { items?: FlashNews[] }).items;
+        if (!Array.isArray(items)) return;
+        setFlashNewsList(items);
+        try {
+          localStorage.setItem("blacknews_flash_news", JSON.stringify(items));
+        } catch {}
+      } catch {}
+    };
+
+    const pullCategories = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "categories"));
+        if (!alive || !snap.exists()) return;
+        const cats = (snap.data() as { categories?: string[] }).categories;
+        if (!Array.isArray(cats) || cats.length === 0) return;
+        setCategoriesList(cats);
+        try {
+          localStorage.setItem("blacknews_categories", JSON.stringify(cats));
+        } catch {}
+      } catch {}
+    };
+
+    const pullFrontLayout = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "frontpage_layout"));
+        if (!alive || !snap.exists()) return;
+        const cfg = snap.data() as FrontPageLayoutConfig;
+        if (!cfg || typeof cfg.leadReportId !== "string") return;
+        setLayoutConfig(cfg);
+        try {
+          localStorage.setItem("blacknews_layout_config", JSON.stringify(cfg));
+        } catch {}
+      } catch {}
+    };
+
+    void Promise.all([
+      pullReports(),
+      pullFlashNews(),
+      pullCategories(),
+      pullFrontLayout(),
+    ]);
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Automatically verify and maintain Firebase Auth session across F5 page reloads
   useEffect(() => {
@@ -711,6 +801,9 @@ export default function App() {
     setReportsList(updated);
     try {
       localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+      // Retira también la copia remota: sin esto la noticia volvería a
+      // aparecer en los demás navegadores al sincronizar al arrancar.
+      await deleteDoc(doc(db, "reports", id));
     } catch {}
     showToast("Informe retirado de portada");
   };

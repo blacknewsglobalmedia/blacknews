@@ -69,6 +69,7 @@ import { AdsManager } from './AdsManager';
 import { PoliciesManager } from './PoliciesManager';
 import { OptimizedPicture } from './OptimizedPicture';
 import { downloadArticleTemplateJson, ParsedArticleImport } from '../utils/articleTemplate';
+import { formatPublishedAt, healPublishedAt } from '../utils/publishedAt';
 
 interface RedactionStudioProps {
   onBackToNews: () => void;
@@ -642,9 +643,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         setFormError('No estás autorizado para modificar este informe.');
         return;
       }
+      // Conserva la fecha original, salvo que sea el valor fijo heredado
+      const base = healPublishedAt(original);
 
       const updated: Report = {
-        ...original,
+        ...base,
         title: title.trim(),
         subtitle: subtitle.trim(),
         category,
@@ -687,7 +690,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       },
       authorEmail: currentUser.email,
       authorId: currentUser.id,
-      publishedAt: '24 Sep 2026 · Despacho Reciente',
+      publishedAt: formatPublishedAt(),
       readTime,
       image: finalImage,
       optimizedImage: selectedOptimizedImage,
