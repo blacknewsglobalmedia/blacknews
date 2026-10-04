@@ -95,8 +95,16 @@ export const EXPANDED_CATEGORIES: string[] = CATEGORIES.filter(
 const DEFAULT_MEDIA_SRC =
   "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80";
 
-/** Ancho de la columna de texto del post: lienzo de 1080 menos 84 de margen
- *  por lado (renderToCanvas calcula lo mismo con `W - padX * 2`). */
+/** Márgenes de texto seguros para TikTok en 9:16 (1080×1920): la UI de la app
+ *  tapa ~160 px superiores (pestañas "Para ti"/"Siguiendo" y búsqueda) y ~140 px
+ *  derechos (raíl de acciones). La izquierda conserva los 84 de siempre. En
+ *  4:5 nada cambia: un post de feed no lleva superposiciones. */
+const PAD_TOP_9X16 = 160;
+const PAD_RIGHT_9X16 = 140;
+
+/** Ancho de la columna de texto en 4:5: 1080 menos 84 de margen por lado. En
+ *  9:16 se estrecha a la columna segura (84 izquierda + 140 derecha) —
+ *  renderToCanvas calcula lo mismo con `W - padX - padRight`. */
 const TEXT_COLUMN_WIDTH = 1080 - 84 * 2;
 
 /** Máximo de líneas de la bajada: la vista previa siempre limitó a 5 líneas
@@ -910,8 +918,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // Padding parameters
     const padX = 84;
-    const contentWidth = W - padX * 2;
-    let curY = 76;
+    // Zonas seguras de TikTok en 9:16: el texto arranca más abajo (160 px) y
+    // deja 140 px libres a la derecha (raíl de acciones). En 4:5: 76/84 de
+    // toda la vida. El suelo de la foto no cambia.
+    const padTop = postFormat === "9:16" ? PAD_TOP_9X16 : 76;
+    const padRight = postFormat === "9:16" ? PAD_RIGHT_9X16 : 84;
+    const contentWidth = W - padX - padRight;
+    let curY = padTop;
 
     // 2. Category & Country Header Line (Guaranteed Single Line with Vector Flags)
     ctx.save();
@@ -993,7 +1006,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // Line divider
     const lineStartX = curX + 18;
-    const lineEndX = Math.min(lineStartX + 60, W - padX);
+    const lineEndX = Math.min(lineStartX + 60, W - padRight);
 
     if (lineEndX > lineStartX + 8) {
       ctx.strokeStyle = "#FFFFFF";
@@ -2324,7 +2337,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const previewScale = previewCardWidth / 1080;
   const previewTitleSize = fontSizeTitle * previewScale;
   const previewDescSize = fontSizeDesc * previewScale;
-  const previewPadTop = 76 * previewScale;
+  const padTopCanvas = postFormat === "9:16" ? PAD_TOP_9X16 : 76;
+  const previewPadTop = padTopCanvas * previewScale;
+  const previewPadRight =
+    (postFormat === "9:16" ? PAD_RIGHT_9X16 : 84) * previewScale;
+  // Columna idéntica a la del export: 912 px en 4:5 · 856 px seguros en 9:16.
+  const textColumnWidth =
+    postFormat === "9:16" ? 1080 - 84 - PAD_RIGHT_9X16 : TEXT_COLUMN_WIDTH;
   const previewPadX = 84 * previewScale;
   const previewGapCatTitle = gapCategoryToTitle * previewScale;
   const previewGapTitleDesc = gapTitleToDesc * previewScale;
@@ -2335,28 +2354,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     Math.round(fontSizeDesc * descLineHeightRatio) * previewScale;
 
   // Líneas idénticas a las del export: se miden con la métrica real del
-  // lienzo (Lexend Bold/Regular, columna de 912 px, sin tracking) y aquí solo
-  // se pintan, así titular y bajada cortan igual que en el PNG/vídeo exportado.
+  // lienzo (Lexend Bold/Regular, columna real según formato, sin tracking) y
+  // aquí solo se pintan, así titular y bajada cortan igual que en el archivo.
   const previewTitleLines = wrapLikeExport(
     `700 ${fontSizeTitle}px 'Lexend', sans-serif`,
     title || "Escribe un titular impactante...",
-    TEXT_COLUMN_WIDTH,
+    textColumnWidth,
   );
   const previewDescLines = description.trim()
     ? capDescLines(
         wrapLikeExport(
           `400 ${fontSizeDesc}px 'Lexend', sans-serif`,
           description,
-          TEXT_COLUMN_WIDTH,
+          textColumnWidth,
         ),
       )
     : [];
 
-  // Inicio de la foto: replica el recorrido de curY del export (76 → cabecera
-  // → insignia → titular → bajada → 40 px de aire) y aplica el mismo suelo
-  // (30 % del alto en 9:16). En 4:5 se conserva el 40 % fijo de siempre.
+  // Inicio de la foto: replica el recorrido de curY del export (padTop →
+  // cabecera → insignia → titular → bajada → 40 px de aire) y aplica el mismo
+  // suelo (30 % del alto en 9:16). En 4:5 se conserva el 40 % fijo de siempre.
   const previewTextEndCanvas =
-    76 +
+    padTopCanvas +
     (autoFitHeader ? 20 : headerSize) +
     gapCategoryToTitle +
     (countryPlacement === "badge" && selectedCountries.length > 0
@@ -3846,7 +3865,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               style={{
                 paddingTop: `${previewPadTop}px`,
                 paddingLeft: `${previewPadX}px`,
-                paddingRight: `${previewPadX}px`,
+                paddingRight: `${previewPadRight}px`,
               }}
               className="z-20 relative select-none"
             >
