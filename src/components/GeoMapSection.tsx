@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Report } from "../types/news";
 import { WORLD_DOTS_PATH } from "../data/worldDots";
+import { ReadMeter } from "../utils/readMeter";
 
 /** Coordenadas del centroide de los países donde ocurren noticias de la portada. */
 // Coordenadas [lon, lat] de los países seleccionables en el editor y en el
@@ -45,44 +46,16 @@ const COUNTRY_COORDS: Record<string, [number, number]> = {
 /** Cubo de informes sin país (alcance global). */
 const INTERNATIONAL = "Internacional";
 
-/** Límite diario de lecturas en el mapa para usuarios sin suscripción. */
-const MAP_READ_KEY = "blacknews_map_reads";
-const MAX_FREE_MAP_READS = 3;
-
-const todayKey = (): string => {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-};
-
-/** Lecturas usadas hoy en el mapa (se reinicia cada día; falla hacia 0 si no hay storage). */
-const readMapUsage = (): { date: string; count: number } => {
-  const today = todayKey();
-  try {
-    const raw = localStorage.getItem(MAP_READ_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data && data.date === today && typeof data.count === "number") {
-        return { date: today, count: data.count };
-      }
-    }
-  } catch {
-    /* modo privado: se contará solo si el storage vuelve a estar disponible */
-  }
-  return { date: today, count: 0 };
-};
-
 interface GeoMapSectionProps {
   reports: Report[];
   /** Reservado: categorías del portafolio (hoy solo se acepta, sin uso). */
   categories?: string[];
   /** Abre el informe elegido desde el mapa. */
   onOpenReport?: (report: Report) => void;
-  /** Se invoca al agotar las lecturas free del mapa. */
+  /** Abre el modal de suscripciones (CTA al agotar la cuota). */
   onOpenSubscriptionModal?: () => void;
-  /** Suscriptor activo: lecturas ilimitadas en el mapa. */
-  isSubscribed?: boolean;
+  /** Cuota diaria compartida con el resto del sitio (se registra al abrir). */
+  meter?: ReadMeter;
 }
 
 interface CountryGroup {
@@ -96,14 +69,15 @@ interface CountryGroup {
  * Mapa de cobertura por puntos (cuadrícula de 2.5° sobre Natural Earth 110m),
  * sin fondo: solo puntos sobre negro puro. Cada marcador muestra cuántas
  * noticias ocurren en ese país; tocar país o marcador entra a sus titulares y
- * cada noticia abierta cuenta para el límite free de 3 al día (la 4ª pide
- * suscripción).
+ * cada noticia abierta suma a la cuota diaria compartida con el resto del
+ * sitio (2/día de invitado, 3/día registrado, sin límite para suscriptores
+ * y redacción; al agotarse la lectura sigue con un aviso).
  */
 export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
   reports,
   onOpenReport,
   onOpenSubscriptionModal,
-  isSubscribed,
+  meter,
 }) => {
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -136,28 +110,11 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
   if (groups.length === 0) return null;
 
   const active = groups.find((g) => g.name === selected) || null;
-  const usage = isSubscribed ? null : readMapUsage();
-  const exhausted =
-    !isSubscribed && usage !== null && usage.count >= MAX_FREE_MAP_READS;
+  const exhausted = Boolean(meter && !meter.unlimited && meter.exhausted);
 
   const openNews = (report: Report) => {
-    if (!onOpenReport) return;
-    if (!isSubscribed) {
-      const u = readMapUsage();
-      if (u.count >= MAX_FREE_MAP_READS) {
-        onOpenSubscriptionModal?.();
-        return;
-      }
-      try {
-        localStorage.setItem(
-          MAP_READ_KEY,
-          JSON.stringify({ date: u.date, count: u.count + 1 }),
-        );
-      } catch {
-        /* sin storage la lectura sigue adelante sin contarse */
-      }
-    }
-    onOpenReport(report);
+    // La cuota la registra App al abrir (misma contabilidad que la portada)
+    onOpenReport?.(report);
   };
 
   const toggleCountry = (name: string) =>
@@ -326,8 +283,8 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
               </>
             )}
 
-            {/* Cuenta de lecturas free / estado de suscripción */}
-            {!isSubscribed && usage && (
+            {/* Cuota diaria compartida / estado de suscripción */}
+            {meter && !meter.unlimited && (
               <>
                 {exhausted && onOpenSubscriptionModal ? (
                   <button
@@ -335,20 +292,21 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                     onClick={onOpenSubscriptionModal}
                     className="mt-4 w-full text-left text-[10px] leading-relaxed text-neutral-500 hover:text-white transition-colors cursor-pointer"
                   >
-                    Viste tus {MAX_FREE_MAP_READS} noticias de hoy ·
+                    Viste tus {meter.limit} lecturas de hoy ·
                     Suscríbete para seguir leyendo →
                   </button>
                 ) : (
                   <div className="mt-4 text-[10px] text-neutral-600">
-                    Lecturas gratuitas hoy: {usage.count} de{" "}
-                    {MAX_FREE_MAP_READS}
+                    Lecturas gratuitas hoy: {meter.used} de {meter.limit}
                   </div>
                 )}
               </>
             )}
-            {isSubscribed && (
+            {meter?.unlimited && (
               <div className="mt-4 text-[10px] text-neutral-600">
-                Suscriptor · lecturas ilimitadas
+                {meter.kind === "subscriber"
+                  ? "Suscriptor · lecturas ilimitadas"
+                  : "Redacción · sin límite"}
               </div>
             )}
           </aside>

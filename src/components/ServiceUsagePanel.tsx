@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { HardDrive, Gauge, Server, RefreshCw } from 'lucide-react';
+import { FREE_LIMIT_REGISTERED, loadReadUsage } from '../utils/readMeter';
 
 interface ServiceUsagePanelProps {
   publishedCount: number;
@@ -15,8 +16,6 @@ interface ServiceUsagePanelProps {
 
 /** Límite típico de localStorage por origen en los navegadores (~5 MB de caracteres). */
 const LOCAL_LIMIT_CHARS = 5_000_000;
-/** Lecturas diarias del mapa de cobertura en el plan gratuito. */
-const MAX_MAP_READS = 3;
 
 const fmtBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -139,7 +138,7 @@ export const ServiceUsagePanel: React.FC<ServiceUsagePanelProps> = ({
   const [scan, setScan] = useState(scanLocalUsage);
   const [origin, setOrigin] = useState<{ usage: number; quota: number } | null>(null);
   const [visits, setVisits] = useState(0);
-  const [mapReads, setMapReads] = useState(0);
+  const [freeReads, setFreeReads] = useState(0);
   const [bookmarksCount, setBookmarksCount] = useState(0);
   const [highlightsCount, setHighlightsCount] = useState(0);
 
@@ -149,11 +148,8 @@ export const ServiceUsagePanel: React.FC<ServiceUsagePanelProps> = ({
       setVisits(parseInt(localStorage.getItem('blacknews_device_visits') || '0', 10) || 0);
     } catch {}
     try {
-      const raw = localStorage.getItem('blacknews_map_reads');
-      const parsed = raw ? JSON.parse(raw) : null;
-      const today = new Date();
-      const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      setMapReads(parsed && parsed.date === key && typeof parsed.count === 'number' ? parsed.count : 0);
+      // Cuota diaria de lecturas gratuitas (artículos únicos de hoy)
+      setFreeReads(loadReadUsage().ids.length);
     } catch {}
     try {
       const parsed = JSON.parse(localStorage.getItem('blacknews_bookmarks') || '[]');
@@ -265,10 +261,10 @@ export const ServiceUsagePanel: React.FC<ServiceUsagePanelProps> = ({
               hint="Máximo de artículos en borradores por usuario"
             />
             <Meter
-              label="Lecturas del mapa · hoy"
-              used={mapReads}
-              max={MAX_MAP_READS}
-              hint="Plan gratuito · se reinicia cada día"
+              label="Lecturas gratuitas · hoy"
+              used={Math.min(freeReads, FREE_LIMIT_REGISTERED)}
+              max={FREE_LIMIT_REGISTERED}
+              hint="Plan gratuito (2 sin registro · 3 con cuenta) · se reinicia cada día"
             />
           </div>
 

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CategoryId } from "../types/news";
 import { APP_VERSION, BUILD_STAMP } from "../version";
+import { scrollToTop } from "../utils/scroll";
 
 interface FooterProps {
   categories: readonly CategoryId[];
@@ -26,13 +27,9 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenAdModal,
   onOpenPolicies,
 }) => {
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   return (
     <>
-      <footer className="w-full bg-black text-neutral-400 text-xs sm:text-sm pt-14 pb-12 border-t border-white/10 font-['Lexend',sans-serif]">
+      <footer className="w-full bg-black text-neutral-400 text-xs sm:text-sm pt-14 pb-24 border-t border-white/10 font-['Lexend',sans-serif]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Editorial Core Principles */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12 mb-12 border-b border-white/10">

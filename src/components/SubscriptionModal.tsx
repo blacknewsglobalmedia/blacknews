@@ -142,7 +142,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               <ul className="space-y-2.5 text-xs text-neutral-400 font-light">
                 <li className="flex items-start gap-2">
                   <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>3 lecturas diarias en el mapa mundial</span>
+                  <span>2 lecturas diarias (invitado) · 3 con cuenta</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />

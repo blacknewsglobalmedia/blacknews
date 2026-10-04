@@ -19,3 +19,19 @@ export function scrollToSectionId(id: string): void {
     }
   }, 400);
 }
+
+/**
+ * Lleva el scroll al inicio de la página (botón «volver arriba»).
+ * Mismo criterio que scrollToSectionId: scroll suave y, si en unos
+ * milisegundos no se ha movido, salto directo.
+ */
+export function scrollToTop(): void {
+  const before = window.scrollY;
+  if (before <= 0) return;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.setTimeout(() => {
+    if (window.scrollY >= before - 8) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+  }, 400);
+}

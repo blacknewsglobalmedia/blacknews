@@ -11,7 +11,8 @@ import {
   Check,
   Highlighter,
   Trash2,
-  Copy
+  Copy,
+  Lock
 } from 'lucide-react';
 import { Report } from '../types/news';
 import { AdCampaign } from '../types/ads';
@@ -34,6 +35,12 @@ interface ReportDetailModalProps {
   adCampaigns?: AdCampaign[];
   onTrackImpression?: (campaignId: string) => void;
   onTrackClick?: (campaignId: string) => void;
+  /** Cuota diaria agotada: aviso de suscripción al final del texto. */
+  readExhausted?: boolean;
+  /** Cuota de lecturas del día (para redactar el aviso). */
+  readLimit?: number;
+  /** Abre el modal de suscripciones desde el aviso de cuota. */
+  onOpenSubscription?: () => void;
 }
 
 export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
@@ -48,6 +55,9 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   adCampaigns = [],
   onTrackImpression,
   onTrackClick,
+  readExhausted = false,
+  readLimit = 0,
+  onOpenSubscription,
 }) => {
   const [fontSizeScale, setFontSizeScale] = useState<'normal' | 'large' | 'huge'>('normal');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -632,6 +642,33 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
           onTrackImpression={onTrackImpression}
           onTrackClick={onTrackClick}
         />
+
+        {/* Aviso de cuota diaria agotada (la lectura no se bloquea) */}
+        {readExhausted && (
+          <div className="my-10 p-4 sm:p-5 rounded-xl border border-amber-500/40 bg-amber-950/40 font-sans">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-300 mb-2">
+              <Lock className="w-3.5 h-3.5" />
+              <span>Lecturas gratuitas agotadas</span>
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-300 font-light leading-relaxed">
+              Has utilizado tus{" "}
+              <span className="text-white font-semibold">
+                {readLimit} lecturas gratuitas de hoy
+              </span>
+              . Puedes seguir navegando con normalidad: la cuota se renueva
+              cada día. Con una suscripción tus lecturas son ilimitadas.
+            </p>
+            {onOpenSubscription && (
+              <button
+                type="button"
+                onClick={onOpenSubscription}
+                className="mt-3.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+              >
+                Ver suscripciones
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Share CTA Footer Ribbon */}
         <div className="my-14 py-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans">

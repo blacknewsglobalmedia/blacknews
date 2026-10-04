@@ -19,6 +19,7 @@ import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
 import { PoliciesPage } from "./components/PoliciesPage";
 import { PoliciesNoticeBanner } from "./components/PoliciesNoticeBanner";
+import { ReadingDock } from "./components/ReadingDock";
 import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
@@ -34,6 +35,7 @@ import {
   DEFAULT_LAYOUT_CONFIG,
   computeLayoutPreset,
 } from "./utils/layoutUtils";
+import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import { doc, setDoc } from "firebase/firestore";
 
@@ -363,6 +365,21 @@ export default function App() {
     return GUEST_USER;
   });
 
+  // Cuota de lecturas gratuitas con reinicio diario:
+  // invitado 2 · registrado 3 · suscriptores y redacción sin límite
+  const [readUsage, setReadUsage] = useState(loadReadUsage);
+  const readMeter = computeReadMeter(readUsage, {
+    isSubscribed,
+    isGuest: currentUser.id === GUEST_USER_ID,
+    isStaff: currentUser.role !== "LECTOR",
+  });
+
+  /** Anota la lectura de un artículo (no cuenta si la cuota es ilimitada). */
+  const countArticleRead = (report: Report) => {
+    if (readMeter.unlimited) return;
+    setReadUsage((prev) => recordRead(prev, report.id));
+  };
+
   // Automatically verify and maintain Firebase Auth session across F5 page reloads
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -574,6 +591,7 @@ export default function App() {
     if (reportIdFromUrl) {
       const found = reportsList.find((r) => r.id === reportIdFromUrl);
       if (found) {
+        countArticleRead(found);
         setActiveReport(found);
       }
     }
@@ -581,6 +599,7 @@ export default function App() {
 
   // Sync URL when active report changes
   const handleOpenReport = (report: Report) => {
+    countArticleRead(report);
     setActiveReport(report);
     const newUrl = `${window.location.pathname}?informe=${encodeURIComponent(report.id)}`;
     window.history.pushState({ reportId: report.id }, "", newUrl);
@@ -1046,7 +1065,7 @@ export default function App() {
               categories={categoriesList}
               onOpenReport={handleOpenReport}
               onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
-              isSubscribed={isSubscribed}
+              meter={readMeter}
             />
 
             {/* Visual Posts Section: News cards in 4:5 post format */}
@@ -1135,6 +1154,9 @@ export default function App() {
         adCampaigns={adsList}
         onTrackImpression={handleTrackImpression}
         onTrackClick={handleTrackClick}
+        readExhausted={readMeter.exhausted}
+        readLimit={readMeter.limit}
+        onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
       />
 
       {/* Social Media Sharing Modal */}
@@ -1197,6 +1219,14 @@ export default function App() {
           );
         }}
       />
+
+      {/* Barra flotante inferior: cuota de lecturas del día + volver arriba */}
+      {currentView !== "redaccion" && (
+        <ReadingDock
+          meter={readMeter}
+          onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+        />
+      )}
     </div>
   );
 }
