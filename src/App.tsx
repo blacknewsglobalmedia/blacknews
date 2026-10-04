@@ -101,6 +101,9 @@ const INITIAL_REDACTORS: RedactorProfile[] = [
   },
 ];
 
+/** Una sola cuenta de visita por carga de página (StrictMode ejecuta los efectos dos veces en dev). */
+let visitCountedThisLoad = false;
+
 export default function App() {
   const [currentView, setCurrentView] = useState<"portada" | "redaccion">(
     "portada",
@@ -401,6 +404,16 @@ export default function App() {
       localStorage.setItem("blacknews_lite", liteMode ? "1" : "0");
     } catch {}
   }, [liteMode]);
+
+  // Métrica local: visitas de este dispositivo (visible en Servicio y Límites del panel admin)
+  useEffect(() => {
+    if (visitCountedThisLoad) return;
+    visitCountedThisLoad = true;
+    try {
+      const prev = parseInt(localStorage.getItem("blacknews_device_visits") || "0", 10) || 0;
+      localStorage.setItem("blacknews_device_visits", String(prev + 1));
+    } catch {}
+  }, []);
 
   // PWA: instalación desde el navegador (beforeinstallprompt)
   const [installEvt, setInstallEvt] = useState<BeforeInstallPromptEvent | null>(

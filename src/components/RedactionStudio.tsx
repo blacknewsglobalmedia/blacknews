@@ -62,6 +62,7 @@ import { CategoryManager } from './CategoryManager';
 import { SocialPostGenerator, POPULAR_COUNTRIES, CountryFlag } from './SocialPostGenerator';
 import { ImportArticleModal } from './ImportArticleModal';
 import { DraftsModal, ArticleDraft } from './DraftsModal';
+import { ServiceUsagePanel } from './ServiceUsagePanel';
 import { RedactorFloatingBar } from './RedactorFloatingBar';
 import { AdsManager } from './AdsManager';
 import { OptimizedPicture } from './OptimizedPicture';
@@ -1515,6 +1516,18 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 </div>
               </div>
             </div>
+
+            <ServiceUsagePanel
+              publishedCount={publishedReports.length}
+              flashCount={flashNews.length}
+              adsActiveCount={adCampaigns.filter((c) => c.status === 'ACTIVE').length}
+              adsImpressions={adCampaigns.reduce((sum, c) => sum + (c.impressions || 0), 0)}
+              adsClicks={adCampaigns.reduce((sum, c) => sum + (c.clicks || 0), 0)}
+              draftsCount={drafts.length}
+              maxDrafts={MAX_DRAFTS_PER_USER}
+              redactorsCount={allRedactors.length}
+              categoriesCount={categories.length}
+            />
           </div>
         )}
 
