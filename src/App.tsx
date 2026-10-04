@@ -20,6 +20,7 @@ import { Footer } from "./components/Footer";
 import { PoliciesPage } from "./components/PoliciesPage";
 import { PoliciesNoticeBanner } from "./components/PoliciesNoticeBanner";
 import { ReadingDock } from "./components/ReadingDock";
+import { WorldClockBar } from "./components/WorldClockBar";
 import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
@@ -1320,6 +1321,9 @@ export default function App() {
           onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
         />
       )}
+
+      {/* Relojes del mundo: marquee pegado al borde inferior, en todo el sitio */}
+      <WorldClockBar />
     </div>
   );
 }

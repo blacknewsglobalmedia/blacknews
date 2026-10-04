@@ -133,6 +133,27 @@ body.bn-lite main video {
   display: none !important;
 }
 
+/* Barra inferior de relojes: marquee continuo y silencioso */
+.bn-marquee {
+  animation: bn-marquee 65s linear infinite;
+}
+.bn-marquee:hover {
+  animation-play-state: paused;
+}
+@keyframes bn-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bn-marquee {
+    animation: none;
+  }
+}
+
 /* Mapa de cobertura: halo pulsante en las corresponsalías */
 .map-pulse {
   transform-box: fill-box;

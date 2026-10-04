@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { CATEGORIES } from "../data/newsData";
+import { dateIn, REFERENCE_TZ } from "../utils/clock";
 import { CategoryId } from "../types/news";
 import { RedactorProfile, GUEST_USER_ID } from "../types/auth";
 
@@ -117,7 +118,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             EN DIRECTO
           </span>
           <span className="text-neutral-700">·</span>
-          <span className="text-neutral-400">25 SEP 2026</span>
+          <span className="text-neutral-400">{dateIn(REFERENCE_TZ)}</span>
         </div>
 
         <div className="flex items-center gap-3 text-neutral-400">

@@ -8,7 +8,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { CategoryId } from "../types/news";
-import { APP_VERSION, BUILD_STAMP } from "../version";
+import { APP_VERSION, BUILD_STAMP_LABEL } from "../version";
 import { scrollToTop } from "../utils/scroll";
 
 interface FooterProps {
@@ -150,7 +150,7 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-sans text-neutral-400 font-light">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-neutral-300">
-                BLACKNEWS v{APP_VERSION} ({BUILD_STAMP})
+                BLACKNEWS v{APP_VERSION} · {BUILD_STAMP_LABEL}
               </span>
               <span>·</span>
               <span>© 2026 TODOS LOS DERECHOS RESERVADOS</span>
