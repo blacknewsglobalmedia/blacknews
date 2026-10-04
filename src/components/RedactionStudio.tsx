@@ -1099,7 +1099,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'overview' && 'PANEL DE CONTROL'}
               {activeTab === 'builder' && (editingReportId ? 'EDITANDO INFORME' : 'CONSTRUCTOR DE ARTÍCULOS')}
               {activeTab === 'my-articles' && 'CATÁLOGO DE DESPACHOS'}
-              {activeTab === 'post-generator' && 'GENERADOR DE POSTS 4:5'}
+              {activeTab === 'post-generator' && 'GENERADOR DE POSTS 4:5 / 9:16'}
               {activeTab === 'images' && 'OPTIMIZADOR .AVIF'}
               {activeTab === 'layout' && 'GESTIÓN DE PORTADA'}
               {activeTab === 'categories' && 'GESTIÓN DE CATEGORÍAS'}
@@ -1344,7 +1344,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 className="group pt-3 border-t border-white/10 text-left transition-colors cursor-pointer"
               >
                 <div className="text-xs font-bold text-white uppercase tracking-wider group-hover:text-neutral-300 transition-colors">
-                  Post 4:5
+                  Post 4:5 · 9:16
                 </div>
                 <div className="text-[11px] text-neutral-500 mt-0.5 group-hover:text-neutral-400 transition-colors">
                   Generar video / imagen
@@ -1448,10 +1448,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                             type="button"
                             onClick={() => setActiveTab('post-generator')}
                             className="px-2 py-1 text-neutral-500 hover:text-white text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
-                            title="Crear Post 4:5 para redes"
+                            title="Crear Post 4:5 o 9:16 para redes"
                           >
                             <Smartphone className="w-3 h-3" />
-                            <span>Post 4:5</span>
+                            <span>Post 4:5/9:16</span>
                           </button>
                         </div>
                       </div>

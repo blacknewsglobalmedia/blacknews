@@ -90,6 +90,84 @@ export const EXPANDED_CATEGORIES: string[] = CATEGORIES.filter(
 );
 
 // In-memory cache for loaded flag images for canvas rendering
+/** Imagen por defecto del generador; también es el respaldo del borrador
+ *  cuando la URL guardada de un vídeo local ya no existe. */
+const DEFAULT_MEDIA_SRC =
+  "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80";
+
+/** Ancho de la columna de texto del post: lienzo de 1080 menos 84 de margen
+ *  por lado (renderToCanvas calcula lo mismo con `W - padX * 2`). */
+const TEXT_COLUMN_WIDTH = 1080 - 84 * 2;
+
+/** Máximo de líneas de la bajada: la vista previa siempre limitó a 5 líneas
+ *  (line-clamp) y el export ahora respeta ese mismo tope. */
+const MAX_DESC_LINES = 5;
+
+/** Reparte `text` en líneas que caben en `maxWidth` según la métrica del ctx. */
+const wrapText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] => {
+  const paragraphs = text.split("\n");
+  const allLines: string[] = [];
+
+  paragraphs.forEach((paragraph) => {
+    if (paragraph.length === 0) {
+      allLines.push("");
+      return;
+    }
+    const words = paragraph.split(" ");
+    let currentLine = "";
+
+    for (let n = 0; n < words.length; n++) {
+      const testLine = currentLine ? `${currentLine} ${words[n]}` : words[n];
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && currentLine !== "") {
+        allLines.push(currentLine);
+        currentLine = words[n];
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) {
+      allLines.push(currentLine);
+    }
+  });
+
+  return allLines;
+};
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/** Envuelve texto con la MISMA métrica del export (peso y tamaño reales del
+ *  lienzo, ancho de columna 912 px, sin tracking): la vista previa pinta estas
+ *  líneas tal cual, así que los cortes coinciden al 100 % con el archivo
+ *  exportado. */
+const wrapLikeExport = (
+  font: string,
+  text: string,
+  maxWidth: number,
+): string[] => {
+  if (!measureCtx) {
+    measureCtx = document.createElement("canvas").getContext("2d");
+  }
+  if (!measureCtx) return text.split("\n");
+  measureCtx.font = font;
+  measureCtx.letterSpacing = "0px";
+  return wrapText(measureCtx, text, maxWidth);
+};
+
+/** Tope de líneas de la bajada (diseño de 5) con "…" de corte. Se aplica igual
+ *  en la vista previa y en el archivo exportado para que coincidan carácter a
+ *  carácter. */
+const capDescLines = (lines: string[]): string[] => {
+  if (lines.length <= MAX_DESC_LINES) return lines;
+  const capped = lines.slice(0, MAX_DESC_LINES);
+  capped[MAX_DESC_LINES - 1] += "…";
+  return capped;
+};
+
 const flagImageCache = new Map<string, HTMLImageElement>();
 
 export const loadFlagImage = (
@@ -181,11 +259,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // Media state
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
-  const [mediaSrc, setMediaSrc] = useState<string>(
-    "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80",
-  );
+  const [mediaSrc, setMediaSrc] = useState<string>(DEFAULT_MEDIA_SRC);
   const [mediaName, setMediaName] = useState<string>("Imagen predeterminada");
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Formato de salida: el mismo post se genera en 4:5 (1080×1350) o en 9:16
+  // (1080×1920, el vertical de TikTok / Shorts / Reels). Lo comparten la vista
+  // previa, el render del canvas y las dos rutas de exportación (PNG y video).
+  const [postFormat, setPostFormat] = useState<"4:5" | "9:16">("4:5");
+  const POST_W = 1080;
+  const POST_H = postFormat === "9:16" ? 1920 : 1350;
+  const formatSlug = postFormat === "9:16" ? "9x16" : "4x5";
 
   // Filters & Appearance
   const [filter, setFilter] = useState<MediaFilter>("bw-high");
@@ -414,8 +498,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Construct full post configuration JSON object
   const getPostConfigObject = () => {
     return {
-      version: 1,
-      appName: "BlackNews 4:5 Generator",
+      version: 2,
+      outputFormat: postFormat,
+      appName: `BlackNews ${postFormat} Generator`,
       savedAt: new Date().toISOString(),
       content: {
         title,
@@ -511,6 +596,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (Array.isArray(data.content.selectedCountries))
           setSelectedCountries(data.content.selectedCountries);
       }
+      if (data.outputFormat === "4:5" || data.outputFormat === "9:16")
+        setPostFormat(data.outputFormat);
       if (data.typography) {
         if (data.typography.fontSizeTitle)
           setFontSizeTitle(data.typography.fontSizeTitle);
@@ -539,10 +626,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setBlendFade(data.appearance.blendFade);
       }
       if (data.mediaSettings) {
+        // El modo vídeo solo se restaura si su URL sigue siendo un vídeo: un
+        // borrador con un vídeo local (blob ya inexistente) o con la imagen
+        // por defecto reabre el generador en imagen, para no dejarlo en modo
+        // vídeo sin medio reproducible.
+        const mediaUrl = data.mediaSettings.mediaUrl || "";
+        const isVideoMedia =
+          data.mediaSettings.mediaType === "video" &&
+          (/^blob:/.test(mediaUrl) ||
+            /^data:video\//.test(mediaUrl) ||
+            /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i.test(mediaUrl));
+        const videoFallback =
+          data.mediaSettings.mediaType === "video" && !isVideoMedia;
         if (data.mediaSettings.mediaType)
-          setMediaType(data.mediaSettings.mediaType);
+          setMediaType(isVideoMedia ? "video" : "image");
         if (data.mediaSettings.mediaName)
-          setMediaName(data.mediaSettings.mediaName);
+          setMediaName(
+            videoFallback
+              ? "Imagen predeterminada"
+              : data.mediaSettings.mediaName,
+          );
         if (typeof data.mediaSettings.isMuted === "boolean")
           setIsMuted(data.mediaSettings.isMuted);
         if (typeof data.mediaSettings.videoSpeed === "number")
@@ -557,8 +660,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setVideoFormat(data.mediaSettings.videoFormat);
         if (typeof data.mediaSettings.maxVideoDuration === "number")
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
-        if (data.mediaSettings.mediaUrl)
-          setMediaSrc(data.mediaSettings.mediaUrl);
+        if (mediaUrl) setMediaSrc(mediaUrl);
+        else if (videoFallback) setMediaSrc(DEFAULT_MEDIA_SRC);
       }
       setIsJsonModalOpen(false);
       setJsonError(null);
@@ -617,6 +720,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     videoQuality,
     videoFormat,
     maxVideoDuration,
+    postFormat,
   ]);
 
   // Restore draft on initial load if available
@@ -630,6 +734,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       }
     } catch {}
+  }, []);
+
+  // Las líneas de la vista previa se miden con la métrica real de Lexend: al
+  // terminar de cargar la fuente se re-mide para no quedar con la métrica de
+  // la fuente de respaldo.
+  const [, setFontsReadyTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    document.fonts?.ready.then(() => {
+      if (alive) setFontsReadyTick((v) => v + 1);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // Sync video speed with preview video element
@@ -695,41 +813,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Helper to wrap text into canvas lines
-  const wrapText = (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxWidth: number,
-  ): string[] => {
-    const paragraphs = text.split("\n");
-    const allLines: string[] = [];
-
-    paragraphs.forEach((paragraph) => {
-      if (paragraph.length === 0) {
-        allLines.push("");
-        return;
-      }
-      const words = paragraph.split(" ");
-      let currentLine = "";
-
-      for (let n = 0; n < words.length; n++) {
-        const testLine = currentLine ? `${currentLine} ${words[n]}` : words[n];
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && currentLine !== "") {
-          allLines.push(currentLine);
-          currentLine = words[n];
-        } else {
-          currentLine = testLine;
-        }
-      }
-      if (currentLine) {
-        allLines.push(currentLine);
-      }
-    });
-
-    return allLines;
-  };
-
   // Formatted countries string for display and canvas
   const getFormattedCountries = (
     fmt: "names" | "flags-names" | "flags-codes" = countryFormat,
@@ -748,7 +831,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Render high-res 1080x1350 canvas
+  // Render high-res canvas (1080×1350 en 4:5, 1080×1920 en 9:16)
   const renderToCanvas = async (
     targetCanvas: HTMLCanvasElement,
     mediaElement?: HTMLImageElement | HTMLVideoElement,
@@ -768,8 +851,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       rotation?: number;
     },
   ): Promise<void> => {
-    const W = 1080;
-    const H = 1350;
+    const W = POST_W;
+    const H = POST_H;
 
     // 1) Todo el trabajo asíncrono ANTES de tocar el lienzo: si esperamos fuentes
     //    o banderas despejándolo, el capturador del grabador de video puede leer un
@@ -977,7 +1060,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.fillStyle = "#E2E8F0";
       ctx.textBaseline = "top";
       const descLineHeight = Math.round(fontSizeDesc * descLineHeightRatio);
-      const descLines = wrapText(ctx, description, contentWidth);
+      // Mismo tope que la vista previa (5 líneas con "…" de corte): lo que no
+      // cabe en pantalla tampoco se dibuja en el archivo exportado.
+      const descLines = capDescLines(
+        wrapText(ctx, description, contentWidth),
+      );
       for (const line of descLines) {
         if (line) {
           ctx.fillText(line, padX, curY);
@@ -992,7 +1079,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 5. Draw Media (Image or Video Frame)
     // Entero a propósito: una y fraccional deja una costura antialias de 1 px
     // entre el fondo negro y el video (la "raya" del borde superior).
-    const mediaTopY = Math.round(Math.max(curY, 520));
+    // El texto ocupa la misma proporción vertical en 4:5 y en 9:16
+    const mediaTopY = Math.round(Math.max(curY, (520 * H) / 1350));
     const mediaHeight = H - mediaTopY;
 
     if ((mediaElement || frameOverride) && !isOverlayOnly) {
@@ -1204,7 +1292,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         .slice(0, 20)
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-");
-      const filename = `blacknews-post-${slug || "4x5"}-${Date.now()}.png`;
+      const filename = `blacknews-post-${slug || "post"}-${formatSlug}-${Date.now()}.png`;
       setExportFileName(filename);
 
       try {
@@ -1215,7 +1303,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               const dataUrl = canvas.toDataURL("image/png");
               triggerDownload(dataUrl, filename);
               setExportedImageUrl(dataUrl);
-              showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
+              showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
             } catch (canvasErr) {
               console.error(canvasErr);
               showToast(
@@ -1228,7 +1316,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const url = URL.createObjectURL(blob);
           triggerDownload(url, filename);
           setExportedImageUrl(url);
-          showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
+          showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
           setIsExporting(false);
         }, "image/png");
       } catch (toBlobErr) {
@@ -1237,7 +1325,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const dataUrl = canvas.toDataURL("image/png");
           triggerDownload(dataUrl, filename);
           setExportedImageUrl(dataUrl);
-          showToast("¡Post 4:5 exportado en PNG con éxito (1080×1350)!");
+          showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
         } catch {
           showToast(
             "Error de exportación por origen de imagen. Prueba subiendo la foto directamente.",
@@ -1286,7 +1374,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // ─── Exportación de video 4:5 100% en el navegador ─────────────────────────
+  // ─── Exportación de video 100% en el navegador ─────────────────────────
   // El post (frame del video + overlay tipográfico) se compone en un canvas y se
   // exporta en el equipo del usuario: nada se sube a un servidor (el antiguo
   // endpoint FFmpeg /api/video/* sigue retirado → 410). Hay dos rutas:
@@ -1566,7 +1654,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const target = new ArrayBufferTarget();
       const muxer = new Muxer({
         target,
-        video: { codec: "avc", width: 1080, height: 1350, frameRate: 30 },
+        video: { codec: "avc", width: POST_W, height: POST_H, frameRate: 30 },
         ...(hasAudio
           ? {
               audio: {
@@ -1591,8 +1679,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           const candidate: VideoEncoderConfig = {
             codec: codecName,
-            width: 1080,
-            height: 1350,
+            width: POST_W,
+            height: POST_H,
             bitrate,
             framerate: 30,
             latencyMode: "realtime",
@@ -1644,8 +1732,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       // ── 5. Canvas dedicado (no pisa la vista previa) + calentamiento ──
       const canvas = document.createElement("canvas");
-      canvas.width = 1080;
-      canvas.height = 1350;
+      canvas.width = POST_W;
+      canvas.height = POST_H;
       const cachedFlags = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
@@ -1793,7 +1881,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         .slice(0, 20)
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-");
-      const filename = `blacknews-video-${slug || "4x5"}-${Date.now()}.mp4`;
+      const filename = `blacknews-video-${slug || "video"}-${formatSlug}-${Date.now()}.mp4`;
       setExportVideoFileName(filename);
       const url = URL.createObjectURL(blob);
       const sizeFormatted =
@@ -1805,7 +1893,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingProgress(100);
       triggerDownload(url, filename);
       showToast(
-        `¡Video 4:5 exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`,
       );
       snap("finalize");
       return "done";
@@ -2016,7 +2104,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         .slice(0, 20)
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-");
-      const filename = `blacknews-video-${slug || "4x5"}-${Date.now()}.${ext}`;
+      const filename = `blacknews-video-${slug || "video"}-${formatSlug}-${Date.now()}.${ext}`;
       setExportVideoFileName(filename);
 
       let stopped = false;
@@ -2198,7 +2286,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingProgress(100);
       triggerDownload(url, filename);
       showToast(
-        `¡Video 4:5 exportado en tu navegador (${sizeFormatted})!${formatNote}`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}`,
       );
     } catch (err: any) {
       if (!isCancelledRef.current) {
@@ -2220,17 +2308,41 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Real-time proportional metrics for live preview (canvas: 1080px wide, preview ~420px max)
-  const previewScale = 0.3888;
-  const previewTitleSize = Math.max(
-    15,
-    Math.round(fontSizeTitle * previewScale),
+  // Real-time proportional metrics for live preview (canvas: 1080px wide;
+  // la tarjeta mide 420 px en 4:5 y 340 px en 9:16 para no disparar en alto).
+  // Valores fraccionales exactos: al redondear, la vista previa partía las
+  // líneas en sitios distintos a los del archivo exportado.
+  const previewCardWidth = postFormat === "9:16" ? 340 : 420;
+  const previewScale = previewCardWidth / 1080;
+  const previewTitleSize = fontSizeTitle * previewScale;
+  const previewDescSize = fontSizeDesc * previewScale;
+  const previewPadTop = 76 * previewScale;
+  const previewPadX = 84 * previewScale;
+  const previewGapCatTitle = gapCategoryToTitle * previewScale;
+  const previewGapTitleDesc = gapTitleToDesc * previewScale;
+  // Altura de línea: la misma del lienzo (entera) llevada a escala de tarjeta
+  const previewTitleLineH =
+    Math.round(fontSizeTitle * titleLineHeightRatio) * previewScale;
+  const previewDescLineH =
+    Math.round(fontSizeDesc * descLineHeightRatio) * previewScale;
+
+  // Líneas idénticas a las del export: se miden con la métrica real del
+  // lienzo (Lexend Bold/Regular, columna de 912 px, sin tracking) y aquí solo
+  // se pintan, así titular y bajada cortan igual que en el PNG/vídeo exportado.
+  const previewTitleLines = wrapLikeExport(
+    `700 ${fontSizeTitle}px 'Lexend', sans-serif`,
+    title || "Escribe un titular impactante...",
+    TEXT_COLUMN_WIDTH,
   );
-  const previewDescSize = Math.max(11, Math.round(fontSizeDesc * previewScale));
-  const previewPadTop = Math.round(76 * previewScale);
-  const previewPadX = Math.round(84 * previewScale);
-  const previewGapCatTitle = Math.round(gapCategoryToTitle * previewScale);
-  const previewGapTitleDesc = Math.round(gapTitleToDesc * previewScale);
+  const previewDescLines = description.trim()
+    ? capDescLines(
+        wrapLikeExport(
+          `400 ${fontSizeDesc}px 'Lexend', sans-serif`,
+          description,
+          TEXT_COLUMN_WIDTH,
+        ),
+      )
+    : [];
 
   // Dynamic header sizing calculation to strictly fit in ONE single line
   const countriesLineText =
@@ -2270,14 +2382,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       {/* High-res processing canvas (positioned offscreen to maintain active compositor pipeline for captureStream) */}
       <canvas
         ref={hiddenCanvasRef}
-        width={1080}
-        height={1350}
+        width={POST_W}
+        height={POST_H}
         style={{
           position: "fixed",
           left: "-9999px",
           top: "-9999px",
-          width: "1080px",
-          height: "1350px",
+          width: `${POST_W}px`,
+          height: `${POST_H}px`,
           pointerEvents: "none",
           opacity: 0,
           zIndex: -9999,
@@ -2290,10 +2402,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         <div>
           <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold mb-1">
             <Smartphone className="w-3.5 h-3.5 text-white" />
-            <span>FORMATO VERTICAL 4:5 · SUPER AMOLED BLACK</span>
+            <span>FORMATO VERTICAL {postFormat} · SUPER AMOLED BLACK</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Generador de Posts 4:5
+            Generador de Posts {postFormat}
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-light max-w-2xl leading-relaxed">
             Publicaciones visuales de alto impacto con fondo negro absoluto,
@@ -2395,7 +2507,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </label>
 
                 {/* Real-time size control & presets */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <span className="text-xs font-mono font-bold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
                     {fontSizeTitle}px
                   </span>
@@ -2409,18 +2521,25 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     title="Ajustar tamaño en tiempo real"
                   />
                   <div className="flex items-center gap-1">
-                    {[48, 62, 74].map((sz) => (
+                    {[
+                      { label: "XS", size: 42 },
+                      { label: "S", size: 48 },
+                      { label: "M", size: 62 },
+                      { label: "L", size: 74 },
+                      { label: "XL", size: 82 },
+                    ].map((p) => (
                       <button
-                        key={sz}
+                        key={p.label}
                         type="button"
-                        onClick={() => setFontSizeTitle(sz)}
+                        onClick={() => setFontSizeTitle(p.size)}
+                        title={`Titular de ${p.size}px`}
                         className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
-                          fontSizeTitle === sz
+                          fontSizeTitle === p.size
                             ? "bg-white text-black font-bold"
                             : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {sz === 48 ? "S" : sz === 62 ? "M" : "L"}
+                        {p.label}
                       </button>
                     ))}
                   </div>
@@ -2449,7 +2568,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </label>
 
                 {/* Real-time size control */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <span className="text-xs font-mono font-bold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
                     {fontSizeDesc}px
                   </span>
@@ -2463,18 +2582,25 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     title="Ajustar tamaño en tiempo real"
                   />
                   <div className="flex items-center gap-1">
-                    {[24, 30, 38].map((sz) => (
+                    {[
+                      { label: "XS", size: 20 },
+                      { label: "S", size: 24 },
+                      { label: "M", size: 30 },
+                      { label: "L", size: 38 },
+                      { label: "XL", size: 42 },
+                    ].map((p) => (
                       <button
-                        key={sz}
+                        key={p.label}
                         type="button"
-                        onClick={() => setFontSizeDesc(sz)}
+                        onClick={() => setFontSizeDesc(p.size)}
+                        title={`Bajada de ${p.size}px`}
                         className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
-                          fontSizeDesc === sz
+                          fontSizeDesc === p.size
                             ? "bg-white text-black font-bold"
                             : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
-                        {sz === 24 ? "S" : sz === 30 ? "M" : "L"}
+                        {p.label}
                       </button>
                     ))}
                   </div>
@@ -3636,23 +3762,53 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Live Interactive 4:5 Preview (5 cols) */}
+        {/* RIGHT COLUMN: Live Interactive Preview (5 cols) */}
         <div className="lg:col-span-5 sticky top-8 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5 text-white" />
-              <span>Vista Previa en Vivo 4:5</span>
+              <span>Vista Previa en Vivo {postFormat}</span>
             </span>
             <span className="text-[11px] font-mono text-neutral-400">
               Titular: {fontSizeTitle}px · Bajada: {fontSizeDesc}px
             </span>
           </div>
 
-          {/* THE 4:5 CARD CONTAINER */}
+          {/* Selector de formato: el mismo post en 4:5 o en 9:16 */}
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              Formato
+            </span>
+            <div className="flex items-center gap-1 bg-neutral-950 border border-white/10 p-1 rounded-xl">
+              {(["4:5", "9:16"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setPostFormat(f)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    postFormat === f
+                      ? "bg-white text-black"
+                      : "text-neutral-400 hover:text-white hover:bg-white/5"
+                  }`}
+                  title={
+                    f === "4:5"
+                      ? "1080×1350 · Instagram, LinkedIn, X y estados"
+                      : "1080×1920 · TikTok, YouTube Shorts y Reels"
+                  }
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* THE POST CARD CONTAINER */}
           <div
             ref={previewContainerRef}
-            className="w-full max-w-[420px] mx-auto aspect-[4/5] bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl flex flex-col justify-between select-none"
-            style={{ backgroundColor: "#000000" }}
+            className={`w-full mx-auto ${
+              postFormat === "9:16" ? "aspect-[9/16]" : "aspect-[4/5]"
+            } bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl flex flex-col justify-between select-none`}
+            style={{ backgroundColor: "#000000", maxWidth: previewCardWidth }}
           >
             {/* Top Text Content Area (1:1 with canvas metrics) */}
             <div
@@ -3746,24 +3902,36 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 style={{
                   marginTop: `${previewGapCatTitle}px`,
                   fontSize: `${previewTitleSize}px`,
-                  lineHeight: titleLineHeightRatio,
+                  lineHeight: `${previewTitleLineH}px`,
+                  // El lienzo exporta sin tracking (el global de la app hereda
+                  // −0.015em): aquí se anula para render igual que el archivo.
+                  letterSpacing: 0,
                 }}
-                className="font-bold text-white font-['Lexend'] whitespace-pre-line tracking-tight drop-shadow-sm transition-[font-size,margin]"
+                className="font-bold text-white font-['Lexend'] drop-shadow-sm transition-[font-size,margin]"
               >
-                {title || "Escribe un titular impactante..."}
+                {previewTitleLines.map((line, i) => (
+                  <span key={i} className="block whitespace-nowrap">
+                    {line || "\u00A0"}
+                  </span>
+                ))}
               </h1>
 
               {/* Description with dynamic Real-time Font Size and Spacing */}
-              {description && (
+              {previewDescLines.length > 0 && (
                 <p
                   style={{
                     marginTop: `${previewGapTitleDesc}px`,
                     fontSize: `${previewDescSize}px`,
-                    lineHeight: descLineHeightRatio,
+                    lineHeight: `${previewDescLineH}px`,
+                    letterSpacing: 0,
                   }}
-                  className="text-neutral-300 font-normal font-['Lexend'] line-clamp-5 transition-[font-size,margin]"
+                  className="text-neutral-300 font-normal font-['Lexend'] transition-[font-size,margin]"
                 >
-                  {description}
+                  {previewDescLines.map((line, i) => (
+                    <span key={i} className="block whitespace-nowrap">
+                      {line || "\u00A0"}
+                    </span>
+                  ))}
                 </p>
               )}
             </div>
@@ -3891,7 +4059,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span>
                   {isRecordingVideo
                     ? `Exportando video… ${recordingProgress}%`
-                    : "Exportar Video 4:5 (en tu navegador)"}
+                    : `Exportar Video ${postFormat} (en tu navegador)`}
                 </span>
               </button>
             ) : (
@@ -3904,8 +4072,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <Download className="w-4 h-4" />
                 <span>
                   {isExporting
-                    ? "Procesando imagen 4:5..."
-                    : "Descargar Imagen PNG (1080×1350)"}
+                    ? `Procesando imagen ${postFormat}...`
+                    : `Descargar Imagen PNG (${POST_W}×${POST_H})`}
                 </span>
               </button>
             )}
@@ -3995,8 +4163,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <br />
                 </>
               )}
-              Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter /
-              X y estados de WhatsApp.
+              {postFormat === "9:16"
+                ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
+                : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
               {mediaType === "video" &&
                 " El video se compone en tu navegador: no se sube a ningún servidor."}
             </p>
@@ -4014,7 +4183,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             <div className="space-y-1">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Exportando Video BlackNews 4:5
+                Exportando Video BlackNews {postFormat}
               </h3>
               <p className="text-xs text-neutral-400">
                 {recordingPaused ? (
@@ -4022,7 +4191,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 ) : (
                   <>
                     {recordingProgress < 30 &&
-                      "Preparando overlay tipográfico 1080×1350..."}
+                      `Preparando overlay tipográfico ${POST_W}×${POST_H}...`}
                     {recordingProgress >= 30 &&
                       recordingProgress < 65 &&
                       (fastExport
@@ -4051,7 +4220,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
               <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
                 <span>
-                  1080 × 1350 px
+                  {POST_W} × {POST_H} px
                   {exportClipSeconds !== null
                     ? ` · ${exportClipSeconds} s`
                     : ""}{" "}
@@ -4092,12 +4261,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div>
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                     {exportedVideoUrl
-                      ? "¡Video 4:5 Optimizado!"
-                      : "¡Post 4:5 Exportado!"}
+                      ? `¡Video ${postFormat} Optimizado!`
+                      : `¡Post ${postFormat} Exportado!`}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-neutral-400 font-mono">
-                      1080 × 1350 px
+                      {POST_W} × {POST_H} px
                     </span>
                     {exportedVideoSize && (
                       <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
@@ -4121,7 +4290,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             {/* Generated media preview */}
-            <div className="aspect-[4/5] max-h-[50vh] mx-auto rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
+            <div
+              className={`${
+                postFormat === "9:16" ? "aspect-[9/16]" : "aspect-[4/5]"
+              } max-h-[50vh] mx-auto rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg`}
+            >
               {exportedVideoUrl ? (
                 <video
                   src={exportedVideoUrl}
