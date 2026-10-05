@@ -145,9 +145,11 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                       role="button"
                       tabIndex={0}
                       aria-label={`${g.name}: ${g.count} noticias`}
-                      className="cursor-pointer"
+                      className="cursor-pointer focus:outline-none"
                       onMouseEnter={() => setHovered(g.name)}
                       onMouseLeave={() => setHovered(null)}
+                      onFocus={() => setHovered(g.name)}
+                      onBlur={() => setHovered(null)}
                       onClick={() => toggleCountry(g.name)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -194,9 +196,6 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                       >
                         {g.count}
                       </text>
-                      <title>
-                        {`${g.name} · ${g.count} ${g.count === 1 ? "noticia" : "noticias"}`}
-                      </title>
                     </g>
                   );
                 })}

@@ -240,6 +240,20 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
     };
   }, [isOpen, email]);
 
+  // Bloquea la página de fondo con la modal abierta: si no, se ven dos
+  // scrollbars a la vez (la del panel y la de la portada detrás). El lock va
+  // en <html> porque index.css fija overflow-x en html y body, y entonces la
+  // del viewport la gobierna la raíz, no el body.
+  useEffect(() => {
+    if (!isOpen) return;
+    const root = document.documentElement;
+    const prevOverflow = root.style.overflow;
+    root.style.overflow = "hidden";
+    return () => {
+      root.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
   // ---------------------------------------------------------------- SDK
   useEffect(() => {
     if (!isOpen || configState !== "ready" || !config?.clientId || !email || isActive) return;

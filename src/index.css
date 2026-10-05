@@ -75,6 +75,13 @@
   box-decoration-break: clone;
 }
 
+/* Marcadores del mapa: sin rectángulo de foco (Chrome dibuja el anillo
+   de foco de <g tabindex> como caja, fea sobre el mapa) */
+svg g[tabindex]:focus {
+  outline: none !important;
+  outline-color: transparent !important;
+}
+
 /* Glosario: término resaltado con tooltip al pasar el cursor */
 .gloss-term {
   position: relative;
