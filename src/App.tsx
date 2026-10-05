@@ -38,6 +38,7 @@ import {
 } from "./utils/layoutUtils";
 import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
 import { fetchSubscriptionStatus, PLAN_NAMES, type PlanTier } from "./utils/paypalSubscription";
+import { captureAdOrder } from "./utils/paypalAds";
 import { healPublishedAt } from "./utils/publishedAt";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import {
@@ -61,6 +62,17 @@ interface BeforeInstallPromptEvent extends Event {
  * test accounts are shipped to the public anymore.
  */
 const OWNER_EMAIL = "blacknewsglobalmedia@gmail.com";
+
+/**
+ * Firestore rechaza `undefined` (a diferencia de JSON.stringify). Filtra los
+ * campos undefined antes de cualquier setDoc — p. ej. paymentReceiptUrl o
+ * rejectionReason ausentes.
+ */
+function firestoreDoc(obj: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined),
+  );
+}
 
 // Test accounts created during development: removed from the team and purged from any
 // stored roster so they can never show up (or be signed in) again.
@@ -296,6 +308,13 @@ export default function App() {
       } catch {}
       return updated;
     });
+    // Firestore: la solicitud debe verse en TODOS los navegadores (el admin
+    // no comparte localStorage con el anunciante).
+    try {
+      void setDoc(doc(db, "ads", campaign.id), firestoreDoc(campaign)).catch(
+        () => {},
+      );
+    } catch {}
     showToast(
       `Campaña "${campaign.title.slice(0, 20)}..." guardada con éxito.`,
     );
@@ -309,6 +328,7 @@ export default function App() {
       } catch {}
       return updated;
     });
+    void deleteDoc(doc(db, "ads", campaignId)).catch(() => {});
     showToast("Campaña publicitaria retirada.");
   };
 
@@ -337,6 +357,71 @@ export default function App() {
       return updated;
     });
   };
+
+  // Retorno desde PayPal después de pagar una publicidad:
+  //   /?ad_campaign=<id>&token=<ORDER_ID>
+  // El Worker captura y verifica el cobro; aquí solo se refleja el estado.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("token");
+    const campaignId = params.get("ad_campaign");
+    if (!orderId || !campaignId) return;
+
+    let alive = true;
+    (async () => {
+      try {
+        const res = await captureAdOrder({ orderId, campaignId });
+        if (!alive) return;
+        if (res.success && res.status !== "pending") {
+          const source = adsList.find((c) => c.id === campaignId);
+          if (source) {
+            const paid: AdCampaign = {
+              ...source,
+              status: "PENDIENTE_APROBACION",
+              paymentReceiptUrl: `PayPal order ${orderId}`,
+            };
+            setAdsList((prev) => {
+              const updated = prev.map((c) => (c.id === campaignId ? paid : c));
+              try {
+                localStorage.setItem("blacknews_ads", JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+            void setDoc(doc(db, "ads", paid.id), firestoreDoc(paid)).catch(
+              () => {},
+            );
+          }
+          showToast(
+            "Pago con PayPal confirmado. Tu anuncio pasa a aprobación.",
+          );
+        } else if (res.status === "pending") {
+          showToast(
+            "PayPal está procesando el pago; se confirmará en unos minutos.",
+          );
+        } else {
+          showToast("El pago no se pudo confirmar. Revisa tu solicitud.");
+        }
+      } catch {
+        showToast(
+          "No se pudo confirmar el pago con PayPal. Tu solicitud queda pendiente de pago.",
+        );
+      } finally {
+        if (alive) {
+          params.delete("token");
+          params.delete("ad_campaign");
+          const qs = params.toString();
+          window.history.replaceState(
+            {},
+            "",
+            window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash,
+          );
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Persistent redactors and registered users management (always honoring the single-admin rule)
   const [redactorsList, setRedactorsList] = useState<RedactorProfile[]>(() => {
@@ -477,11 +562,38 @@ export default function App() {
       } catch {}
     };
 
+    // Publicidad: Firestore es la fuente de verdad para que las solicitudes
+    // autogestionadas (hechas en el navegador del anunciante) lleguen al
+    // panel de aprobaciones. Sin conexión/permisos: sigue la copia local.
+    const pullAds = async () => {
+      try {
+        const snap = await getDocs(collection(db, "ads"));
+        if (!alive) return;
+        const remote = snap.docs
+          .map((d) => ({ ...(d.data() as AdCampaign), id: d.id }))
+          .filter(
+            (c) =>
+              c &&
+              typeof c.title === "string" &&
+              typeof c.placement === "string" &&
+              typeof c.status === "string",
+          );
+        if (remote.length === 0) return;
+        setAdsList(remote);
+        try {
+          localStorage.setItem("blacknews_ads", JSON.stringify(remote));
+        } catch {}
+      } catch {
+        /* sin conexión o sin permisos: sigue la copia local */
+      }
+    };
+
     void Promise.all([
       pullReports(),
       pullFlashNews(),
       pullCategories(),
       pullFrontLayout(),
+      pullAds(),
     ]);
 
     return () => {
@@ -1159,6 +1271,7 @@ export default function App() {
                 selectedCategory={selectedCategory}
                 onTrackImpression={handleTrackImpression}
                 onTrackClick={handleTrackClick}
+                onOpenInquiry={() => setIsAdModalOpen(true)}
               />
             )}
 
@@ -1210,6 +1323,7 @@ export default function App() {
                 selectedCategory={selectedCategory}
                 onTrackImpression={handleTrackImpression}
                 onTrackClick={handleTrackClick}
+                onOpenInquiry={() => setIsAdModalOpen(true)}
               />
             )}
 
@@ -1319,7 +1433,7 @@ export default function App() {
         onSubmitAdCampaign={(campaign) => {
           handleSaveCampaign(campaign);
           showToast(
-            "Tu anuncio fue enviado a revisión. El equipo lo aprobará en breve.",
+            "Solicitud de anuncio registrada. Tras confirmar el pago pasará a aprobación.",
           );
         }}
       />

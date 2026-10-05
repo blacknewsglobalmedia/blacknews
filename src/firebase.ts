@@ -8,6 +8,7 @@ import {
   onSnapshot,
   setDoc,
   getDocs,
+  deleteDoc,
   writeBatch
 } from 'firebase/firestore';
 import { 
@@ -51,5 +52,5 @@ export async function testConnection(): Promise<boolean> {
     return false;
   }
 }
-export { collection, doc, getDoc, onSnapshot, setDoc, getDocs, writeBatch, signInWithPopup, signOut, onAuthStateChanged };
+export { collection, doc, getDoc, onSnapshot, setDoc, getDocs, deleteDoc, writeBatch, signInWithPopup, signOut, onAuthStateChanged };
 export type { FirebaseUser };

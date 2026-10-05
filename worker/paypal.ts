@@ -70,6 +70,18 @@ export const PRICES: Record<PlanTier, { monthly: string; yearly: string }> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Planes de PUBLICIDAD — pago único (Orders API v2). Precios SOLO aquí:
+// el cliente envía el planId, nunca el importe.
+// ---------------------------------------------------------------------------
+export const AD_PLANS: Record<string, { name: string; usd: string }> = {
+  'plan-flash-7d': { name: 'Plan Rápido (7 Días)', usd: '15.00' },
+  'plan-fortnight-15d': { name: 'Plan Quincenal (15 Días)', usd: '28.00' },
+  'plan-monthly-30d': { name: 'Plan Mensual (30 Días)', usd: '49.00' },
+  'plan-cpm-10k': { name: '10.000 Impresiones Garantizadas', usd: '12.00' },
+  'plan-cpm-50k': { name: '50.000 Impresiones Garantizadas', usd: '45.00' },
+};
+
 const PLAN_TIERS: PlanTier[] = ['access', 'insight', 'intelligence'];
 const CYCLES: BillingCycle[] = ['monthly', 'yearly'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -487,6 +499,117 @@ export async function handleCancel(
 }
 
 // ---------------------------------------------------------------------------
+// Órdenes de PUBLICIDAD (pago único) — Orders API v2
+// El navegador envía planId + campaignId; el importe vive SOLO en AD_PLANS.
+// ---------------------------------------------------------------------------
+const AD_CAMPAIGN_RE = /^ad-[A-Za-z0-9-]{2,64}$/;
+const AD_PAYPAL_ORDER_RE = /^[A-Z0-9]{8,64}$/i;
+const adOrderKey = (orderId: string) => `adorder:${orderId}`;
+
+export async function handleAdCreateOrder(
+  env: PayPalEnv,
+  body: { campaignId?: string; planId?: string }
+): Promise<{ status: number; body: unknown }> {
+  const campaignId = (body.campaignId ?? '').trim();
+  const planId = (body.planId ?? '').trim();
+  if (!isConfigured(env)) throw fail(503, 'payments_not_configured');
+  if (!AD_CAMPAIGN_RE.test(campaignId)) throw fail(400, 'campaign_id_invalido');
+  const plan = AD_PLANS[planId];
+  if (!plan) throw fail(400, 'plan_invalido');
+
+  const res = await pp(env, '/v2/checkout/orders', {
+    method: 'POST',
+    json: {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          reference_id: campaignId,
+          custom_id: planId,
+          description: `${plan.name} — BlackNews Publicidad`,
+          amount: { currency_code: 'USD', value: plan.usd },
+        },
+      ],
+      application_context: {
+        brand_name: 'BlackNews',
+        user_action: 'PAY_NOW',
+      },
+    },
+  });
+  if (res.status >= 300 || !res.data?.id) {
+    throw fail(502, 'paypal_error');
+  }
+  const approveUrl = (res.data.links as Array<{ rel: string; href: string }> | undefined)?.find(
+    (l) => l.rel === 'approve'
+  )?.href;
+  if (!approveUrl) throw fail(502, 'paypal_error');
+
+  return { status: 200, body: { success: true, orderId: res.data.id, approveUrl } };
+}
+
+export async function handleAdCapture(
+  env: PayPalEnv,
+  body: { orderId?: string; campaignId?: string }
+): Promise<{ status: number; body: unknown }> {
+  const orderId = (body.orderId ?? '').trim();
+  const campaignId = (body.campaignId ?? '').trim();
+  if (!isConfigured(env)) throw fail(503, 'payments_not_configured');
+  if (!AD_PAYPAL_ORDER_RE.test(orderId)) throw fail(400, 'order_id_invalido');
+  if (!AD_CAMPAIGN_RE.test(campaignId)) throw fail(400, 'campaign_id_invalido');
+
+  // Ya capturada (reintento o refresh tras volver de PayPal) → idempotente.
+  const existing = await env.PAYPAL_KV.get(adOrderKey(orderId));
+  if (existing) {
+    const rec = JSON.parse(existing) as { campaignId: string; planId: string };
+    if (rec.campaignId !== campaignId) throw fail(409, 'campaign_mismatch');
+    return {
+      status: 200,
+      body: { success: true, campaignId: rec.campaignId, planId: rec.planId, alreadyCaptured: true },
+    };
+  }
+
+  // Captura; si ya estaba capturada (422), se relee el estado real.
+  let res = await pp(env, `/v2/checkout/orders/${orderId}/capture`, {
+    method: 'POST',
+    json: {},
+  });
+  if (res.status === 422) {
+    res = await pp(env, `/v2/checkout/orders/${orderId}`);
+  } else if (res.status >= 300) {
+    throw fail(502, 'paypal_error');
+  }
+
+  const order = res.data;
+  if (order?.status !== 'COMPLETED') {
+    return { status: 202, body: { success: true, status: 'pending' } };
+  }
+
+  // Verifica plan + importe + campaña contra la tabla del servidor.
+  const unit = order.purchase_units?.[0];
+  const paidPlan = typeof unit?.custom_id === 'string' ? unit.custom_id : '';
+  const paidCampaign = typeof unit?.reference_id === 'string' ? unit.reference_id : '';
+  const expected = AD_PLANS[paidPlan];
+  const amount = unit?.amount;
+  if (!expected || amount?.currency_code !== 'USD' || Number(amount?.value) !== Number(expected.usd)) {
+    throw fail(409, 'amount_mismatch');
+  }
+  if (paidCampaign !== campaignId) throw fail(409, 'campaign_mismatch');
+  const captureId = unit?.payments?.captures?.[0]?.id ?? null;
+
+  await env.PAYPAL_KV.put(
+    adOrderKey(orderId),
+    JSON.stringify({
+      campaignId,
+      planId: paidPlan,
+      orderId,
+      captureId,
+      capturedAt: new Date().toISOString(),
+    })
+  );
+
+  return { status: 200, body: { success: true, campaignId, planId: paidPlan, captureId } };
+}
+
+// ---------------------------------------------------------------------------
 // Router /api/paypal/*
 // ---------------------------------------------------------------------------
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
@@ -523,6 +646,24 @@ export async function handlePaypalRequest(
     if (pathname === '/api/paypal/cancel' && request.method === 'POST') {
       const body = (await request.json().catch(() => ({}))) as { email?: string };
       const { status, body: out } = await handleCancel(env, body);
+      return json(out, status);
+    }
+
+    if (pathname === '/api/paypal/ad-order' && request.method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as {
+        campaignId?: string;
+        planId?: string;
+      };
+      const { status, body: out } = await handleAdCreateOrder(env, body);
+      return json(out, status);
+    }
+
+    if (pathname === '/api/paypal/ad-capture' && request.method === 'POST') {
+      const body = (await request.json().catch(() => ({}))) as {
+        orderId?: string;
+        campaignId?: string;
+      };
+      const { status, body: out } = await handleAdCapture(env, body);
       return json(out, status);
     }
 

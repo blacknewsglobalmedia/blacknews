@@ -30,6 +30,7 @@ import {
   AlertCircle,
   CreditCard,
   Building2,
+  Wallet,
 } from "lucide-react";
 import {
   AdCampaign,
@@ -568,7 +569,12 @@ export const AdsManager: React.FC<AdsManagerProps> = ({
                         Método de Pago
                       </div>
                       <div className="text-white font-bold flex items-center gap-1">
-                        {camp.paymentMethod === "MERCADO_PAGO" ? (
+                        {camp.paymentMethod === "PAYPAL" ? (
+                          <>
+                            <Wallet className="w-3.5 h-3.5 text-sky-300" />{" "}
+                            PayPal
+                          </>
+                        ) : camp.paymentMethod === "MERCADO_PAGO" ? (
                           <>
                             <CreditCard className="w-3.5 h-3.5 text-sky-400" />{" "}
                             Mercado Pago

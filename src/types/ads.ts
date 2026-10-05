@@ -18,7 +18,7 @@ export type AdStatus =
 
 export type AdPricingModel = 'FIXED_PERIOD' | 'CPM' | 'CPC';
 
-export type AdPaymentMethod = 'MERCADO_PAGO' | 'BANK_TRANSFER' | 'STRIPE';
+export type AdPaymentMethod = 'PAYPAL' | 'MERCADO_PAGO' | 'BANK_TRANSFER' | 'STRIPE';
 
 export interface AdCampaign {
   id: string;
@@ -121,6 +121,24 @@ export interface AdPlacementInfo {
   recommendedSize: string;
   suggestedRate: string;
   orientation: 'horizontal' | 'vertical' | 'card';
+  /**
+   * Cómo dimensiona el front el contenedor del slot:
+   * - 'fixed-height': ALTURA FIJA por breakpoint + ancho fluido (los
+   *   contenedores horizontales). La creatividad se escala con
+   *   `object-contain` y NUNCA se recorta; el sobrante en negro es
+   *   invisible sobre el fondo AMOLED. Cero saltos de layout (CLS = 0).
+   * - 'aspect': el contenedor se define por RELACIÓN DE ASPECTO (las
+   *   cards verticales/cuadradas); la altura deriva del ancho.
+   */
+  sizing: 'fixed-height' | 'aspect';
+  /** Clases Tailwind del contenedor: alturas del slot por breakpoint (sizing='fixed-height') */
+  containerClass?: string;
+  /** Relación de aspecto CSS del contenedor, ej. '4 / 5' (sizing='aspect') */
+  aspect?: string;
+  /** Ajuste de la creatividad dentro del contenedor */
+  fit: 'contain' | 'cover';
+  /** Tamaños nominales recomendados para exportar la creatividad (px) */
+  exportSizes: string[];
 }
 
 export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
@@ -128,25 +146,37 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     id: 'TOP_BILLBOARD',
     name: 'Top Billboard Portada',
     description: 'Ubicación de máximo impacto visual entre el teletipo y la noticia de apertura.',
-    recommendedSize: '970 × 250 px / 728 × 90 px',
+    recommendedSize: '970 × 250 px / 728 × 90 px / 320 × 100 px',
     suggestedRate: '$1,800 USD / mes',
     orientation: 'horizontal',
+    sizing: 'fixed-height',
+    containerClass: 'h-[90px] sm:h-[120px] md:h-[160px]',
+    fit: 'contain',
+    exportSizes: ['970 × 250', '728 × 90', '320 × 100'],
   },
   IN_FEED_LEADERBOARD: {
     id: 'IN_FEED_LEADERBOARD',
     name: 'Leaderboard In-Feed',
     description: 'Banner horizontal de transición entre la Edición Visual y los cuadernos de redacción.',
-    recommendedSize: '1200 × 180 px / 970 × 120 px',
+    recommendedSize: '1200 × 180 px / 970 × 120 px / 728 × 90 px',
     suggestedRate: '$1,200 USD / mes',
     orientation: 'horizontal',
+    sizing: 'fixed-height',
+    containerClass: 'h-[72px] sm:h-[96px] md:h-[120px]',
+    fit: 'contain',
+    exportSizes: ['1200 × 180', '970 × 120', '728 × 90'],
   },
   ARTICLE_SIDEBAR: {
     id: 'ARTICLE_SIDEBAR',
-    name: 'Skyscraper Lateral (Lector)',
-    description: 'Banner vertical en la columna de análisis en profundidad durante la lectura completa.',
-    recommendedSize: '300 × 600 px / 300 × 250 px',
+    name: 'Rectangle In-Article',
+    description: 'Banner dentro del cuerpo del artículo, tras la entradilla. Altura contenida para no interrumpir la lectura.',
+    recommendedSize: '300 × 250 px / 300 × 600 px',
     suggestedRate: '$950 USD / mes',
     orientation: 'vertical',
+    sizing: 'fixed-height',
+    containerClass: 'h-[200px] sm:h-[250px]',
+    fit: 'contain',
+    exportSizes: ['300 × 250 (recomendado)', '300 × 600 (vertical, se muestra completo)'],
   },
   ARTICLE_FOOTER: {
     id: 'ARTICLE_FOOTER',
@@ -155,6 +185,10 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '728 × 90 px / 800 × 120 px',
     suggestedRate: '$650 USD / mes',
     orientation: 'horizontal',
+    sizing: 'fixed-height',
+    containerClass: 'h-[56px] sm:h-[72px] md:h-[90px]',
+    fit: 'contain',
+    exportSizes: ['728 × 90', '800 × 120'],
   },
   GRID_CARD: {
     id: 'GRID_CARD',
@@ -163,6 +197,10 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: 'Proporción 4:5 (800 × 1000 px)',
     suggestedRate: '$1,400 USD / mes',
     orientation: 'card',
+    sizing: 'aspect',
+    aspect: '4 / 5',
+    fit: 'cover',
+    exportSizes: ['800 × 1000 (4:5)'],
   },
 };
 

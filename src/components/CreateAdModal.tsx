@@ -5,12 +5,10 @@ import {
   Check,
   CreditCard,
   Building2,
-  Upload,
+  Wallet,
   ShieldAlert,
   Sparkles,
   ArrowRight,
-  Eye,
-  Calendar,
   Lock,
 } from "lucide-react";
 import {
@@ -21,6 +19,7 @@ import {
   AdPricingPlan,
   AdPaymentMethod,
 } from "../types/ads";
+import { createAdOrder } from "../utils/paypalAds";
 import { RedactorProfile, GUEST_USER_ID } from "../types/auth";
 
 interface CreateAdModalProps {
@@ -54,9 +53,9 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
   const [imageUrl, setImageUrl] = useState("");
   const [badgeText, setBadgeText] = useState("PATROCINADO");
 
-  const [paymentMethod, setPaymentMethod] =
-    useState<AdPaymentMethod>("MERCADO_PAGO");
+  const [paymentMethod, setPaymentMethod] = useState<AdPaymentMethod>("PAYPAL");
   const [receiptNote, setReceiptNote] = useState("");
+  const [paypalFailed, setPaypalFailed] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -64,7 +63,7 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
 
   const isSignedIn = Boolean(currentUser && currentUser.id !== GUEST_USER_ID);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
       !title.trim() ||
@@ -83,6 +82,8 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
     end.setDate(now.getDate() + (selectedPlan.durationDays || 30));
     const endDate = end.toISOString().split("T")[0];
 
+    // Todo envío nace PENDIENTE_DE_PAGO: ni la transferencia ni PayPal han
+    // sido verificados todavía. El pago confirmado pasa a PENDIENTE_APROBACION.
     const newCampaign: AdCampaign = {
       id: `ad-user-${Date.now()}`,
       title: title.trim(),
@@ -96,7 +97,7 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
       targetCategory: "TODAS",
       startDate,
       endDate,
-      status: "PENDIENTE_APROBACION",
+      status: "PENDIENTE_PAGO",
       price: selectedPlan.priceUyu,
       currency: "UYU",
       pricingModel: selectedPlan.pricingModel,
@@ -110,11 +111,38 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
         ? `Comprobante: ${receiptNote}`
         : undefined,
       targetImpressionsBudget: selectedPlan.targetImpressions,
-      notes: `Solicitud autogestionada por usuario. Plan: ${selectedPlan.name} ($${selectedPlan.priceUyu} UYU).`,
+      notes: `Solicitud autogestionada. Plan: ${selectedPlan.name} ($${selectedPlan.priceUyu} UYU / $${selectedPlan.priceUsd} USD). Pago: ${paymentMethod}.`,
     };
 
-    setTimeout(() => {
+    // 1) Se registra SIEMPRE (sobrevive aunque el pago no se complete).
+    try {
       onSubmitAdCampaign(newCampaign);
+    } catch {
+      // Un fallo de persistencia no debe cortar el flujo de pago: la
+      // campaña local ya quedó guardada dentro del manejador.
+    }
+
+    // 2) PayPal: se crea la orden con el precio del Worker y se redirige.
+    if (paymentMethod === "PAYPAL") {
+      try {
+        const order = await createAdOrder({
+          campaignId: newCampaign.id,
+          planId: selectedPlan.id,
+        });
+        window.location.assign(order.approveUrl);
+        return; // el botón queda en PROCESANDO durante la redirección
+      } catch {
+        // Sin credenciales de PayPal aún u otro error: la solicitud queda
+        // registrada y se informa al anunciante.
+        setPaypalFailed(true);
+        setIsSubmitting(false);
+        setStep(4);
+        return;
+      }
+    }
+
+    // 3) Transferencia / Mercado Pago: confirmación inmediata.
+    window.setTimeout(() => {
       setIsSubmitting(false);
       setStep(4);
     }, 600);
@@ -458,13 +486,41 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                       $ {selectedPlan.priceUyu} UYU
                     </span>
                   </div>
+                  {paymentMethod === "PAYPAL" && (
+                    <div className="flex items-center justify-between text-xs text-neutral-300 font-mono">
+                      <span>Cobro en PayPal (USD):</span>
+                      <span className="text-white font-semibold">
+                        $ {selectedPlan.priceUsd} USD
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-sans text-neutral-300 mb-2">
-                    MÉTODO DE PAGO DESDE URUGUAY *
+                    MÉTODO DE PAGO *
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div
+                      onClick={() => setPaymentMethod("PAYPAL")}
+                      className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
+                        paymentMethod === "PAYPAL"
+                          ? "border-white bg-white/10"
+                          : "border-white/10 bg-neutral-950/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Wallet className="w-4 h-4 text-sky-300" />
+                        <span className="text-xs font-bold text-white">
+                          PAYPAL
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 font-light">
+                        Pago online seguro en USD. Al enviar serás redirigido a
+                        PayPal para aprobar el cobro.
+                      </p>
+                    </div>
+
                     <div
                       onClick={() => setPaymentMethod("MERCADO_PAGO")}
                       className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
@@ -476,12 +532,12 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <CreditCard className="w-4 h-4 text-sky-400" />
                         <span className="text-xs font-bold text-white">
-                          MERCADO PAGO URUGUAY
+                          MERCADO PAGO
                         </span>
                       </div>
                       <p className="text-[11px] text-neutral-400 font-light">
-                        Tarjetas Visa, OCA, Mastercard, Abitab, Redpagos o saldo
-                        MP.
+                        Tarjetas Visa, OCA, Mastercard, Abitab, Redpagos o
+                        saldo MP.
                       </p>
                     </div>
 
@@ -496,11 +552,12 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                       <div className="flex items-center gap-2 mb-1">
                         <Building2 className="w-4 h-4 text-emerald-400" />
                         <span className="text-xs font-bold text-white">
-                          TRANSFERENCIA BROU / ITAÚ
+                          TRANSFERENCIA
                         </span>
                       </div>
                       <p className="text-[11px] text-neutral-400 font-light">
-                        Transferencia directa entre bancos uruguayos.
+                        Transferencia directa entre bancos uruguayos (BROU /
+                        Itaú).
                       </p>
                     </div>
                   </div>
@@ -537,14 +594,19 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                   <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <p className="font-light leading-relaxed">
                     <strong className="text-white font-medium">
-                      Revisión previa obligatoria:
+                      Flujo de publicación:
                     </strong>{" "}
-                    Una vez realizado el pago, tu anuncio pasará al estado{" "}
+                    Al enviar, tu solicitud queda{" "}
+                    <strong className="text-white font-medium font-mono">
+                      PENDIENTE DE PAGO
+                    </strong>
+                    . Confirmado el cobro (PayPal automático; transferencia o
+                    MP verificados por el equipo) pasa a{" "}
                     <strong className="text-white font-medium font-mono">
                       PENDIENTE DE APROBACIÓN
-                    </strong>
-                    . Un administrador o moderador validará la creatividad y la
-                    activará en la portada.
+                    </strong>{" "}
+                    y un administrador valida la creatividad antes de
+                    publicarla.
                   </p>
                 </div>
 
@@ -564,7 +626,9 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                     <span>
                       {isSubmitting
                         ? "PROCESANDO..."
-                        : "ENVIAR A VALIDACIÓN DE ADMIN"}
+                        : paymentMethod === "PAYPAL"
+                          ? "PAGAR CON PAYPAL"
+                          : "ENVIAR SOLICITUD DE ANUNCIO"}
                     </span>
                     <Sparkles className="w-4 h-4" />
                   </button>
@@ -580,15 +644,37 @@ export const CreateAdModal: React.FC<CreateAdModalProps> = ({
                 </div>
                 <div className="space-y-2 max-w-md">
                   <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                    ¡SOLICITUD DE PUBLICIDAD ENVIADA!
+                    {paypalFailed
+                      ? "NO SE PUDO INICIAR EL PAGO CON PAYPAL"
+                      : "¡SOLICITUD DE PUBLICIDAD ENVIADA!"}
                   </h3>
-                  <p className="text-xs text-neutral-300 leading-relaxed font-light">
-                    Tu campaña se ha registrado correctamente con el estado{" "}
-                    <strong className="text-amber-400 font-mono">
-                      PENDIENTE DE APROBACIÓN
-                    </strong>
-                    .
-                  </p>
+                  {paypalFailed ? (
+                    <p className="text-xs text-neutral-300 leading-relaxed font-light">
+                      Tu solicitud quedó registrada con el estado{" "}
+                      <strong className="text-amber-400 font-mono">
+                        PENDIENTE DE PAGO
+                      </strong>
+                      . El pago con PayPal aún no está disponible; te
+                      contactaremos a{" "}
+                      <strong className="text-white">
+                        {currentUser?.email || "tu correo"}
+                      </strong>{" "}
+                      para coordinar la transferencia y seguir con la
+                      aprobación.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-neutral-300 leading-relaxed font-light">
+                      Tu campaña se ha registrado correctamente con el estado{" "}
+                      <strong className="text-amber-400 font-mono">
+                        PENDIENTE DE PAGO
+                      </strong>
+                      . Tras verificar el cobro pasará a{" "}
+                      <strong className="text-white font-mono">
+                        PENDIENTE DE APROBACIÓN
+                      </strong>{" "}
+                      y la publicaremos cuando el equipo la valide.
+                    </p>
+                  )}
                   <p className="text-xs text-neutral-400 leading-relaxed font-light">
                     Un administrador o moderador de BlackNews revisará la imagen
                     y los datos para activarla en la plataforma.

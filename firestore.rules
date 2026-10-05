@@ -72,5 +72,47 @@ service cloud.firestore {
       allow read: if isEditor();
       allow create, update, delete: if isOwner();
     }
+
+    // -----------------------------------------------------------------
+    // Publicidad autogestionada (colección ads)
+    //
+    // Lectura pública: los visitantes ven los banners y el panel de
+    // aprobaciones ve las solicitudes (sin esto, un anuncio enviado desde
+    // el navegador del anunciante jamás llegaría al admin).
+    //
+    // Creación: cualquier cuenta de Google verificada —el modal exige
+    // login— y SOLO con estado PENDIENTE_PAGO y con el correo del
+    // solicitante igual al de la sesión (no se puede presentar en nombre
+    // de otro).
+    //
+    // Edición:
+    //  - el propietario aprueba/rechaza/pausa/edita (flujo AdsManager);
+    //  - el anunciante solo puede transicionar su propia campaña de
+    //    PENDIENTE_PAGO a PENDIENTE_APROBACION al volver de PayPal
+    //    (comprobante "PayPal order …"), sin tocar el resto de estados.
+    //    Aunque se falseara, jamás llega a ACTIVE sin aprobación del
+    //    propietario, que es quien verifica el cobro.
+    //
+    // Borrado: solo propietario.
+    // -----------------------------------------------------------------
+    match /ads/{campaignId} {
+      allow read: if true;
+      allow create: if isVerifiedEmail()
+        && request.resource.data.applicantEmail == request.auth.token.email
+        && request.resource.data.status == 'PENDIENTE_PAGO';
+      allow update: if isOwner()
+        || (isVerifiedEmail()
+            && resource.data.applicantEmail == request.auth.token.email
+            && request.resource.data.applicantEmail == request.auth.token.email
+            && ((resource.data.status == request.resource.data.status
+                 && resource.data.status == 'PENDIENTE_PAGO')
+                || (resource.data.status == 'PENDIENTE_PAGO'
+                    && request.resource.data.status == 'PENDIENTE_APROBACION'
+                    && request.resource.data.paymentReceiptUrl
+                         is string
+                    && request.resource.data.paymentReceiptUrl
+                         matches 'PayPal order .*')));
+      allow delete: if isOwner();
+    }
   }
 }
