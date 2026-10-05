@@ -529,7 +529,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 }`}
               />
             </span>
-            <span className="font-mono text-[11.5px] font-semibold uppercase tracking-[0.14em] text-neutral-200">
+            <span className="font-mono text-[11.5px] font-semibold uppercase leading-tight tracking-[0.14em] text-neutral-200">
               {PLAN_NAMES[tier]}
             </span>
           </div>
@@ -557,7 +557,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 <span className="font-mono text-[32px] font-bold leading-none tracking-tight text-white">
                   {p ? `$${p.yearly}` : "—"}
                 </span>
-                <span className="text-xs text-neutral-500">/año</span>
+                <span className="text-xs text-neutral-500">USD/año</span>
               </div>
               <p className="mt-2 text-[13px] text-neutral-400">
                 {p
@@ -576,7 +576,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 <span className="font-mono text-[32px] font-bold leading-none tracking-tight text-white">
                   {p ? `$${p.monthly}` : "—"}
                 </span>
-                <span className="text-xs text-neutral-500">/mes</span>
+                <span className="text-xs text-neutral-500">USD/mes</span>
               </div>
               <p className="mt-2 text-[13px] text-neutral-400">
                 Se cobra cada mes · cancela cuando quieras
@@ -735,7 +735,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm font-['Lexend',sans-serif] sm:p-6">
-      <div className="relative max-h-[92dvh] w-full max-w-5xl overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-black text-[#EDEDED] shadow-2xl">
+      <div className="relative max-h-[92dvh] w-full max-w-6xl overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-black text-[#EDEDED] shadow-2xl">
         <div className="p-5 sm:p-8">
           {/* Cabecera */}
           <div className="flex items-start justify-between gap-4">
@@ -811,7 +811,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               </div>
 
               {/* Planes: gratuito + Access + Insight + Intelligence */}
-              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {/* Gratuito */}
                 <div className="flex flex-col rounded-xl border border-white/10 bg-black p-5">
                   <div className="flex items-center gap-3">
