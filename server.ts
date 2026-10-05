@@ -9,6 +9,8 @@ import { execFile } from 'child_process';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { processNewsImage, getR2Status } from './server/imageOptimizer.ts';
+// Tabla de precios compartida con el Worker (fuente única de verdad)
+import { PRICES } from './worker/paypal.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -165,6 +167,27 @@ const composeUpload = multer({
     }
   }),
   limits: { fileSize: 250 * 1024 * 1024 } // 250MB max for long videos
+});
+
+// API: Suscripciones PayPal — en local no hay Worker ni credenciales, se
+// responde "no configurado" para que la modal lo muestre sin fingir pagos.
+app.get('/api/paypal/config', (_req, res) => {
+  res.json({
+    success: true,
+    enabled: false,
+    mode: 'sandbox',
+    currency: 'USD',
+    clientId: null,
+    planIds: {},
+    prices: PRICES,
+  });
+});
+app.use('/api/paypal', (_req, res) => {
+  if (_req.method === 'GET') {
+    res.json({ success: true, active: false });
+    return;
+  }
+  res.status(503).json({ success: false, error: 'payments_not_configured' });
 });
 
 // API: Direct Server-Side Video Post Composition (High-Speed, 100% Quality, Perfect Audio Sync)

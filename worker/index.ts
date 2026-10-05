@@ -18,6 +18,16 @@ export interface Env {
   CLOUDINARY_CLOUD_NAME: string;
   CLOUDINARY_API_KEY: string;
   CLOUDINARY_API_SECRET: string;
+  // Suscripciones PayPal (secretos con `wrangler secret put`, nunca en el repo)
+  PAYPAL_MODE?: string; // 'sandbox' (por defecto) | 'live'
+  PAYPAL_API_BASE?: string; // SOLO pruebas locales (ver worker/paypal.ts)
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_SECRET?: string;
+  // Accesos concedidos (solo el Worker escribe aquí)
+  PAYPAL_KV: {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string): Promise<void>;
+  };
 }
 
 async function handleApi(request: Request, env: Env, pathname: string): Promise<Response> {
@@ -37,6 +47,12 @@ async function handleApi(request: Request, env: Env, pathname: string): Promise<
       console.error('[BLACKNEWS WORKER] optimize:', message);
       return json({ success: false, error: message }, 502);
     }
+  }
+
+  // Suscripciones PayPal (config, estado, activación y cancelación)
+  if (pathname.startsWith('/api/paypal/')) {
+    const { handlePaypalRequest } = await import('./paypal');
+    return handlePaypalRequest(request, env, pathname);
   }
 
   if (pathname.startsWith('/api/video/')) {

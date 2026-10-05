@@ -645,8 +645,8 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
 
         {/* Aviso de cuota diaria agotada (la lectura no se bloquea) */}
         {readExhausted && (
-          <div className="my-10 p-4 sm:p-5 rounded-xl border border-amber-500/40 bg-amber-950/40 font-sans">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-amber-300 mb-2">
+          <div className="my-10 p-4 sm:p-5 rounded-xl border border-emerald-500/40 bg-emerald-950/40 font-sans">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-emerald-300 mb-2">
               <Lock className="w-3.5 h-3.5" />
               <span>Lecturas gratuitas agotadas</span>
             </div>
@@ -662,7 +662,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
               <button
                 type="button"
                 onClick={onOpenSubscription}
-                className="mt-3.5 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+                className="mt-3.5 px-5 py-2.5 bg-emerald-400 hover:bg-emerald-300 text-black text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
               >
                 Ver suscripciones
               </button>

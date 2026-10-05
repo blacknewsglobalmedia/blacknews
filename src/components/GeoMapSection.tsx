@@ -304,9 +304,21 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
             )}
             {meter?.unlimited && (
               <div className="mt-4 text-[10px] text-neutral-600">
-                {meter.kind === "subscriber"
-                  ? "Suscriptor · lecturas ilimitadas"
-                  : "Redacción · sin límite"}
+                {meter.kind === "subscriber" ? (
+                  onOpenSubscriptionModal ? (
+                    <button
+                      type="button"
+                      onClick={onOpenSubscriptionModal}
+                      className="text-neutral-500 transition-colors hover:text-white cursor-pointer"
+                    >
+                      Suscriptor · lecturas ilimitadas · gestionar →
+                    </button>
+                  ) : (
+                    "Suscriptor · lecturas ilimitadas"
+                  )
+                ) : (
+                  "Redacción · sin límite"
+                )}
               </div>
             )}
           </aside>

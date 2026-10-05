@@ -34,7 +34,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
           <>
             <span
               className={`flex items-center gap-2 text-[11px] font-semibold whitespace-nowrap ${
-                exhausted ? "text-amber-400" : "text-neutral-300"
+                exhausted ? "text-emerald-400" : "text-neutral-300"
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 shrink-0" />
@@ -51,7 +51,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
                     className={`w-1.5 h-1.5 rounded-full ${
                       i < meter.used
                         ? exhausted
-                          ? "bg-amber-400"
+                          ? "bg-emerald-400"
                           : "bg-white"
                         : "bg-white/25"
                     }`}
@@ -66,7 +66,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
               aria-label="Ver suscripciones"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
                 exhausted
-                  ? "bg-amber-500 text-black hover:bg-amber-400"
+                  ? "bg-emerald-400 text-black hover:bg-emerald-300"
                   : "border border-white/20 text-neutral-200 hover:bg-white/10"
               }`}
             >

@@ -37,6 +37,7 @@ import {
   computeLayoutPreset,
 } from "./utils/layoutUtils";
 import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
+import { fetchSubscriptionStatus, PLAN_NAMES, type PlanTier } from "./utils/paypalSubscription";
 import { healPublishedAt } from "./utils/publishedAt";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import {
@@ -277,18 +278,12 @@ export default function App() {
     return INITIAL_AD_CAMPAIGNS;
   });
 
-  // Subscription state (BlackNews Digital Pass / Pro Terminal)
+  // Subscription state (BlackNews Digital Pass / Pro Terminal).
+  // La suscripción vive en el servidor (PayPal + Workers KV): aquí SOLO se
+  // consulta. Antes se concedía escribiendo localStorage — era el error
+  // crítico que daba acceso de pago gratis a cualquiera.
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  const [isSubscribed, setIsSubscribed] = useState(() => {
-    try {
-      const raw = localStorage.getItem("blacknews_subscription");
-      if (!raw) return false;
-      const data = JSON.parse(raw);
-      return data.status === "active";
-    } catch {
-      return false;
-    }
-  });
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
   const handleSaveCampaign = (campaign: AdCampaign) => {
     setAdsList((prev) => {
@@ -375,6 +370,29 @@ export default function App() {
     } catch {}
     return GUEST_USER;
   });
+
+  // Estado de suscripción: consultado al servidor por cuenta (PayPal + KV).
+  useEffect(() => {
+    // Clave heredada de la vieja concesión gratuita: se ignora y se purga.
+    try {
+      localStorage.removeItem("blacknews_subscription");
+    } catch {}
+    // Estado por defecto: sin cuenta no hay suscripción (antes se quedaba
+    // el valor de la sesión anterior al cerrar sesión).
+    setIsSubscribed(false);
+    if (!currentUser.email || currentUser.id === GUEST_USER_ID) return;
+    let alive = true;
+    fetchSubscriptionStatus(currentUser.email)
+      .then((s) => {
+        if (alive) setIsSubscribed(s.active);
+      })
+      .catch(() => {
+        /* sin conexión se mantiene la cuota gratuita */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [currentUser]);
 
   // Cuota de lecturas gratuitas con reinicio diario:
   // invitado 2 · registrado 3 · suscriptores y redacción sin límite
@@ -1133,14 +1151,16 @@ export default function App() {
           />
         ) : (
           <>
-            {/* Top Billboard Sponsor Banner */}
-            <AdBanner
-              placement="TOP_BILLBOARD"
-              campaigns={adsList}
-              selectedCategory={selectedCategory}
-              onTrackImpression={handleTrackImpression}
-              onTrackClick={handleTrackClick}
-            />
+            {/* Top Billboard Sponsor Banner (los suscriptores no ven publicidad) */}
+            {!isSubscribed && (
+              <AdBanner
+                placement="TOP_BILLBOARD"
+                campaigns={adsList}
+                selectedCategory={selectedCategory}
+                onTrackImpression={handleTrackImpression}
+                onTrackClick={handleTrackClick}
+              />
+            )}
 
             {leadReport && (
               <>
@@ -1182,14 +1202,16 @@ export default function App() {
               }
             />
 
-            {/* In-Feed Leaderboard Horizontal Banner */}
-            <AdBanner
-              placement="IN_FEED_LEADERBOARD"
-              campaigns={adsList}
-              selectedCategory={selectedCategory}
-              onTrackImpression={handleTrackImpression}
-              onTrackClick={handleTrackClick}
-            />
+            {/* In-Feed Leaderboard Horizontal Banner (los suscriptores no ven publicidad) */}
+            {!isSubscribed && (
+              <AdBanner
+                placement="IN_FEED_LEADERBOARD"
+                campaigns={adsList}
+                selectedCategory={selectedCategory}
+                onTrackImpression={handleTrackImpression}
+                onTrackClick={handleTrackClick}
+              />
+            )}
 
             <ReportsGrid
               reports={secondaryReports}
@@ -1306,11 +1328,24 @@ export default function App() {
       <SubscriptionModal
         isOpen={isSubscriptionModalOpen}
         onClose={() => setIsSubscriptionModalOpen(false)}
+        currentUser={currentUser}
+        onOpenGoogleAuth={() => {
+          setIsSubscriptionModalOpen(false);
+          setIsGoogleAuthOpen(true);
+        }}
         onSubscribeSuccess={(planId) => {
           setIsSubscribed(true);
           showToast(
-            `¡Suscripción [${planId.toUpperCase()}] activada con éxito! Acceso ilimitado concedido.`,
+            `Suscripción ${
+              PLAN_NAMES[planId as PlanTier] ?? planId
+            } activada. Lecturas ilimitadas desbloqueadas.`,
           );
+        }}
+        onStatusChange={(active) => {
+          setIsSubscribed(active);
+          if (!active) {
+            showToast("Suscripción cancelada. Ya no habrá más cobros.");
+          }
         }}
       />
 
