@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, Check, LogOut, PenTool } from 'lucide-react';
-import { RedactorProfile, ROLE_PERMISSIONS } from '../types/auth';
+import { X, Check, LogOut, PenTool, User } from 'lucide-react';
+import { RedactorProfile, ROLE_PERMISSIONS, GUEST_USER_ID } from '../types/auth';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 
@@ -11,6 +11,8 @@ interface GoogleAuthModalProps {
   onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string, verified?: boolean) => void;
   onLogout: () => void;
   onOpenStudio?: () => void;
+  /** Abre el panel del lector (historial, guardados y publicidad). */
+  onOpenReaderPanel?: () => void;
 }
 
 export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
@@ -20,6 +22,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   onLoginWithGoogle,
   onLogout,
   onOpenStudio,
+  onOpenReaderPanel,
 }) => {
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
@@ -158,8 +161,20 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {currentUser.role === 'LECTOR' ? (
               <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
                 <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: puedes guardar artículos y compartir sin restricciones. Para ver el panel interno con permisos editoriales es necesario iniciar sesión con la cuenta de Google del editor, verificada por Firebase.
+                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: puedes guardar hasta <strong className="text-white font-medium">10 artículos</strong>, ver el historial de tus últimas <strong className="text-white font-medium">50 lecturas</strong> y enviar publicidades pagadas desde tu panel. Para ver el panel interno con permisos editoriales es necesario iniciar sesión con la cuenta del editor, verificada por Firebase.
                 </p>
+                {onOpenReaderPanel && currentUser.id !== GUEST_USER_ID && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenReaderPanel();
+                    }}
+                    className="mt-3 w-full py-2.5 px-4 bg-emerald-500 text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    <span>ABRIR MI PANEL DEL LECTOR</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div>

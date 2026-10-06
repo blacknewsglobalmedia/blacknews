@@ -14,6 +14,7 @@ import { ReportDetailModal } from "./components/ReportDetailModal";
 import { ShareModal } from "./components/ShareModal";
 import { SearchBarModal } from "./components/SearchBarModal";
 import { BookmarksDrawer } from "./components/BookmarksDrawer";
+import { ReaderPanel } from "./components/ReaderPanel";
 import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
@@ -37,6 +38,12 @@ import {
   computeLayoutPreset,
 } from "./utils/layoutUtils";
 import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
+import {
+  loadReadHistory,
+  recordHistoryEntry,
+  FREE_BOOKMARK_LIMIT,
+  type HistoryEntry,
+} from "./utils/readerPanel";
 import { fetchSubscriptionStatus, PLAN_NAMES, type PlanTier } from "./utils/paypalSubscription";
 import { captureAdOrder } from "./utils/paypalAds";
 import { healPublishedAt } from "./utils/publishedAt";
@@ -153,6 +160,7 @@ export default function App() {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  const [isReaderPanelOpen, setIsReaderPanelOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -482,6 +490,10 @@ export default function App() {
   // Cuota de lecturas gratuitas con reinicio diario:
   // invitado 2 · registrado 3 · suscriptores y redacción sin límite
   const [readUsage, setReadUsage] = useState(loadReadUsage);
+  // Historial del panel del lector: últimas 50 lecturas de este dispositivo
+  const [readHistory, setReadHistory] = useState<HistoryEntry[]>(
+    loadReadHistory,
+  );
   const readMeter = computeReadMeter(readUsage, {
     isSubscribed,
     isGuest: currentUser.id === GUEST_USER_ID,
@@ -490,6 +502,8 @@ export default function App() {
 
   /** Anota la lectura de un artículo (no cuenta si la cuota es ilimitada). */
   const countArticleRead = (report: Report) => {
+    // Historial del panel: se anota siempre, también para suscriptores.
+    setReadHistory((prev) => recordHistoryEntry(prev, report.id));
     if (readMeter.unlimited) return;
     setReadUsage((prev) => recordRead(prev, report.id));
   };
@@ -856,6 +870,18 @@ export default function App() {
 
   // Bookmark toggling
   const handleToggleBookmark = (report: Report) => {
+    // Plan gratuito: tope de guardados (suscriptores y redacción, sin límite).
+    const saving = !bookmarkedIds.has(report.id);
+    if (
+      saving &&
+      !readMeter.unlimited &&
+      bookmarkedIds.size >= FREE_BOOKMARK_LIMIT
+    ) {
+      showToast(
+        `Plan gratuito: hasta ${FREE_BOOKMARK_LIMIT} artículos guardados. Suscríbete para guardar sin límite.`,
+      );
+      return;
+    }
     setBookmarkedIds((prev) => {
       const next = new Set(prev);
       if (next.has(report.id)) {
@@ -1422,6 +1448,33 @@ export default function App() {
         onLoginWithGoogle={handleLoginWithGoogle}
         onLogout={handleLogout}
         onOpenStudio={handleToggleStudio}
+        onOpenReaderPanel={() => {
+          setIsGoogleAuthOpen(false);
+          setIsReaderPanelOpen(true);
+        }}
+      />
+
+      {/* Reader panel: historial, guardados y publicidad del lector */}
+      <ReaderPanel
+        isOpen={isReaderPanelOpen}
+        onClose={() => setIsReaderPanelOpen(false)}
+        currentUser={currentUser}
+        isSubscribed={isSubscribed}
+        history={readHistory}
+        reports={reportsList}
+        bookmarks={savedReportsList}
+        bookmarksTotal={bookmarkedIds.size}
+        myAds={adsList.filter((c) => c.applicantEmail === currentUser.email)}
+        onSelectReport={handleOpenReport}
+        onRemoveBookmark={handleRemoveBookmark}
+        onOpenBookmarks={() => {
+          setIsReaderPanelOpen(false);
+          setIsBookmarksOpen(true);
+        }}
+        onOpenCreateAd={() => {
+          setIsReaderPanelOpen(false);
+          setIsAdModalOpen(true);
+        }}
       />
 
       {/* Self-Service Advertising Modal */}
