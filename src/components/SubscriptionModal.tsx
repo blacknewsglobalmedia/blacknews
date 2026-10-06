@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 import { GUEST_USER_ID, type RedactorProfile } from "../types/auth";
 import {
+  COMMENT_LIMIT_ACCESS,
+  COMMENT_LIMIT_FREE,
+  COMMENT_LIMIT_INSIGHT,
+} from "../utils/commentMeter";
+import {
   activateSubscription,
   cancelSubscription,
   fetchPayPalConfig,
@@ -59,6 +64,7 @@ const PLAN_CONTENT: Record<
       "Newsletter semanal",
       "Guardar artículos",
       "Perfil de miembro",
+      `Comentarios en los posts: ${COMMENT_LIMIT_ACCESS} al día`,
     ],
   },
   insight: {
@@ -74,6 +80,7 @@ const PLAN_CONTENT: Record<
       "Fichas de países",
       "Newsletter premium",
       "Alertas de acontecimientos importantes",
+      `Comentarios en los posts: ${COMMENT_LIMIT_INSIGHT} al día`,
     ],
   },
   intelligence: {
@@ -90,12 +97,14 @@ const PLAN_CONTENT: Record<
       "Acceso anticipado a investigaciones",
       "Eventos privados",
       "Comunidad exclusiva",
+      "Comentarios en los posts: ilimitados",
     ],
   },
 };
 
 const FREE_FEATURES = [
   "Cuota diaria: 2 lecturas de invitado · 3 con cuenta",
+  `Comentarios en los posts: ${COMMENT_LIMIT_FREE} al día`,
   "Teletipo y portada en tiempo real",
   "Todas las secciones de blacknews.media",
 ];

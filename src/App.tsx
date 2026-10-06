@@ -38,6 +38,11 @@ import {
 } from "./utils/layoutUtils";
 import { loadReadUsage, recordRead, computeReadMeter } from "./utils/readMeter";
 import {
+  loadCommentUsage,
+  recordComment,
+  computeCommentMeter,
+} from "./utils/commentMeter";
+import {
   loadReadHistory,
   recordHistoryEntry,
   FREE_BOOKMARK_LIMIT,
@@ -302,6 +307,8 @@ export default function App() {
   // crítico que daba acceso de pago gratis a cualquiera.
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  /** Plan de pago activo (para la cuota de comentarios por plan). */
+  const [subscriptionPlan, setSubscriptionPlan] = useState<PlanTier | null>(null);
 
   const handleSaveCampaign = (campaign: AdCampaign) => {
     setAdsList((prev) => {
@@ -471,11 +478,15 @@ export default function App() {
     // Estado por defecto: sin cuenta no hay suscripción (antes se quedaba
     // el valor de la sesión anterior al cerrar sesión).
     setIsSubscribed(false);
+    setSubscriptionPlan(null);
     if (!currentUser.email || currentUser.id === GUEST_USER_ID) return;
     let alive = true;
     fetchSubscriptionStatus(currentUser.email)
       .then((s) => {
-        if (alive) setIsSubscribed(s.active);
+        if (alive) {
+          setIsSubscribed(s.active);
+          setSubscriptionPlan(s.active ? (s.plan ?? null) : null);
+        }
       })
       .catch(() => {
         /* sin conexión se mantiene la cuota gratuita */
@@ -497,6 +508,19 @@ export default function App() {
     isGuest: currentUser.id === GUEST_USER_ID,
     isStaff: currentUser.role !== "LECTOR",
   });
+
+  // Cuota diaria de comentarios: gratuito 3 · Access 10 · Insight 30 ·
+  // Intelligence y redacción sin límite (se reinicia cada día)
+  const [commentUsage, setCommentUsage] = useState(loadCommentUsage);
+  const commentMeter = computeCommentMeter(commentUsage, {
+    plan: subscriptionPlan,
+    isStaff: currentUser.role !== "LECTOR",
+  });
+
+  /** Anota un comentario publicado (no cuenta si la cuota es ilimitada). */
+  const handleCommentPosted = () => {
+    setCommentUsage((prev) => recordComment(prev));
+  };
 
   /** Anota la lectura de un artículo (no cuenta si la cuota es ilimitada). */
   const countArticleRead = (report: Report) => {
@@ -1424,6 +1448,11 @@ export default function App() {
         readExhausted={readMeter.exhausted}
         readLimit={readMeter.limit}
         onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+        currentUser={currentUser}
+        signedIn={currentUser.id !== GUEST_USER_ID && !!currentUser.email}
+        commentMeter={commentMeter}
+        onCommentPosted={handleCommentPosted}
+        onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
       />
 
       {/* Social Media Sharing Modal */}

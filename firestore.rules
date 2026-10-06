@@ -100,19 +100,81 @@ service cloud.firestore {
       allow create: if isVerifiedEmail()
         && request.resource.data.applicantEmail == request.auth.token.email
         && request.resource.data.status == 'PENDIENTE_PAGO';
+      // El anunciante solo puede conservar su solicitud en PENDIENTE_PAGO
+      // o pasarla a PENDIENTE_APROBACION con comprobante PayPal, sin tocar
+      // el resto de estados (aprueba/rechaza el propietario).
       allow update: if isOwner()
         || (isVerifiedEmail()
             && resource.data.applicantEmail == request.auth.token.email
             && request.resource.data.applicantEmail == request.auth.token.email
-            && ((resource.data.status == request.resource.data.status
-                 && resource.data.status == 'PENDIENTE_PAGO')
-                || (resource.data.status == 'PENDIENTE_PAGO'
-                    && request.resource.data.status == 'PENDIENTE_APROBACION'
-                    && request.resource.data.paymentReceiptUrl
-                         is string
-                    && request.resource.data.paymentReceiptUrl
-                         matches 'PayPal order .*')));
+            && resource.data.status == 'PENDIENTE_PAGO'
+            && request.resource.data.status == 'PENDIENTE_PAGO')
+        || (isVerifiedEmail()
+            && resource.data.applicantEmail == request.auth.token.email
+            && request.resource.data.applicantEmail == request.auth.token.email
+            && resource.data.status == 'PENDIENTE_PAGO'
+            && request.resource.data.status == 'PENDIENTE_APROBACION'
+            && request.resource.data.paymentReceiptUrl is string
+            && request.resource.data.paymentReceiptUrl.startsWith('PayPal order '));
       allow delete: if isOwner();
+    }
+
+    // -----------------------------------------------------------------
+    // Comentarios y reacciones públicos de los posts
+    //
+    // Colecciones `comments` y `reactions` (lectura pública: cualquier
+    // visitante ve la conversación; ver src/utils/comments.ts).
+    //
+    // Escritura solo con Google verificada y SIEMPRE a nombre propio:
+    //  - comments: el correo del autor debe ser el de la sesión, texto de
+    //    1 a 600 caracteres; el autor borra (o edita) lo suyo y el
+    //    propietario puede moderar cualquier comentario.
+    //  - reactions: un "Me gusta" por (post, correo) — el id del documento
+    //    es `${reportId}_${correo}` — creándolo o borrándolo para alternar.
+    //
+    // La cuota diaria de comentarios por plan se controla en el cliente
+    // (mismo patrón que las lecturas gratuitas: ver utils/commentMeter).
+    // -----------------------------------------------------------------
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isVerifiedEmail()
+        && request.resource.data.authorEmail == request.auth.token.email
+        && request.resource.data.reportId is string
+        && request.resource.data.reportId.size() > 0
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() > 0
+        && request.resource.data.avatarInitials is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 600
+        && request.resource.data.createdAt is number;
+      allow update: if isVerifiedEmail()
+        && resource.data.authorEmail == request.auth.token.email
+        && request.resource.data.authorEmail == resource.data.authorEmail
+        && request.resource.data.reportId == resource.data.reportId
+        && request.resource.data.authorName == resource.data.authorName
+        && request.resource.data.avatarInitials == resource.data.avatarInitials
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 600;
+      allow delete: if isOwner()
+        || (isVerifiedEmail()
+            && resource.data.authorEmail == request.auth.token.email);
+    }
+
+    match /reactions/{reactionId} {
+      allow read: if true;
+      allow create: if isVerifiedEmail()
+        && reactionId == request.resource.data.reportId + '_'
+             + request.auth.token.email
+        && request.resource.data.reportId is string
+        && request.resource.data.userEmail == request.auth.token.email
+        && request.resource.data.kind == 'like'
+        && request.resource.data.createdAt is number;
+      allow delete: if isOwner()
+        || (isVerifiedEmail()
+            && resource.data.userEmail == request.auth.token.email);
     }
   }
 }

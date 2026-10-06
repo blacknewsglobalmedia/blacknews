@@ -16,12 +16,15 @@ import {
 } from 'lucide-react';
 import { Report } from '../types/news';
 import { AdCampaign } from '../types/ads';
+import { RedactorProfile } from '../types/auth';
 import { AdBanner } from './AdBanner';
 import { OptimizedPicture } from './OptimizedPicture';
 import { RichText } from './RichText';
+import { PostInteractions } from './PostInteractions';
 import { readTimeOf } from '../utils/readTime';
 import { getReadPct, setReadPct } from '../utils/readProgress';
 import { Highlight, getHighlights, addHighlight, removeHighlight } from '../utils/highlights';
+import { CommentMeter } from '../utils/commentMeter';
 
 interface ReportDetailModalProps {
   report: Report | null;
@@ -41,6 +44,16 @@ interface ReportDetailModalProps {
   readLimit?: number;
   /** Abre el modal de suscripciones desde el aviso de cuota. */
   onOpenSubscription?: () => void;
+  /** Perfil de la sesión actual (firma reacciones y comentarios). */
+  currentUser: RedactorProfile;
+  /** Hay sesión con correo (no invitado). */
+  signedIn: boolean;
+  /** Cuota diaria de comentarios del plan. */
+  commentMeter: CommentMeter;
+  /** Tras publicar un comentario: consume la cuota del día. */
+  onCommentPosted: () => void;
+  /** Abre el login de Google desde la sección de comentarios. */
+  onOpenGoogleAuth: () => void;
 }
 
 export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
@@ -58,6 +71,11 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   readExhausted = false,
   readLimit = 0,
   onOpenSubscription,
+  currentUser,
+  signedIn,
+  commentMeter,
+  onCommentPosted,
+  onOpenGoogleAuth,
 }) => {
   const [fontSizeScale, setFontSizeScale] = useState<'normal' | 'large' | 'huge'>('normal');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -669,6 +687,17 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             )}
           </div>
         )}
+
+        {/* Reacciones y comentarios de los lectores */}
+        <PostInteractions
+          report={report}
+          currentUser={currentUser}
+          signedIn={signedIn}
+          meter={commentMeter}
+          onCommentPosted={onCommentPosted}
+          onOpenGoogleAuth={onOpenGoogleAuth}
+          onOpenSubscription={onOpenSubscription}
+        />
 
         {/* Share CTA Footer Ribbon */}
         <div className="my-14 py-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 font-sans">
