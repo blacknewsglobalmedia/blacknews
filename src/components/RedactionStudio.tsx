@@ -836,7 +836,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       <aside className={`
         ${isMobileSidebarOpen ? 'block' : 'hidden'} lg:block 
         w-full lg:w-64 lg:min-h-screen border-r border-white/10 bg-black
-        p-4 shrink-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto z-40 flex flex-col justify-between
+        p-4 shrink-0 lg:sticky lg:top-[var(--bn-header-h)] lg:h-[calc(100dvh_-_var(--bn-header-h))] lg:overflow-y-auto z-40 flex flex-col justify-between
       `}>
         <div className="space-y-5">
           {/* Logo & Bureau Badge */}
@@ -1279,7 +1279,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       {/* MAIN WORKSPACE */}
       <main className="flex-1 min-w-0 flex flex-col bg-black">
         {/* Workspace Sticky Header */}
-        <div className="border-b border-white/10 bg-black/85 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3">
+        <div className="border-b border-white/10 bg-black/85 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-[var(--bn-header-h)] z-20 flex flex-wrap items-center justify-between gap-3">
           {/* Breadcrumb Title */}
           <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider">
             <span className="text-neutral-500 font-semibold">{isReader ? 'MI CUENTA' : 'SISTEMA EDITORIAL'}</span>

@@ -181,7 +181,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
           type="button"
           onClick={handleLike}
           disabled={!likes}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:cursor-default ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:cursor-default ${
             likes?.mine
               ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
               : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/30 hover:text-white"
@@ -190,9 +190,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
         >
           <ThumbsUp className="w-4 h-4" />
           <span className="font-mono">{likes ? likes.count : 0}</span>
-          <span className="hidden sm:inline">
-            {likes?.mine ? "Te gusta" : "Me gusta"}
-          </span>
+          <span>{likes?.mine ? "Te gusta" : "Me gusta"}</span>
         </button>
         <div className="flex items-center gap-1.5 text-xs text-neutral-500">
           <MessageCircle className="w-3.5 h-3.5" />
@@ -237,7 +235,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
                 maxLength={COMMENT_MAX_LENGTH}
                 rows={3}
                 placeholder="Escribe un comentario sobre este informe…"
-                className="flex-1 resize-none bg-transparent text-sm text-white placeholder:text-neutral-500 font-light leading-relaxed focus:outline-none"
+                className="flex-1 min-w-0 resize-none bg-transparent text-base text-white placeholder:text-neutral-500 font-light leading-relaxed focus:outline-none"
               />
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -252,7 +250,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
                 type="button"
                 onClick={handlePublish}
                 disabled={publishing || !draft.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-white text-black hover:bg-neutral-200 disabled:opacity-40 text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-white text-black hover:bg-neutral-200 disabled:opacity-40 text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 {publishing ? "Publicando…" : "Publicar"}
@@ -351,7 +349,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
                     <button
                       type="button"
                       onClick={() => handleDelete(c.id)}
-                      className="p-1.5 rounded text-neutral-500 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+                      className="p-2.5 -m-1 rounded text-neutral-500 hover:text-red-400 hover:bg-white/5 transition-colors cursor-pointer shrink-0"
                       title="Eliminar mi comentario"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

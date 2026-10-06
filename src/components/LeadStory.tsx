@@ -128,7 +128,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
             <div className="pt-2">
               <button
                 onClick={() => onRead(report)}
-                className="text-xs font-sans font-medium uppercase tracking-wider text-white hover:text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer py-1"
+                className="text-xs font-sans font-medium uppercase tracking-wider text-white hover:text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer py-2.5 -my-1"
               >
                 <span>LEER ANÁLISIS ECONÓMICO</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
             </div>
 
             {/* Read CTA button con esquinas sutilmente suavizadas */}
-            <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+            <div className="pt-4 border-t border-white/10 flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:justify-between">
               <button
                 onClick={() => onRead(report)}
                 className="px-5 py-2.5 bg-white text-black font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
@@ -178,7 +178,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
                 <span>LEER INFORME COMPLETO</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-              <span className="text-xs font-sans text-neutral-400 font-medium tracking-wide">
+              <span className="text-xs font-sans text-neutral-400 font-medium tracking-wide hidden sm:inline">
                 DESPACHO VERIFICADO
               </span>
             </div>
@@ -233,7 +233,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
             <div className="pt-4 border-t border-white/10 flex items-center justify-between">
               <button
                 onClick={() => onToggleBookmark(report)}
-                className={`flex items-center gap-1.5 text-xs font-sans uppercase tracking-wider py-1.5 px-3 rounded-md border transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 text-xs font-sans uppercase tracking-wider py-2.5 px-3 rounded-md border transition-colors cursor-pointer ${
                   isBookmarked
                     ? 'bg-white text-black border-white font-semibold'
                     : 'border-white/15 text-neutral-400 hover:text-white hover:border-white'
@@ -245,7 +245,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
 
               <button
                 onClick={() => onShare(report)}
-                className="flex items-center gap-1.5 text-xs font-sans uppercase tracking-wider py-1.5 px-3 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-sans uppercase tracking-wider py-2.5 px-3 text-neutral-400 hover:text-white transition-colors cursor-pointer"
               >
                 <Share2 className="w-3.5 h-3.5" />
                 <span>COMPARTIR</span>

@@ -4,6 +4,13 @@
   :root {
     --bg-amoled: #000000;
     --border-hairline: rgba(255, 255, 255, 0.08);
+    /* Altura real de la cabecera sticky (barra + tira de categorías).
+       La usan las sub-cabeceras y las anclas para no quedar debajo.
+       Medida en navegador: 125px <640, 133px ≥640 (sm) */
+    --bn-header-h: calc(125px + env(safe-area-inset-top, 0px));
+  }
+  @media (min-width: 640px) {
+    :root { --bn-header-h: calc(133px + env(safe-area-inset-top, 0px)); }
   }
 
   html, body {
@@ -14,6 +21,34 @@
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* iOS: sin auto-escala de tipografía; anclas bajo la cabecera sticky */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-padding-top: calc(var(--bn-header-h) + 3.5rem);
+  }
+
+  body {
+    /* Tap highlight sutil sobre negro (el azul por defecto choca con AMOLED) */
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Móvil: iOS hace zoom automático al enfocar campos con <16px.
+     Forzamos 16px solo en pantallas pequeñas (no afecta a escritorio). */
+  @media (max-width: 640px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Cabecera: respeta el notch en modo standalone */
+  header.bn-safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  /* Barra inferior fija: respeta la barra home del iPhone */
+  .bn-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* Custom minimal monochrome scrollbar */
@@ -117,7 +152,8 @@ svg g[tabindex]:focus {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
 }
 .gloss-term:hover .gloss-tip,
-.gloss-term:focus-visible .gloss-tip {
+.gloss-term:focus-visible .gloss-tip,
+.gloss-term[data-open='1'] .gloss-tip {
   opacity: 1;
   visibility: visible;
 }

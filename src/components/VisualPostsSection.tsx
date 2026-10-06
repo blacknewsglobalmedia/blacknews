@@ -119,7 +119,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
               <button
                 type="button"
                 onClick={handlePrev}
-                className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                className="p-2.5 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                 title="Página anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -130,7 +130,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
               <button
                 type="button"
                 onClick={handleNext}
-                className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                className="p-2.5 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                 title="Página siguiente"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -150,7 +150,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                   setFilterCategory(cat);
                   setCurrentPage(0);
                 }}
-                className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-lg border ${
+                className={`px-3 py-2.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-lg border ${
                   active
                     ? 'text-black bg-white font-bold border-white shadow-md'
                     : 'text-neutral-400 hover:text-white bg-neutral-950/60 border-white/10 hover:border-white/20'
@@ -184,7 +184,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => onShareReport(report)}
-                      className="p-1.5 bg-black/60 hover:bg-black/90 text-neutral-300 hover:text-white rounded-full backdrop-blur-md border border-white/10 transition-colors cursor-pointer"
+                      className="p-2.5 bg-black/60 hover:bg-black/90 text-neutral-300 hover:text-white rounded-full backdrop-blur-md border border-white/10 transition-colors cursor-pointer"
                       title="Compartir despacho"
                     >
                       <Share2 className="w-3.5 h-3.5" />
@@ -193,7 +193,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => onToggleBookmark(report)}
-                      className={`p-1.5 rounded-full backdrop-blur-md border transition-colors cursor-pointer ${
+                      className={`p-2.5 rounded-full backdrop-blur-md border transition-colors cursor-pointer ${
                         isBookmarked 
                           ? 'bg-white text-black border-white' 
                           : 'bg-black/60 hover:bg-black/90 text-neutral-300 hover:text-white border-white/10'
@@ -215,10 +215,10 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
 
                       <span className="text-neutral-500 text-[10px] shrink-0">·</span>
 
-                      {/* Country Flag & Name */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <CountryFlag code={country.code} className="w-4 h-2.5 object-cover rounded-[1px] shadow-xs" />
-                        <span className="text-[10px] sm:text-[11px] font-semibold tracking-wide text-neutral-300 uppercase">
+                      {/* Country Flag & Name (se trunca en móvil para no expulsar la línea) */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <CountryFlag code={country.code} className="w-4 h-2.5 object-cover rounded-[1px] shadow-xs shrink-0" />
+                        <span className="text-[10px] sm:text-[11px] font-semibold tracking-wide text-neutral-300 uppercase truncate">
                           {country.name}
                         </span>
                       </div>
@@ -286,8 +286,9 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
             })}
           </div>
         ) : (
-          <div className="p-12 text-center border border-white/10 rounded-2xl bg-neutral-950/40">
+          <div className="p-6 sm:p-12 text-center border border-white/10 rounded-2xl bg-neutral-950/40">
             <p className="text-sm text-neutral-400 font-light">
+              No hay publicaciones de estudio con estos filtros por ahora.
               No hay despachos disponibles en esta sección.
             </p>
           </div>

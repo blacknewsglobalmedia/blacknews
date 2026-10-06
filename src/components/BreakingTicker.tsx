@@ -27,11 +27,11 @@ export const BreakingTicker: React.FC<BreakingTickerProps> = ({
 
   return (
     <div className="w-full bg-black border-b border-white/5 text-xs sm:text-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-2 sm:gap-3">
         {/* Ticker label: ultra minimal */}
         <div className="flex items-center gap-2.5 shrink-0">
           <span className="font-medium tracking-wider text-black bg-white px-2 py-0.5 text-xs uppercase">
-            ÚLTIMA HORA
+            ÚLTIMA<span className="hidden sm:inline"> HORA</span>
           </span>
           <span className="font-mono text-neutral-500 text-xs hidden md:inline">
             {currentItem.time}
@@ -59,11 +59,11 @@ export const BreakingTicker: React.FC<BreakingTickerProps> = ({
           </span>
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className="p-1 hover:text-white transition-colors cursor-pointer"
+            className="p-2 -my-1 hover:text-white transition-colors cursor-pointer"
             title={isPaused ? 'Reanudar teletipo' : 'Pausar teletipo'}
             aria-label="Pausa teletipo"
           >
-            {isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3 text-neutral-400" />}
+            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4 text-neutral-400" />}
           </button>
         </div>
       </div>

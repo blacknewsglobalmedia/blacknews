@@ -587,7 +587,7 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
         {/* LEFT COLUMN: BANCO DE ARTÍCULOS DISPONIBLES (POLL) */}
-        <div className="lg:col-span-4 bg-neutral-950 rounded-2xl border border-white/10 p-5 space-y-4 lg:sticky lg:top-20 max-h-[85vh] flex flex-col">
+        <div className="lg:col-span-4 bg-neutral-950 rounded-2xl border border-white/10 p-5 space-y-4 lg:sticky lg:top-[calc(var(--bn-header-h)_+_3.75rem)] max-h-[85vh] flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-white flex items-center gap-2">

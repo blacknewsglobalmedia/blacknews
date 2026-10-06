@@ -101,8 +101,8 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
-      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto rounded-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 py-6 overflow-y-auto overscroll-contain animate-in fade-in duration-150 font-sans">
+      <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative max-h-[90dvh] overflow-y-auto overscroll-contain rounded-xl">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
           <div className="flex items-center gap-2.5">
@@ -113,7 +113,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
+            className="p-2.5 -m-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
             aria-label="Cerrar"
           >
             <X className="w-4 h-4" />
@@ -141,7 +141,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   {currentUser.role === 'LECTOR' ? 'LECTOR (BÁSICO)' : currentUser.role}
                 </span>
               </div>
-              <div className="text-xs font-sans text-neutral-400 mt-1 font-light">
+              <div className="text-xs font-sans text-neutral-400 mt-1 font-light break-all">
                 {currentUser.email}
               </div>
             </div>
@@ -175,7 +175,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
               </div>
             ) : (
               <div>
-                <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                   <div className="flex items-center gap-1.5">
                     <span className={permissions.canWritePosts ? 'text-white' : 'text-neutral-600'}>●</span>
                     <span>Redactar: {permissions.canWritePosts ? 'SÍ' : 'NO'}</span>
@@ -240,7 +240,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         {!isCustomFormOpen ? (
           <button
             onClick={() => setIsCustomFormOpen(true)}
-            className="w-full py-2 text-xs font-sans font-medium text-neutral-400 hover:text-white uppercase tracking-wider text-center transition-colors cursor-pointer border-t border-white/5 pt-3"
+            className="w-full py-2.5 text-xs font-sans font-medium text-neutral-400 hover:text-white uppercase tracking-wider text-center transition-colors cursor-pointer border-t border-white/5 pt-3"
           >
             + Registrar otra cuenta de correo o Gmail
           </button>
@@ -259,7 +259,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 placeholder="Nombre y apellido"
-                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white font-sans"
+                className="w-full bg-black border-b border-white/20 px-1 py-2.5 text-base text-white focus:outline-none focus:border-white font-sans"
               />
             </div>
             <div>
@@ -272,7 +272,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
                 placeholder="correo@gmail.com"
-                className="w-full bg-black border-b border-white/20 pb-1 text-xs sm:text-sm text-white focus:outline-none focus:border-white font-sans"
+                className="w-full bg-black border-b border-white/20 px-1 py-2.5 text-base text-white focus:outline-none focus:border-white font-sans"
               />
             </div>
             <p className="text-xs font-sans text-neutral-500 font-light">
@@ -281,14 +281,14 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 py-2 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-md"
+                className="flex-1 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-md"
               >
                 INGRESAR / REGISTRAR
               </button>
               <button
                 type="button"
                 onClick={() => setIsCustomFormOpen(false)}
-                className="px-3 py-2 text-xs font-sans text-neutral-400 hover:text-white cursor-pointer"
+                className="px-3 py-2.5 text-xs font-sans text-neutral-400 hover:text-white cursor-pointer"
               >
                 CANCELAR
               </button>
@@ -303,14 +303,14 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
               onLogout();
               onClose();
             }}
-            className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+            className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium py-2 -my-1"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>CERRAR SESIÓN (MODO LECTOR)</span>
           </button>
           <button
             onClick={onClose}
-            className="text-xs font-sans text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium"
+            className="text-xs font-sans text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium py-2 -my-1"
           >
             CERRAR
           </button>

@@ -113,7 +113,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-150 font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 py-6 overflow-y-auto overscroll-contain animate-in fade-in duration-150 font-sans">
       <div className="w-full max-w-lg bg-black border border-white/10 p-6 sm:p-8 shadow-2xl relative rounded-xl">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">
@@ -125,7 +125,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
+            className="p-2.5 -m-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
             aria-label="Cerrar ventana"
           >
             <X className="w-4 h-4" />
@@ -157,14 +157,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         )}
 
         {/* Social Networks Grid without bulky boxes */}
-        <div className="grid grid-cols-3 gap-2.5 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-6">
           {shareNetworks.map((net) => (
             <a
               key={net.name}
               href={net.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2.5 hover:bg-white hover:text-black transition-colors text-xs font-semibold text-neutral-300 border border-white/10 rounded-lg"
+              className="flex items-center gap-2 px-3 py-3 min-h-11 hover:bg-white hover:text-black transition-colors text-xs font-semibold text-neutral-300 border border-white/10 rounded-lg"
             >
               {net.icon}
               <span className="truncate">{net.name}</span>
@@ -186,7 +186,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             />
             <button
               onClick={handleCopyLink}
-              className={`px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer rounded-md ${
+              className={`px-4 py-2.5 text-xs font-semibold tracking-wider uppercase transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer rounded-md ${
                 copied
                   ? 'bg-emerald-400 text-black'
                   : 'bg-white text-black hover:bg-neutral-200'
@@ -211,7 +211,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Quote Card */}
         {report && (
-          <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs font-sans">
+          <div className="pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs font-sans">
             <span className="text-neutral-400 uppercase flex items-center gap-1.5 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-white" />
               FICHA DE TEXTO

@@ -36,7 +36,7 @@ export const SearchBarModal: React.FC<SearchBarModalProps> = ({
       });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/85 backdrop-blur-sm p-4 sm:p-6 pt-16 sm:pt-24 animate-in fade-in duration-150 font-['Lexend',sans-serif]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/85 backdrop-blur-sm p-4 sm:p-6 pt-16 sm:pt-24 overflow-y-auto overscroll-contain animate-in fade-in duration-150 font-['Lexend',sans-serif]">
       <div className="w-full max-w-2xl bg-neutral-950 border border-white/15 rounded-xl shadow-2xl overflow-hidden">
         {/* Search Input Bar */}
         <div className="p-4 border-b border-white/10 flex items-center gap-3">
@@ -47,11 +47,11 @@ export const SearchBarModal: React.FC<SearchBarModalProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por titular, mercado, sector, autor o palabra clave..."
-            className="flex-1 bg-transparent text-sm sm:text-base text-white placeholder-neutral-500 focus:outline-none font-sans font-light"
+            className="flex-1 min-w-0 bg-transparent text-base py-1.5 text-white placeholder-neutral-500 focus:outline-none font-sans font-light"
           />
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
+            className="p-2.5 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded-md hover:bg-white/5"
             aria-label="Cerrar búsqueda"
           >
             <X className="w-5 h-5" />
@@ -59,7 +59,7 @@ export const SearchBarModal: React.FC<SearchBarModalProps> = ({
         </div>
 
         {/* Results / Suggestions */}
-        <div className="max-h-[60vh] overflow-y-auto p-3 space-y-1">
+        <div className="max-h-[55dvh] overflow-y-auto overscroll-contain p-3 space-y-1">
           {query.trim() === '' ? (
             <div className="py-8 text-center text-xs font-sans text-neutral-500">
               Escribe para buscar entre todos los informes y coberturas de BLACKNEWS

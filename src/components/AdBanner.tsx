@@ -214,7 +214,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({
               />
               {brokenImages[c.id] && (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-gradient-to-r from-neutral-950 to-black px-4 text-center">
-                  <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-neutral-500">
+                  <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-500">
                     {c.badgeText || "Patrocinio"}
                   </span>
                   <span className="line-clamp-1 text-xs font-semibold text-white">
@@ -230,12 +230,12 @@ export const AdBanner: React.FC<AdBannerProps> = ({
         })}
 
         {/* Etiqueta de transparencia publicitaria */}
-        <span className="pointer-events-none absolute left-2 top-1.5 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.2em] text-neutral-500">
+        <span className="pointer-events-none absolute left-2 top-1.5 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
           Publicidad
         </span>
 
         {/* Anunciante (micro) */}
-        <span className="pointer-events-none absolute bottom-1.5 left-2 z-20 max-w-[55%] truncate font-mono text-[8px] uppercase tracking-widest text-neutral-600">
+        <span className="pointer-events-none absolute bottom-1.5 left-2 z-20 max-w-[55%] truncate font-mono text-[10px] uppercase tracking-widest text-neutral-600">
           {activeCampaign?.advertiser}
         </span>
 
@@ -248,11 +248,11 @@ export const AdBanner: React.FC<AdBannerProps> = ({
               onClick={() =>
                 setActive((i) => (i - 1 + eligibleCampaigns.length) % eligibleCampaigns.length)
               }
-              className="hidden rounded-full border border-white/10 bg-black/60 p-0.5 text-neutral-400 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover:opacity-100 sm:block"
+              className="rounded-full border border-white/10 bg-black/60 p-1.5 text-neutral-400 transition-colors hover:text-white focus-visible:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
             >
-              <ChevronLeft className="h-3 w-3" />
+              <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex items-center gap-1 px-1">
+            <div className="flex items-center gap-1 pr-1">
               {eligibleCampaigns.map((c, i) => (
                 <button
                   key={c.id}
@@ -260,21 +260,25 @@ export const AdBanner: React.FC<AdBannerProps> = ({
                   aria-label={`Ir al anuncio ${i + 1} de ${eligibleCampaigns.length}`}
                   aria-current={i === activeIndex}
                   onClick={() => setActive(i)}
-                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                    i === activeIndex
-                      ? "bg-white/90"
-                      : "bg-white/25 hover:bg-white/50"
-                  }`}
-                />
+                  className="flex h-6 w-6 items-center justify-center"
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                      i === activeIndex
+                        ? "bg-white/90"
+                        : "bg-white/25 hover:bg-white/50"
+                    }`}
+                  />
+                </button>
               ))}
             </div>
             <button
               type="button"
               aria-label="Siguiente anuncio"
               onClick={() => setActive((i) => (i + 1) % eligibleCampaigns.length)}
-              className="hidden rounded-full border border-white/10 bg-black/60 p-0.5 text-neutral-400 opacity-0 transition-opacity hover:text-white focus-visible:opacity-100 group-hover:opacity-100 sm:block"
+              className="rounded-full border border-white/10 bg-black/60 p-1.5 text-neutral-400 transition-colors hover:text-white focus-visible:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
             >
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}

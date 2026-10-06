@@ -64,7 +64,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
               type="button"
               onClick={onOpenSubscription}
               aria-label="Ver suscripciones"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
                 exhausted
                   ? "bg-emerald-400 text-black hover:bg-emerald-300"
                   : "border border-white/20 text-neutral-200 hover:bg-white/10"
@@ -82,7 +82,7 @@ export const ReadingDock: React.FC<ReadingDockProps> = ({
           onClick={scrollToTop}
           aria-label="Volver arriba"
           title="Volver arriba"
-          className="p-2 rounded-full bg-white/10 hover:bg-white text-black transition-colors cursor-pointer shrink-0"
+          className="p-2.5 rounded-full bg-white/10 hover:bg-white text-black transition-colors cursor-pointer shrink-0"
         >
           <ArrowUp className="w-4 h-4" />
         </button>

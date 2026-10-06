@@ -69,19 +69,19 @@ export function WorldClockBar() {
 
   return (
     <>
-      {/* Clic fuera cierra el panel (queda por debajo de la barra, z-40) */}
+      {/* Clic fuera cierra el panel (z-40 = por encima de la cabecera, que así también lo cierra) */}
       {open && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-30 bg-black/30"
+          className="fixed inset-0 z-40 bg-black/30"
           onClick={() => setOpen(false)}
         />
       )}
 
-      <div className="fixed bottom-0 inset-x-0 z-40 font-sans select-none">
+      <div className="bn-safe-bottom fixed bottom-0 inset-x-0 z-40 font-sans select-none">
         {/* Panel con todos los relojes */}
         {open && (
-          <div className="bg-black border-t border-white/10 max-h-[60vh] overflow-y-auto">
+          <div className="bg-black border-t border-white/10 max-h-[65dvh] overflow-y-auto overscroll-contain">
             <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-2.5 pb-3">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-500 mb-2">
                 <span>Hora en el mundo</span>
@@ -121,8 +121,8 @@ export function WorldClockBar() {
           </div>
         )}
 
-        {/* Barra marquee compacta */}
-        <div className="h-6 flex items-stretch bg-black border-t border-white/10 text-[10px] tracking-wide">
+        {/* Barra marquee compacta (36 px en móvil para poder tocarla) */}
+        <div className="h-9 sm:h-6 flex items-stretch bg-black border-t border-white/10 text-[10px] tracking-wide">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -132,7 +132,7 @@ export function WorldClockBar() {
                 ? "Ocultar la hora en los principales países"
                 : "Ver la hora en los principales países"
             }
-            className="shrink-0 px-2 flex items-center gap-1.5 border-r border-white/10 text-neutral-500 hover:text-white transition-colors cursor-pointer"
+            className="shrink-0 px-3 sm:px-2 flex items-center gap-1.5 border-r border-white/10 text-neutral-500 hover:text-white transition-colors cursor-pointer"
           >
             <Clock className="w-3 h-3" />
             <ChevronUp

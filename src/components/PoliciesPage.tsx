@@ -78,7 +78,7 @@ export const PoliciesPage: React.FC<PoliciesPageProps> = ({
       let current = 1;
       for (let n = 1; n <= sections.length; n++) {
         const el = document.getElementById(`seccion-${n}`);
-        if (el && el.getBoundingClientRect().top <= 160) current = n;
+        if (el && el.getBoundingClientRect().top <= 190) current = n;
       }
       setActiveSection(current);
     };
@@ -96,9 +96,9 @@ export const PoliciesPage: React.FC<PoliciesPageProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-black text-neutral-300 font-sans">
-      {/* Encabezado */}
-      <div className="sticky top-0 z-30 bg-black/90 backdrop-blur-md border-b border-white/10">
+    <div className="min-h-dvh bg-black text-neutral-300 font-sans">
+      {/* Encabezado (pegado justo debajo de la cabecera sticky del sitio) */}
+      <div className="sticky top-[var(--bn-header-h)] z-30 bg-black/90 backdrop-blur-md border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
           <button
             onClick={onBack}
@@ -183,7 +183,7 @@ export const PoliciesPage: React.FC<PoliciesPageProps> = ({
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Índice sticky */}
           <aside className="lg:w-64 lg:shrink-0">
-            <nav className="lg:sticky lg:top-20 border border-white/10 rounded-xl bg-neutral-950 p-3.5">
+            <nav className="lg:sticky lg:top-[calc(var(--bn-header-h)_+_1rem)] border border-white/10 rounded-xl bg-neutral-950 p-3.5">
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white mb-2.5">
                 <ScrollText className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Índice de secciones</span>
@@ -196,7 +196,7 @@ export const PoliciesPage: React.FC<PoliciesPageProps> = ({
                     <li key={section.title}>
                       <button
                         onClick={() => goTo(n)}
-                        className={`w-full text-left px-2 py-1.5 rounded-md text-xs leading-snug transition-colors cursor-pointer ${
+                        className={`w-full text-left px-2 py-2.5 lg:py-1.5 rounded-md text-xs leading-snug transition-colors cursor-pointer ${
                           active
                             ? "bg-white text-black font-semibold"
                             : "text-neutral-400 hover:text-white hover:bg-white/5"

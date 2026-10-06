@@ -465,7 +465,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
             <button
               type="button"
               onClick={() => setCancelState("confirm")}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-neutral-300 transition-colors hover:border-red-400/50 hover:text-red-300 cursor-pointer"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-neutral-300 transition-colors hover:border-red-400/50 hover:text-red-300 cursor-pointer"
             >
               Cancelar suscripción
             </button>
@@ -475,7 +475,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 type="button"
                 onClick={handleCancel}
                 disabled={cancelState === "cancelling"}
-                className="rounded-lg bg-red-500 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-red-400 disabled:opacity-50 cursor-pointer"
+                className="rounded-lg bg-red-500 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-red-400 disabled:opacity-50 cursor-pointer"
               >
                 {cancelState === "cancelling" ? "Cancelando…" : "Sí, cancelar ahora"}
               </button>
@@ -483,7 +483,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 type="button"
                 onClick={() => setCancelState("idle")}
                 disabled={cancelState === "cancelling"}
-                className="rounded-lg border border-white/15 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-neutral-400 transition-colors hover:text-white disabled:opacity-50 cursor-pointer"
+                className="rounded-lg border border-white/15 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400 transition-colors hover:text-white disabled:opacity-50 cursor-pointer"
               >
                 Mantener
               </button>
@@ -779,7 +779,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="shrink-0 rounded-full p-2 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+              className="shrink-0 rounded-full p-2.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -876,8 +876,8 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 )}
               </div>
 
-              {/* Barra de pago */}
-              <div className="mt-4 flex flex-col gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between">
+              {/* Barra de pago — fija abajo en móvil para no perderla tras las ~2.000 px de tarjetas */}
+              <div className="mt-4 sticky bottom-0 z-10 flex flex-col gap-4 rounded-xl border border-white/10 bg-black/95 backdrop-blur-md p-4 shadow-[0_-14px_28px_rgba(0,0,0,0.8)] sm:static sm:bg-white/[0.02] sm:backdrop-blur-none sm:shadow-none sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="font-headline text-[15px] font-bold text-white">
                     {planName} · {cycleLabel}

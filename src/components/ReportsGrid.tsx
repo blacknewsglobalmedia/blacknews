@@ -76,7 +76,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                 <button
                   key={cat}
                   onClick={() => onSelectCategory(cat)}
-                  className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-md ${
+                  className={`px-3 py-2.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-md ${
                     active
                       ? 'text-white bg-white/10 font-semibold'
                       : 'text-neutral-400 hover:text-white hover:bg-white/5'
@@ -108,12 +108,12 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
           </div>
         ) : (
           /* Newspaper Broadsheet Modular Blocks (Ultra-Minimalist & Borderless) */
-          <div className="space-y-16">
+          <div className="space-y-10 sm:space-y-16">
             
             {/* BLOQUE I: GRANDES DESPACHOS EN 2 COLUMNAS ABIERTAS */}
             {block1Items.length > 0 && (
               <div>
-                <div className="flex items-center justify-between pb-3 mb-8 border-b border-white/10">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-3 mb-8 border-b border-white/10">
                   <span className="text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold">
                     BLOQUE I · DESPACHOS DE FONDO & ESTADO DE DERECHO
                   </span>
@@ -177,16 +177,16 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                         </div>
 
                         {/* Author & Action Bar */}
-                        <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between">
-                          <div className="text-xs font-sans text-neutral-400">
-                            <span className="text-white font-medium block text-sm">{report.author.name}</span>
-                            <span className="text-neutral-500">{report.author.bureau}</span>
+                        <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between gap-3">
+                          <div className="text-xs font-sans text-neutral-400 min-w-0">
+                            <span className="text-white font-medium block text-sm truncate">{report.author.name}</span>
+                            <span className="text-neutral-500 block truncate">{report.author.bureau}</span>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => onToggleBookmark(report)}
-                              className={`p-2 rounded-md transition-colors cursor-pointer ${
+                              className={`p-2.5 rounded-md transition-colors cursor-pointer ${
                                 isBookmarked
                                   ? 'text-white bg-white/10'
                                   : 'text-neutral-400 hover:text-white hover:bg-white/5'
@@ -199,15 +199,16 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
 
                             <button
                               onClick={() => onShareReport(report)}
-                              className="text-xs font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer py-1 px-2.5 rounded-md hover:bg-white/5"
+                              aria-label="Compartir"
+                              className="text-xs font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer py-2 px-2.5 rounded-md hover:bg-white/5"
                             >
                               <Share2 className="w-3.5 h-3.5" />
-                              <span>COMPARTIR</span>
+                              <span className="hidden sm:inline">COMPARTIR</span>
                             </button>
 
                             <button
                               onClick={() => onReadReport(report)}
-                              className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                              className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                               title="Leer informe completo"
                               aria-label="Leer informe"
                             >
@@ -225,7 +226,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
             {/* BLOQUE II: COLUMNAS EN 3 COLUMNAS ABIERTAS */}
             {block2Items.length > 0 && (
               <div>
-                <div className="flex items-center justify-between pb-3 mb-8 border-b border-white/10">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-3 mb-8 border-b border-white/10">
                   <span className="text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold">
                     BLOQUE II · INFRAESTRUCTURA, INNOVACIÓN Y MERCADOS DE CAPITAL
                   </span>
@@ -291,10 +292,10 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                             <span className="text-white block truncate font-medium">{report.author.name}</span>
                           </div>
 
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => onToggleBookmark(report)}
-                              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                              className={`p-2.5 rounded-md transition-colors cursor-pointer ${
                                 isBookmarked
                                   ? 'text-white bg-white/10'
                                   : 'text-neutral-400 hover:text-white hover:bg-white/5'
@@ -302,21 +303,22 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                               title={isBookmarked ? 'Guardado' : 'Guardar'}
                               aria-label="Guardar"
                             >
-                              <Bookmark className="w-3.5 h-3.5" />
+                              <Bookmark className="w-4 h-4" />
                             </button>
 
                             <button
                               onClick={() => onShareReport(report)}
-                              className="text-xs font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer py-1 px-2 rounded-md hover:bg-white/5"
+                              className="text-xs font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer py-2 px-2.5 rounded-md hover:bg-white/5"
                               title="Compartir en redes sociales"
+                              aria-label="Compartir"
                             >
-                              <Share2 className="w-3 h-3" />
-                              <span className="hidden xl:inline">COMPARTIR</span>
+                              <Share2 className="w-3.5 h-3.5" />
+                              <span className="hidden md:inline">COMPARTIR</span>
                             </button>
 
                             <button
                               onClick={() => onReadReport(report)}
-                              className="p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                              className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                               title="Leer informe"
                               aria-label="Leer informe"
                             >
@@ -350,16 +352,16 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                     </p>
                   </div>
 
-                  <div className="shrink-0 flex items-center gap-3">
+                  <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
                     <button
                       onClick={() => onReadReport(configuredDossier)}
-                      className="px-5 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors cursor-pointer shadow-sm"
+                      className="px-5 py-3 sm:py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors cursor-pointer shadow-sm"
                     >
                       LEER LA INVESTIGACIÓN
                     </button>
                     <button
                       onClick={() => onSelectCategory('INVESTIGACIÓN')}
-                      className="px-4 py-2.5 border border-white/20 text-neutral-200 hover:text-white font-medium text-xs uppercase tracking-wider rounded-md hover:border-white transition-colors cursor-pointer"
+                      className="px-4 py-3 sm:py-2.5 border border-white/20 text-neutral-200 hover:text-white font-medium text-xs uppercase tracking-wider rounded-md hover:border-white transition-colors cursor-pointer"
                     >
                       EXPLORAR TODOS
                     </button>
@@ -371,7 +373,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
             {/* ADDITIONAL REPORTS IF ANY */}
             {additionalReports.length > 0 && (
               <div className="pt-10 border-t border-white/10">
-                <div className="flex items-center justify-between pb-3 mb-6 border-b border-white/10">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-3 mb-6 border-b border-white/10">
                   <span className="text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold">
                     DESPACHOS ADICIONALES DE LA EDICIÓN
                   </span>

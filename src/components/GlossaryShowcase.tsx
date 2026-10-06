@@ -12,6 +12,10 @@ const SPOTLIGHT_TERMS = [
 ];
 
 /** Vitrina del glosario en la portada + modal con el glosario completo y buscador. */
+const isTouchDevice =
+  typeof window !== "undefined" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
 export const GlossaryShowcase: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -75,22 +79,22 @@ export const GlossaryShowcase: React.FC = () => {
       {/* Modal: glosario completo */}
       {open && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black flex flex-col font-['Lexend',sans-serif]">
-          <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3 min-w-0">
               <BookOpen className="w-4 h-4 text-neutral-400 shrink-0" />
               <span className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-white truncate">
                 GLOSARIO · {filtered.length} TÉRMINOS
               </span>
             </div>
-            <div className="flex items-center gap-2 flex-1 max-w-sm justify-end">
+            <div className="flex items-center gap-2 w-full sm:flex-1 sm:max-w-sm sm:justify-end">
               <div className="relative w-full">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
                 <input
-                  autoFocus
+                  autoFocus={!isTouchDevice}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Buscar término…"
-                  className="w-full bg-neutral-900 border border-white/15 rounded-md pl-8 pr-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
+                  className="w-full bg-neutral-900 border border-white/15 rounded-md pl-8 pr-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/40"
                 />
               </div>
               <button

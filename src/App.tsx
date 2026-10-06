@@ -1272,10 +1272,10 @@ export default function App() {
   const savedReportsList = reportsList.filter((r) => bookmarkedIds.has(r.id));
 
   return (
-    <div className="min-h-screen bg-black text-[#EDEDED] font-['Lexend',sans-serif] selection:bg-white selection:text-black flex flex-col justify-between">
+    <div className="min-h-dvh bg-black text-[#EDEDED] font-['Lexend',sans-serif] selection:bg-white selection:text-black flex flex-col justify-between">
       {/* Toast notification banner */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium tracking-normal rounded-lg border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="fixed left-4 right-4 sm:left-auto sm:right-6 bottom-24 sm:bottom-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium tracking-normal rounded-lg border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
           <span className="w-1.5 h-1.5 rounded-full bg-black inline-block"></span>
           <span>{toastMessage}</span>
         </div>

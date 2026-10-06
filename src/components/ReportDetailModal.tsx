@@ -278,7 +278,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
-            className="flex items-center gap-2 text-xs sm:text-sm font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer py-1 px-2.5 rounded-md hover:bg-white/5"
+            className="flex items-center gap-2 text-xs sm:text-sm font-sans font-medium uppercase tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer py-2 px-3 rounded-md hover:bg-white/5"
           >
             <ArrowLeft className="w-4 h-4" />
             <span className="hidden sm:inline">VOLVER A LA PORTADA</span>
@@ -290,11 +290,11 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         </div>
 
         {/* Reader Controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           {/* Audio read-aloud */}
           <button
             onClick={toggleSpeech}
-            className={`px-3 py-1.5 text-xs font-sans font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`px-3 sm:px-3 py-2 text-xs font-sans font-medium rounded-md flex items-center gap-1.5 transition-colors cursor-pointer ${
               isPlayingAudio
                 ? 'bg-white text-black font-semibold shadow-sm'
                 : 'text-neutral-400 hover:text-white hover:bg-white/5'
@@ -314,7 +314,25 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             )}
           </button>
 
-          {/* Text scale control */}
+          {/* Tamaño de texto en móvil: ciclo normal → grande → extra */}
+          <button
+            onClick={() =>
+              setFontSizeScale((s) =>
+                s === 'normal' ? 'large' : s === 'large' ? 'huge' : 'normal',
+              )
+            }
+            className={`sm:hidden px-3 py-2 text-xs font-sans font-semibold rounded-md flex items-center transition-colors cursor-pointer ${
+              fontSizeScale === 'normal'
+                ? 'text-neutral-400 hover:text-white hover:bg-white/5'
+                : 'bg-white text-black shadow-sm'
+            }`}
+            title="Ajustar tamaño del texto"
+            aria-label="Ajustar tamaño del texto"
+          >
+            Aa
+          </button>
+
+          {/* Text scale control (desktop) */}
           <div className="hidden sm:flex items-center text-xs font-sans gap-0.5 bg-neutral-900/60 p-0.5 rounded-md border border-white/10">
             <button
               onClick={() => setFontSizeScale('normal')}
@@ -348,7 +366,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
           {/* Quick Copy Link */}
           <button
             onClick={handleQuickCopyLink}
-            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
             title="Copiar enlace directo"
           >
             {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4" />}
@@ -357,7 +375,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
           {/* Bookmark */}
           <button
             onClick={() => onToggleBookmark(report)}
-            className={`p-2 rounded-md transition-colors cursor-pointer ${
+            className={`p-2.5 rounded-md transition-colors cursor-pointer ${
               isBookmarked
                 ? 'text-white bg-white/10'
                 : 'text-neutral-400 hover:text-white hover:bg-white/5'
@@ -370,16 +388,17 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
           {/* Share button */}
           <button
             onClick={() => onShare(report)}
-            className="px-3.5 py-1.5 text-xs sm:text-sm font-semibold bg-white text-black hover:bg-neutral-200 transition-colors uppercase tracking-wider rounded-md flex items-center gap-1.5 cursor-pointer shadow-sm"
+            aria-label="Compartir informe"
+            className="px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold bg-white text-black hover:bg-neutral-200 transition-colors uppercase tracking-wider rounded-md flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <Share2 className="w-3.5 h-3.5" />
-            <span>COMPARTIR</span>
+            <span className="hidden sm:inline">COMPARTIR</span>
           </button>
 
           {/* Close */}
           <button
             onClick={onClose}
-            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors ml-1 cursor-pointer"
+            className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors ml-1 cursor-pointer"
             aria-label="Cerrar"
           >
             <X className="w-5 h-5" />

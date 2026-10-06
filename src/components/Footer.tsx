@@ -68,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({
               </p>
               <a
                 href="mailto:blacknewsglobalmedia@gmail.com"
-                className="text-white hover:text-neutral-300 text-xs sm:text-sm block transition-colors font-medium"
+                className="text-white hover:text-neutral-300 text-xs sm:text-sm block transition-colors font-medium py-1.5 -my-1"
               >
                 blacknewsglobalmedia@gmail.com
               </a>
@@ -89,7 +89,7 @@ export const Footer: React.FC<FooterProps> = ({
               </p>
               <button
                 onClick={onShareSite}
-                className="px-4 py-2 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+                className="px-4 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Share2 className="w-3.5 h-3.5" />
                 <span>COMPARTIR MEDIO</span>
@@ -98,7 +98,7 @@ export const Footer: React.FC<FooterProps> = ({
               {onOpenAdModal && (
                 <button
                   onClick={onOpenAdModal}
-                  className="mt-3 px-4 py-2 border border-white/20 text-white hover:bg-white/10 font-semibold text-xs uppercase tracking-wider rounded-md transition-colors flex items-center gap-2 cursor-pointer"
+                  className="mt-3 px-4 py-2.5 border border-white/20 text-white hover:bg-white/10 font-semibold text-xs uppercase tracking-wider rounded-md transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <Megaphone className="w-3.5 h-3.5 text-amber-400" />
                   <span>ANUNCIAR EN BLACKNEWS</span>
@@ -116,7 +116,7 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     key={cat}
                     onClick={() => onSelectCategory(cat)}
-                    className="text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-1 font-sans"
+                    className="text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-2 font-sans"
                   >
                     → {cat}
                   </button>
@@ -138,7 +138,7 @@ export const Footer: React.FC<FooterProps> = ({
 
               <button
                 onClick={scrollToTop}
-                className="self-start text-neutral-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider cursor-pointer mt-4 py-1"
+                className="self-start text-neutral-400 hover:text-white transition-colors flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider cursor-pointer mt-4 py-2.5 -my-1"
               >
                 <span>VOLVER ARRIBA</span>
                 <ArrowUp className="w-3.5 h-3.5" />
@@ -159,28 +159,28 @@ export const Footer: React.FC<FooterProps> = ({
             <div className="flex items-center flex-wrap justify-center gap-3 sm:gap-4 text-neutral-400 font-medium">
               <button
                 onClick={() => onOpenPolicies?.(5)}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-white transition-colors cursor-pointer py-2 px-1 -my-1"
               >
                 Políticas de Privacidad
               </button>
               <span>·</span>
               <button
                 onClick={() => onOpenPolicies?.(1)}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-white transition-colors cursor-pointer py-2 px-1 -my-1"
               >
                 Términos y Condiciones
               </button>
               <span>·</span>
               <button
                 onClick={() => onOpenPolicies?.(10)}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-white transition-colors cursor-pointer py-2 px-1 -my-1"
               >
                 Política de Cookies
               </button>
               <span>·</span>
               <button
                 onClick={() => onOpenPolicies?.()}
-                className="hover:text-white transition-colors cursor-pointer"
+                className="hover:text-white transition-colors cursor-pointer py-2 px-1 -my-1"
               >
                 Todas las Políticas
               </button>

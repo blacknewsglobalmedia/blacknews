@@ -37,7 +37,7 @@ export const PoliciesNoticeBanner: React.FC<PoliciesNoticeBannerProps> = ({
         </span>
         <button
           onClick={onOpenPolicies}
-          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 bg-black text-amber-400 text-xs font-semibold uppercase tracking-wider rounded hover:bg-neutral-800 transition-colors cursor-pointer"
+          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-2 bg-black text-amber-400 text-xs font-semibold uppercase tracking-wider rounded hover:bg-neutral-800 transition-colors cursor-pointer"
         >
           <span>Leer políticas</span>
           <ArrowRight className="w-3 h-3" />
@@ -45,7 +45,7 @@ export const PoliciesNoticeBanner: React.FC<PoliciesNoticeBannerProps> = ({
         <button
           onClick={ackNotice}
           aria-label="Descartar aviso de políticas"
-          className="p-1 rounded hover:bg-black/15 transition-colors cursor-pointer"
+          className="p-2 -m-1 rounded hover:bg-black/15 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Search,
   Bookmark,
@@ -52,6 +52,17 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleLite,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // Tira de categorías (móvil/tablet): la sección activa se centra sola
+  useEffect(() => {
+    const active = stripRef.current?.querySelector<HTMLElement>(
+      '[data-active="true"]',
+    );
+    if (active) {
+      active.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }, [selectedCategory]);
 
   const rawList =
     propCategories && propCategories.length > 0
@@ -111,7 +122,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   );
 
   return (
-    <header className="w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
+    <header className="bn-safe-top w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
       {/* Top micro-strip: clean & uncrowded */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-sans tracking-wide text-neutral-400 border-b border-white/5 uppercase font-medium">
         <div className="flex items-center gap-2.5">
@@ -123,10 +134,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="text-neutral-400">{dateIn(REFERENCE_TZ)}</span>
         </div>
 
-        <div className="flex items-center gap-3 text-neutral-400">
+        <div className="flex items-center gap-1 sm:gap-3 text-neutral-400">
           <button
             onClick={onToggleLiveTicker}
-            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
+            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer px-1.5 py-1.5 -mx-1.5 -my-1.5 ${
               liveTickerActive ? "text-white font-medium" : "text-neutral-500"
             }`}
             title="Alternar teletipo"
@@ -137,7 +148,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="text-neutral-700">·</span>
           <button
             onClick={onToggleLite}
-            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer ${
+            className={`hover:text-white transition-colors flex items-center gap-1 cursor-pointer px-1.5 py-1.5 -mx-1.5 -my-1.5 ${
               liteMode ? "text-white font-medium" : "text-neutral-500"
             }`}
             title={
@@ -149,9 +160,10 @@ export const TopBar: React.FC<TopBarProps> = ({
             <ImageOff className="w-3 h-3" />
             <span className="hidden sm:inline">LIGERO</span>
           </button>
+          <span className="text-neutral-700 hidden sm:inline">·</span>
           <button
             onClick={onShareSite}
-            className="hover:text-white transition-colors cursor-pointer hidden sm:inline"
+            className="hover:text-white transition-colors cursor-pointer hidden sm:inline px-1"
             title="Compartir medio"
           >
             COMPARTIR
@@ -175,11 +187,11 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Right: Streamlined Action Cluster */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Studio / Panel Toggle - oculto para invitados (el contenido se segmenta por permisos dentro) */}
+          {/* Panel: en móvil vive en el menú hamburguesa (menos cabecera que saturar) */}
           {canAccessEditorialStudio && (
             <button
               onClick={onOpenStudio}
-              className={`px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
+              className={`hidden sm:flex px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
                 isStudioOpen
                   ? "bg-white text-black border-white font-semibold shadow-sm"
                   : "border-white/20 text-white bg-white/5 hover:bg-white hover:text-black hover:border-white"
@@ -191,22 +203,21 @@ export const TopBar: React.FC<TopBarProps> = ({
               }
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">
+              <span>
                 {isStudioOpen
                   ? "VER PORTADA"
                   : currentUser?.role === "LECTOR"
                     ? "MI PANEL"
                     : "PANEL INTERNO"}
               </span>
-              <span className="sm:hidden">PANEL</span>
             </button>
           )}
 
-          {/* User Account / Google Chip (Compact) */}
+          {/* User Account / Google Chip (solo ≥sm; en móvil está en el menú) */}
           {onOpenGoogleAuth && (
             <button
               onClick={onOpenGoogleAuth}
-              className="flex items-center gap-1.5 py-1.5 px-2.5 rounded-md border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 py-1.5 px-2.5 rounded-md border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
               title={accountTitle}
             >
               {googleIconSvg}
@@ -219,7 +230,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Search Button */}
           <button
             onClick={onOpenSearch}
-            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
             aria-label="Buscar"
             title="Buscar informes"
           >
@@ -229,13 +240,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Bookmarks Button */}
           <button
             onClick={onOpenBookmarks}
-            className="p-2 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors relative cursor-pointer"
+            className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors relative cursor-pointer"
             aria-label="Guardados"
             title="Lecturas guardadas"
           >
             <Bookmark className="w-4 h-4" />
             {bookmarksCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-white text-black font-mono text-[10px] font-bold flex items-center justify-center tabular-nums shadow-sm">
+              <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-white text-black font-mono text-[10px] font-bold flex items-center justify-center tabular-nums shadow-sm">
                 {bookmarksCount}
               </span>
             )}
@@ -244,8 +255,9 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Mobile Menu Hamburger Toggle (Visible on screens below lg) */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-1.5 text-neutral-300 hover:text-white transition-colors cursor-pointer ml-1"
+            className="lg:hidden p-2 text-neutral-300 hover:text-white transition-colors cursor-pointer ml-0.5"
             aria-label="Menú"
+            aria-expanded={isMobileMenuOpen}
             title="Menú de secciones"
           >
             {isMobileMenuOpen ? (
@@ -288,9 +300,41 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </nav>
 
+      {/* Mobile & tablet category strip: always reachable without opening the menu */}
+      <nav
+        className="lg:hidden border-t border-white/5 w-full overflow-hidden"
+        aria-label="Secciones editoriales"
+      >
+        <div
+          ref={stripRef}
+          className="flex items-center gap-4 h-10 px-4 overflow-x-auto no-scrollbar scroll-smooth w-full"
+        >
+          {categories.map((cat) => {
+            const isActive = selectedCategory === cat.id && !isStudioOpen;
+            return (
+              <button
+                key={cat.id}
+                data-active={isActive}
+                onClick={() => handleCategoryClick(cat.id)}
+                className={`h-full flex items-center shrink-0 whitespace-nowrap text-[11px] font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer relative ${
+                  isActive
+                    ? "text-white font-semibold"
+                    : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                {cat.label}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       {/* Slide-out / Dropdown Mobile & Tablet Menu */}
       {isMobileMenuOpen && (
-        <div className="xl:hidden bg-black border-t border-white/10 px-4 sm:px-6 py-6 space-y-6 animate-in slide-in-from-top duration-150">
+        <div className="xl:hidden bg-black border-t border-white/10 px-4 sm:px-6 py-6 max-h-[70dvh] overflow-y-auto overscroll-contain space-y-6 animate-in slide-in-from-top duration-150">
           {/* Category Links List */}
           <div>
             <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mb-3">

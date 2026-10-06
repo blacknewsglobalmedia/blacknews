@@ -158,10 +158,12 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                         }
                       }}
                     >
+                      {/* Zona táctil ampliada (~24 px en móvil): el círculo visible es diminuto */}
+                      <circle cx={lon} cy={cy} r={12} fill="transparent" />
                       <circle
                         cx={lon}
                         cy={cy}
-                        r={4.2}
+                        r={5}
                         fill="none"
                         stroke="#ffffff"
                         strokeWidth={0.5}
@@ -171,7 +173,7 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                         <circle
                           cx={lon}
                           cy={cy}
-                          r={6.5}
+                          r={7.5}
                           fill="none"
                           stroke="#ffffff"
                           strokeWidth={0.5}
@@ -181,14 +183,14 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                       <circle
                         cx={lon}
                         cy={cy}
-                        r={on ? 2.2 : 1.6}
+                        r={on ? 2.4 : 1.8}
                         fill="#ffffff"
                       />
                       <text
                         x={lon}
-                        y={cy + 12.5}
+                        y={cy + 13.5}
                         textAnchor="middle"
-                        fontSize={5}
+                        fontSize={6.5}
                         fontWeight={600}
                         fill={on ? "#ffffff" : "#a1a1aa"}
                         pointerEvents="none"
@@ -229,7 +231,7 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                       <button
                         type="button"
                         onClick={() => openNews(r)}
-                        className="w-full text-left py-2 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer"
+                        className="w-full text-left py-2.5 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer"
                       >
                         <span className="block text-[13px] text-neutral-200 leading-snug line-clamp-2">
                           {r.title}
@@ -260,7 +262,7 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
                           onClick={() => setSelected(g.name)}
                           onMouseEnter={() => setHovered(g.name)}
                           onMouseLeave={() => setHovered(null)}
-                          className={`w-full text-left flex items-baseline justify-between gap-3 py-2 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer${
+                          className={`w-full text-left flex items-baseline justify-between gap-3 py-2.5 -mx-2 px-2 rounded transition-colors hover:bg-white/5 cursor-pointer${
                             on ? " bg-white/5" : ""
                           }`}
                         >

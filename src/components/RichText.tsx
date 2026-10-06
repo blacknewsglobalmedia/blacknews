@@ -34,12 +34,45 @@ const GlossTerm: React.FC<{ def: string; children: React.ReactNode }> = ({
   const ref = useRef<HTMLSpanElement>(null);
 
   // Si el término está cerca del borde superior, el tooltip se despliega hacia abajo
+  // y, en móvil, se encaja horizontalmente para no salirse de la pantalla.
   const place = () => {
     const el = ref.current;
-    const tip = el?.querySelector(".gloss-tip");
+    const tip = el?.querySelector<HTMLElement>(".gloss-tip");
     if (!el || !tip) return;
     tip.classList.toggle("gloss-tip-below", el.getBoundingClientRect().top < 130);
+    const r = el.getBoundingClientRect();
+    const w = tip.offsetWidth || Math.min(300, window.innerWidth * 0.72);
+    const half = w / 2 + 8;
+    const center = r.left + r.width / 2;
+    const clamped = Math.min(Math.max(center, half), window.innerWidth - half);
+    tip.style.left = `${clamped - r.left}px`;
   };
+
+  // Toc/tap: alterna el tooltip (en táctil no existe :hover fiable)
+  const toggle = () => {
+    const el = ref.current;
+    if (!el) return;
+    const wasOpen = el.getAttribute("data-open") === "1";
+    document
+      .querySelectorAll('.gloss-term[data-open="1"]')
+      .forEach((n) => n.removeAttribute("data-open"));
+    if (!wasOpen) {
+      place();
+      el.setAttribute("data-open", "1");
+    }
+  };
+
+  // Un toque fuera cierra cualquier tooltip abierto
+  React.useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.(".gloss-term")) return;
+      document
+        .querySelectorAll('.gloss-term[data-open="1"]')
+        .forEach((n) => n.removeAttribute("data-open"));
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
 
   return (
     <span
@@ -48,6 +81,7 @@ const GlossTerm: React.FC<{ def: string; children: React.ReactNode }> = ({
       tabIndex={0}
       onMouseEnter={place}
       onFocus={place}
+      onClick={toggle}
     >
       {children}
       <span className="gloss-tip" role="tooltip">
