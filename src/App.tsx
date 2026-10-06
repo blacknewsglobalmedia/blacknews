@@ -14,7 +14,6 @@ import { ReportDetailModal } from "./components/ReportDetailModal";
 import { ShareModal } from "./components/ShareModal";
 import { SearchBarModal } from "./components/SearchBarModal";
 import { BookmarksDrawer } from "./components/BookmarksDrawer";
-import { ReaderPanel } from "./components/ReaderPanel";
 import { RedactionStudio } from "./components/RedactionStudio";
 import { GoogleAuthModal } from "./components/GoogleAuthModal";
 import { Footer } from "./components/Footer";
@@ -160,7 +159,6 @@ export default function App() {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
-  const [isReaderPanelOpen, setIsReaderPanelOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -1185,9 +1183,11 @@ export default function App() {
       ? reportsList.filter((r) => r.id !== leadReport?.id)
       : filteredReports.slice(1);
 
-  // Check whether current user has editorial privileges to access internal media studio
+  // Acceso al panel: cualquier cuenta con sesión. El contenido se segmenta
+  // por permisos (ROLE_PERMISSIONS): el lector ve su espacio personal y la
+  // redacción, las herramientas editoriales.
   const canAccessInternalMedia = Boolean(
-    currentUser && currentUser.role !== "LECTOR",
+    currentUser && currentUser.id !== GUEST_USER_ID,
   );
 
   // Strict security guard: redirect away from redaccion immediately if user is LECTOR
@@ -1199,7 +1199,7 @@ export default function App() {
 
   const handleToggleStudio = () => {
     if (!canAccessInternalMedia) {
-      showToast("Acceso restringido a la sala interna de redacción.");
+      showToast("Inicia sesión con tu cuenta para abrir tu panel.");
       return;
     }
     setCurrentView(currentView === "redaccion" ? "portada" : "redaccion");
@@ -1286,6 +1286,17 @@ export default function App() {
             adCampaigns={adsList}
             onSaveAdCampaign={handleSaveCampaign}
             onDeleteAdCampaign={handleDeleteCampaign}
+            readerHistory={readHistory}
+            savedReports={savedReportsList}
+            bookmarksTotal={bookmarkedIds.size}
+            onRemoveBookmark={handleRemoveBookmark}
+            isSubscribed={isSubscribed}
+            onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+            onOpenCreateAd={() => setIsAdModalOpen(true)}
+            onSelectReport={(report) => {
+              setCurrentView("portada");
+              handleOpenReport(report);
+            }}
           />
         ) : (
           <>
@@ -1448,33 +1459,6 @@ export default function App() {
         onLoginWithGoogle={handleLoginWithGoogle}
         onLogout={handleLogout}
         onOpenStudio={handleToggleStudio}
-        onOpenReaderPanel={() => {
-          setIsGoogleAuthOpen(false);
-          setIsReaderPanelOpen(true);
-        }}
-      />
-
-      {/* Reader panel: historial, guardados y publicidad del lector */}
-      <ReaderPanel
-        isOpen={isReaderPanelOpen}
-        onClose={() => setIsReaderPanelOpen(false)}
-        currentUser={currentUser}
-        isSubscribed={isSubscribed}
-        history={readHistory}
-        reports={reportsList}
-        bookmarks={savedReportsList}
-        bookmarksTotal={bookmarkedIds.size}
-        myAds={adsList.filter((c) => c.applicantEmail === currentUser.email)}
-        onSelectReport={handleOpenReport}
-        onRemoveBookmark={handleRemoveBookmark}
-        onOpenBookmarks={() => {
-          setIsReaderPanelOpen(false);
-          setIsBookmarksOpen(true);
-        }}
-        onOpenCreateAd={() => {
-          setIsReaderPanelOpen(false);
-          setIsAdModalOpen(true);
-        }}
       />
 
       {/* Self-Service Advertising Modal */}

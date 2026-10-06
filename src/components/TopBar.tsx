@@ -71,8 +71,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   // Basic readers (LECTOR) and visitors must NOT see the redacción button or internal tools
+  // Cualquier cuenta con sesión abre su panel; el contenido se segmenta por
+  // permisos (el lector ve «Mi Espacio», la redacción, sus herramientas).
   const canAccessEditorialStudio = Boolean(
-    currentUser && currentUser.role !== "LECTOR",
+    currentUser && currentUser.id !== GUEST_USER_ID,
   );
 
   // Account chip: never shows role jargon to readers — guests see "ACCEDER"
@@ -173,7 +175,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Right: Streamlined Action Cluster */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Studio / Internal Panel Toggle - Strictly hidden from basic LECTOR and unauthenticated users */}
+          {/* Studio / Panel Toggle - oculto para invitados (el contenido se segmenta por permisos dentro) */}
           {canAccessEditorialStudio && (
             <button
               onClick={onOpenStudio}
@@ -182,11 +184,19 @@ export const TopBar: React.FC<TopBarProps> = ({
                   ? "bg-white text-black border-white font-semibold shadow-sm"
                   : "border-white/20 text-white bg-white/5 hover:bg-white hover:text-black hover:border-white"
               }`}
-              title="Panel Interno: Redacción, Portada, Imágenes y Gestión"
+              title={
+                currentUser?.role === "LECTOR"
+                  ? "Mi panel: historial, guardados y publicidad"
+                  : "Panel Interno: Redacción, Portada, Imágenes y Gestión"
+              }
             >
               <PenTool className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">
-                {isStudioOpen ? "VER PORTADA" : "PANEL INTERNO"}
+                {isStudioOpen
+                  ? "VER PORTADA"
+                  : currentUser?.role === "LECTOR"
+                    ? "MI PANEL"
+                    : "PANEL INTERNO"}
               </span>
               <span className="sm:hidden">PANEL</span>
             </button>
@@ -329,7 +339,11 @@ export const TopBar: React.FC<TopBarProps> = ({
                 >
                   <PenTool className="w-3.5 h-3.5" />
                   <span>
-                    {isStudioOpen ? "VER PORTADA" : "PANEL INTERNO (REDACCIÓN)"}
+                    {isStudioOpen
+                      ? "VER PORTADA"
+                      : currentUser?.role === "LECTOR"
+                        ? "MI PANEL"
+                        : "PANEL INTERNO (REDACCIÓN)"}
                   </span>
                 </button>
               )}

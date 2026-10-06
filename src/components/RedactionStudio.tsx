@@ -27,6 +27,7 @@ import {
   Bot,
   FileJson,
   HelpCircle,
+  History,
   Info,
   ChevronDown,
   ChevronUp,
@@ -56,7 +57,12 @@ import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
 import { RedactorProfile, RedactorRole, ROLE_PERMISSIONS } from '../types/auth';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
-import { AdCampaign } from '../types/ads';
+import { AdCampaign, AdStatus } from '../types/ads';
+import {
+  HistoryEntry,
+  HISTORY_LIMIT,
+  FREE_BOOKMARK_LIMIT,
+} from '../utils/readerPanel';
 import { FrontPageManager } from './FrontPageManager';
 import { ImageOptimizationStudio } from './ImageOptimizationStudio';
 import { CategoryManager } from './CategoryManager';
@@ -94,6 +100,15 @@ interface RedactionStudioProps {
   adCampaigns?: AdCampaign[];
   onSaveAdCampaign?: (campaign: AdCampaign) => void;
   onDeleteAdCampaign?: (campaignId: string) => void;
+  // Panel personal del lector (sección «Mi Espacio»)
+  readerHistory?: HistoryEntry[];
+  savedReports?: Report[];
+  bookmarksTotal?: number;
+  onRemoveBookmark?: (reportId: string) => void;
+  isSubscribed?: boolean;
+  onOpenSubscription?: () => void;
+  onOpenCreateAd?: () => void;
+  onSelectReport?: (report: Report) => void;
 }
 
 const PRESET_IMAGES = [
@@ -124,6 +139,31 @@ const PRESET_IMAGES = [
   },
 ];
 
+/** Fecha corta para listas personales (dd/mm hh:mm). */
+const fmtShortDate = (ts: number): string =>
+  new Date(ts).toLocaleString('es-UY', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+/** Chip de estado de una campaña (misma semántica que AdsManager). */
+const adStatusChipClass = (status: AdStatus): string => {
+  switch (status) {
+    case 'ACTIVE':
+      return 'border-emerald-500/50 bg-emerald-950/30 text-emerald-400';
+    case 'PENDIENTE_PAGO':
+      return 'border-amber-500/50 bg-amber-950/30 text-amber-400';
+    case 'PENDIENTE_APROBACION':
+      return 'border-sky-500/50 bg-sky-950/30 text-sky-400';
+    case 'RECHAZADA':
+      return 'border-red-500/50 bg-red-950/30 text-red-400';
+    default:
+      return 'border-white/20 text-neutral-300';
+  }
+};
+
 export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onBackToNews,
   onPublishReport,
@@ -147,8 +187,30 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   adCampaigns = [],
   onSaveAdCampaign,
   onDeleteAdCampaign,
+  readerHistory = [],
+  savedReports = [],
+  bookmarksTotal = 0,
+  onRemoveBookmark,
+  isSubscribed = false,
+  onOpenSubscription,
+  onOpenCreateAd,
+  onSelectReport,
 }) => {
   const permissions = ROLE_PERMISSIONS[currentUser.role];
+
+  // Un lector ve el mismo dashboard pero solo su espacio personal:
+  // la sección de publicidad es «mis anuncios» (lector) o AdsManager (redacción).
+  const isReader = currentUser.role === 'LECTOR';
+  const myAds = adCampaigns.filter(
+    (c) => c.applicantEmail === currentUser.email,
+  );
+  // Historial personal resuelto contra el catálogo (los borrados no se listan)
+  const reportById = new Map(publishedReports.map((r) => [r.id, r]));
+  const historyRows = readerHistory
+    .map((h) => ({ ts: h.ts, report: reportById.get(h.id) }))
+    .filter((row): row is { ts: number; report: Report } =>
+      Boolean(row.report),
+    );
 
   const categories = propCategories && propCategories.length > 0
     ? propCategories
@@ -156,7 +218,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const onUpdateCategories = propOnUpdateCategories || (() => {});
 
   // Default tab based on role
-  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved'>(isReader ? 'history' : 'overview');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -726,29 +788,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   const isBasicReader = currentUser.role === 'LECTOR';
 
-  if (isBasicReader) {
-    return (
-      <div className="min-h-[75vh] bg-black text-white flex flex-col items-center justify-center p-6 text-center">
-        <div className="max-w-md p-8 border border-white/10 bg-neutral-950 space-y-4">
-          <div className="w-12 h-12 border border-white/20 flex items-center justify-center mx-auto text-white">
-            <Lock className="w-6 h-6" />
-          </div>
-          <h2 className="text-sm font-medium uppercase tracking-wider text-white">
-            Acceso Restringido · Redacción Interna
-          </h2>
-          <p className="text-xs text-neutral-400 font-mono leading-relaxed">
-            Tu cuenta tiene perfil de usuario básico (Lector). No dispones de autorización para acceder a las herramientas internas del medio.
-          </p>
-          <button
-            onClick={onBackToNews}
-            className="w-full py-2.5 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
-          >
-            Volver a Portada
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Nota: los lectores sí entran al panel; todo el contenido se segmenta
+  // por permisos (ROLE_PERMISSIONS) y la sección «Mi Espacio» es su espacio.
 
   const userPublishedCount = publishedReports.filter((r) => canUserEditThisReport(r)).length;
 
@@ -833,11 +874,23 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             </div>
 
             {/* Session capsule: no role switcher here anymore (roles change only via verified Google login) */}
+            {isReader && (
+              <div
+                className={`inline-flex items-center text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border w-fit ${
+                  isSubscribed
+                    ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10'
+                    : 'text-amber-400 border-amber-500/40 bg-amber-500/10'
+                }`}
+              >
+                {isSubscribed ? 'Plan activo' : 'Plan gratuito'}
+              </div>
+            )}
           </div>
 
           {/* Nav Categories */}
           <nav className="space-y-4">
-            {/* Category: Redacción */}
+            {/* Category: Redacción (solo redacción) */}
+            {permissions.canWritePosts && (
             <div className="space-y-1">
               <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
                 Espacio de Trabajo
@@ -886,50 +939,135 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 </button>
               )}
 
-              {/* Published Articles */}
+              {/* Published Articles (solo redacción) */}
+              {permissions.canWritePosts && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('my-articles');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                    activeTab === 'my-articles'
+                      ? 'bg-white text-black font-bold'
+                      : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    <span>Despachos Emitidos</span>
+                  </div>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                    activeTab === 'my-articles' ? 'bg-black/10 text-black' : 'bg-white/10 text-neutral-300'
+                  }`}>
+                    {publishedReports.length}
+                  </span>
+                </button>
+              )}
+
+              {/* Borradores (solo redacción) */}
+              {permissions.canWritePosts && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDraftsModalOpen(true);
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide text-neutral-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bookmark className="w-4 h-4 text-neutral-400" />
+                    <span>Borradores</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-neutral-400 font-bold">
+                    {drafts.length}
+                  </span>
+                </button>
+              )}
+            </div>
+            )}
+
+            {/* Category: Mi Espacio (personal — todos los roles) */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
+                Mi Espacio
+              </div>
+
+              {/* Historial de lecturas */}
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('my-articles');
+                  setActiveTab('history');
                   setIsMobileSidebarOpen(false);
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                  activeTab === 'my-articles'
+                  activeTab === 'history'
                     ? 'bg-white text-black font-bold'
                     : 'text-neutral-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  <span>Despachos Emitidos</span>
+                  <History className="w-4 h-4" />
+                  <span>Historial</span>
                 </div>
                 <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                  activeTab === 'my-articles' ? 'bg-black/10 text-black' : 'bg-white/10 text-neutral-300'
+                  activeTab === 'history' ? 'bg-black/10 text-black' : 'bg-white/10 text-neutral-300'
                 }`}>
-                  {publishedReports.length}
+                  {readerHistory.length}
                 </span>
               </button>
 
-              {/* Borradores */}
+              {/* Guardados */}
               <button
                 type="button"
                 onClick={() => {
-                  setIsDraftsModalOpen(true);
+                  setActiveTab('saved');
                   setIsMobileSidebarOpen(false);
                 }}
-                className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide text-neutral-300 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  activeTab === 'saved'
+                    ? 'bg-white text-black font-bold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                }`}
               >
                 <div className="flex items-center gap-2">
-                  <Bookmark className="w-4 h-4 text-neutral-400" />
-                  <span>Borradores</span>
+                  <BookmarkCheck className="w-4 h-4 text-neutral-400" />
+                  <span>Guardados</span>
                 </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-neutral-400 font-bold">
-                  {drafts.length}
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                  activeTab === 'saved' ? 'bg-black/10 text-black' : 'bg-white/10 text-neutral-300'
+                }`}>
+                  {bookmarksTotal}
+                </span>
+              </button>
+
+              {/* Publicidad (lector: mis anuncios · redacción: AdsManager) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('ads');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  activeTab === 'ads'
+                    ? 'bg-white text-black font-bold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Megaphone className="w-4 h-4 text-neutral-400" />
+                  <span>{isReader ? 'Mi Publicidad' : 'Publicidad'}</span>
+                </div>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                  activeTab === 'ads' ? 'bg-black/10 text-black' : 'bg-white/10 text-neutral-300'
+                }`}>
+                  {isReader ? myAds.length : adCampaigns.length}
                 </span>
               </button>
             </div>
 
-            {/* Category: Multimedia & Redes */}
+            {/* Category: Multimedia & Redes (solo redacción) */}
+            {permissions.canWritePosts && (
             <div className="space-y-1">
               <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
                 Multimedia & Redes
@@ -976,6 +1114,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 </div>
               </button>
             </div>
+            )}
 
             {/* Category: Portada & Sistema (Admins & Moderators) */}
             {(permissions.canManageLayout || permissions.canManageCategories || permissions.canManageUsers || permissions.canManagePolicies) && (
@@ -1070,6 +1209,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
         {/* Sidebar Footer: Return to Portada & Template */}
         <div className="pt-4 border-t border-white/10 space-y-2">
+          {permissions.canWritePosts && (
           <button
             type="button"
             onClick={() => downloadArticleTemplateJson()}
@@ -1079,6 +1219,21 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Plantilla JSON</span>
           </button>
+          )}
+          {isReader && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('register');
+                setIsMobileSidebarOpen(false);
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-white/5"
+              title="Solicitar acreditación como redactor"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Solicitar acreditación</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1097,7 +1252,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         <div className="border-b border-white/10 bg-black/85 backdrop-blur-md px-4 sm:px-6 py-3 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3">
           {/* Breadcrumb Title */}
           <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-wider">
-            <span className="text-neutral-500 font-semibold">SISTEMA EDITORIAL</span>
+            <span className="text-neutral-500 font-semibold">{isReader ? 'MI CUENTA' : 'SISTEMA EDITORIAL'}</span>
             <span className="text-neutral-700">/</span>
             <span className="text-white font-bold">
               {activeTab === 'overview' && 'PANEL DE CONTROL'}
@@ -1110,6 +1265,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'users' && 'EQUIPO & ROLES'}
               {activeTab === 'policies' && 'POLÍTICAS Y NORMATIVA'}
               {activeTab === 'register' && 'SOLICITUD DE ACREDITACIÓN'}
+              {activeTab === 'history' && 'MI HISTORIAL'}
+              {activeTab === 'saved' && 'MIS GUARDADOS'}
+              {activeTab === 'ads' && (isReader ? 'MI PUBLICIDAD' : 'GESTIÓN DE PUBLICIDAD')}
             </span>
           </div>
 
@@ -1162,14 +1320,36 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     <span>Redactar</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setIsDraftsModalOpen(true)}
-                  className="px-3 py-1.5 text-neutral-400 hover:text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Bookmark className="w-3.5 h-3.5" />
-                  <span>Borradores ({drafts.length})</span>
-                </button>
+                {isReader && !isSubscribed && onOpenSubscription && (
+                  <button
+                    type="button"
+                    onClick={onOpenSubscription}
+                    className="px-3 py-1.5 bg-emerald-500 text-black hover:bg-emerald-400 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Suscribirme</span>
+                  </button>
+                )}
+                {isReader && onOpenCreateAd && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateAd}
+                    className="px-3 py-1.5 bg-white text-black hover:bg-neutral-200 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Megaphone className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Cargar Publicidad</span>
+                  </button>
+                )}
+                {permissions.canWritePosts && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDraftsModalOpen(true)}
+                    className="px-3 py-1.5 text-neutral-400 hover:text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    <span>Borradores ({drafts.length})</span>
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -1192,8 +1372,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
           </div>
         )}
 
-        {/* TAB CONTENT 0: DASHBOARD COMPACTO (OVERVIEW) */}
-        {activeTab === 'overview' && (
+        {/* TAB CONTENT 0: DASHBOARD (OVERVIEW) - solo redaccion */}
+        {activeTab === 'overview' && !isReader && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8 w-full">
             {/* Welcome & Identity Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
@@ -1563,6 +1743,191 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             />
           </div>
         )}
+
+      {/* TAB CONTENT: MI HISTORIAL (personal — todos los roles) */}
+      {activeTab === 'history' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 font-sans">
+          <div className="max-w-3xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white">
+                <History className="w-4 h-4 text-neutral-500" />
+                <span>Últimas lecturas</span>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-500">
+                {readerHistory.length}/{HISTORY_LIMIT}
+              </span>
+            </div>
+
+            {historyRows.length === 0 ? (
+              <div className="py-10 text-center text-xs text-neutral-500 font-light leading-relaxed border border-white/5 rounded-xl">
+                Aún no hay lecturas en este dispositivo. Los últimos{' '}
+                {HISTORY_LIMIT} artículos que abras aparecerán aquí.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5 border-y border-white/5">
+                {historyRows.map((row) => (
+                  <button
+                    key={`${row.report.id}-${row.ts}`}
+                    type="button"
+                    onClick={() => {
+                      if (onSelectReport) onSelectReport(row.report);
+                      onBackToNews();
+                    }}
+                    className="w-full text-left flex items-start gap-3 py-3 px-1 hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                  >
+                    <span className="font-mono text-[10px] text-neutral-600 shrink-0 pt-1 tabular-nums">
+                      {fmtShortDate(row.ts)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs text-white leading-snug group-hover:text-neutral-300 transition-colors truncate">
+                        {row.report.title}
+                      </span>
+                      <span className="block text-[10px] text-neutral-500 uppercase tracking-wider mt-0.5">
+                        {row.report.category}
+                      </span>
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-neutral-600 group-hover:text-white shrink-0 mt-1 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: MIS GUARDADOS (personal — todos los roles) */}
+      {activeTab === 'saved' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 font-sans">
+          <div className="max-w-3xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white">
+                <BookmarkCheck className="w-4 h-4 text-neutral-500" />
+                <span>Artículos guardados</span>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-500">
+                {bookmarksTotal}
+                {!isSubscribed && `/${FREE_BOOKMARK_LIMIT}`}
+              </span>
+            </div>
+
+            {!isSubscribed && bookmarksTotal >= FREE_BOOKMARK_LIMIT && (
+              <div className="text-[11px] text-amber-400/90 font-light leading-relaxed">
+                Alcanzaste el límite del plan gratuito (
+                {FREE_BOOKMARK_LIMIT} artículos). Los suscriptores guardan sin
+                límite.
+              </div>
+            )}
+
+            {bookmarksTotal === 0 ? (
+              <div className="py-10 text-center text-xs text-neutral-500 font-light leading-relaxed border border-white/5 rounded-xl">
+                No tienes artículos guardados. Haz clic en el marcador de
+                cualquier artículo para guardarlo.
+              </div>
+            ) : savedReports.length === 0 ? (
+              <div className="py-10 text-center text-xs text-neutral-500 font-light leading-relaxed border border-white/5 rounded-xl">
+                {bookmarksTotal} artículo
+                {bookmarksTotal === 1 ? '' : 's'} guardado
+                {bookmarksTotal === 1 ? '' : 's'} — ya no está disponible en
+                el catálogo.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5 border-y border-white/5">
+                {savedReports.map((rep) => (
+                  <div key={rep.id} className="flex items-center gap-3 py-3 px-1 group">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSelectReport) onSelectReport(rep);
+                        onBackToNews();
+                      }}
+                      className="min-w-0 flex-1 text-left cursor-pointer"
+                    >
+                      <span className="block text-xs text-white leading-snug group-hover:text-neutral-300 transition-colors truncate">
+                        {rep.title}
+                      </span>
+                      <span className="block text-[10px] text-neutral-500 uppercase tracking-wider mt-0.5">
+                        {rep.category}
+                      </span>
+                    </button>
+                    {onRemoveBookmark && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveBookmark(rep.id)}
+                        className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors cursor-pointer rounded hover:bg-white/5"
+                        aria-label="Quitar de guardados"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: PUBLICIDAD (lector: mis anuncios · redacción: AdsManager) */}
+      {activeTab === 'ads' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 font-sans">
+          {isReader ? (
+            <div className="max-w-3xl space-y-6">
+              {onOpenCreateAd && (
+                <button
+                  type="button"
+                  onClick={onOpenCreateAd}
+                  className="w-full py-3 bg-emerald-500 text-black font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+                >
+                  <Megaphone className="w-4 h-4" />
+                  <span>Cargar una publicidad</span>
+                </button>
+              )}
+              <p className="text-[11px] text-neutral-500 font-light leading-relaxed text-center -mt-3">
+                Publicidad de pago: se publica tras la revisión del equipo y la
+                confirmación del pago (PayPal, transferencia o Mercado Pago).
+              </p>
+
+              {myAds.length === 0 ? (
+                <div className="py-10 text-center text-xs text-neutral-500 font-light leading-relaxed border border-white/5 rounded-xl">
+                  Todavía no has enviado ninguna publicidad.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {myAds.map((ad) => (
+                    <div
+                      key={ad.id}
+                      className="flex items-center gap-3 py-2.5 px-3 bg-neutral-950/60 border border-white/5 rounded-lg"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-white truncate">
+                          {ad.title}
+                        </span>
+                        <span className="block text-[10px] text-neutral-500 font-mono">
+                          {ad.createdAt} · ${ad.price} {ad.currency}
+                        </span>
+                      </span>
+                      <span
+                        className={`text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0 ${adStatusChipClass(ad.status)}`}
+                      >
+                        {ad.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            onSaveAdCampaign && onDeleteAdCampaign && (
+              <AdsManager
+                campaigns={adCampaigns}
+                onSaveCampaign={onSaveAdCampaign}
+                onDeleteCampaign={onDeleteAdCampaign}
+                categories={CATEGORIES}
+              />
+            )
+          )}
+        </div>
+      )}
 
       {/* TAB CONTENT 1: GESTIÓN DE PORTADA */}
       {activeTab === 'layout' && permissions.canManageLayout && (
