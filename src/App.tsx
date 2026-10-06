@@ -1172,6 +1172,46 @@ export default function App() {
     showToast("Sesión cerrada. Modo Lector activado.");
   };
 
+  /** Edición de perfil desde el dashboard (Mi Perfil): nombre y foto. */
+  const handleSaveProfile = (patch: { name: string; avatarUrl?: string }) => {
+    const cleanName = patch.name.trim() || currentUser.name;
+    const initials =
+      cleanName
+        .split(" ")
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase() || "US";
+    const next: RedactorProfile = {
+      ...currentUser,
+      name: cleanName,
+      avatarInitials: initials,
+      avatarUrl: patch.avatarUrl,
+    };
+    setCurrentUser(next);
+    try {
+      localStorage.setItem("blacknews_active_user", JSON.stringify(next));
+    } catch {}
+    // Reflejar también en la lista local de redactores/lectores
+    setRedactorsList((prev) => {
+      const updated = prev.map((u) =>
+        u.id === next.id
+          ? {
+              ...u,
+              name: next.name,
+              avatarInitials: next.avatarInitials,
+              avatarUrl: next.avatarUrl,
+            }
+          : u,
+      );
+      try {
+        localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    showToast("Perfil actualizado.");
+  };
+
   // Sharing handling
   const handleOpenShare = (report: Report | null) => {
     setShareTargetReport(report);
@@ -1321,6 +1361,7 @@ export default function App() {
               setCurrentView("portada");
               handleOpenReport(report);
             }}
+            onSaveProfile={handleSaveProfile}
           />
         ) : (
           <>

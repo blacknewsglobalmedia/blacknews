@@ -11,6 +11,7 @@ import {
   Edit3, 
   Sparkles, 
   Image as ImageIcon,
+  User,
   UserCheck,
   UserX,
   Users,
@@ -72,6 +73,7 @@ import { DraftsModal, ArticleDraft } from './DraftsModal';
 import { ServiceUsagePanel } from './ServiceUsagePanel';
 import { RedactorFloatingBar } from './RedactorFloatingBar';
 import { AdsManager } from './AdsManager';
+import { ProfileEditor } from './ProfileEditor';
 import { PoliciesManager } from './PoliciesManager';
 import { OptimizedPicture } from './OptimizedPicture';
 import { downloadArticleTemplateJson, ParsedArticleImport } from '../utils/articleTemplate';
@@ -109,6 +111,8 @@ interface RedactionStudioProps {
   onOpenSubscription?: () => void;
   onOpenCreateAd?: () => void;
   onSelectReport?: (report: Report) => void;
+  /** Guarda nombre y foto editados en Mi Perfil. */
+  onSaveProfile: (patch: { name: string; avatarUrl?: string }) => void;
 }
 
 const PRESET_IMAGES = [
@@ -195,6 +199,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onOpenSubscription,
   onOpenCreateAd,
   onSelectReport,
+  onSaveProfile,
 }) => {
   const permissions = ROLE_PERMISSIONS[currentUser.role];
 
@@ -218,7 +223,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const onUpdateCategories = propOnUpdateCategories || (() => {});
 
   // Default tab based on role
-  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved'>(isReader ? 'history' : 'overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved' | 'profile'>(isReader ? 'history' : 'overview');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -856,9 +861,17 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
           {/* User Profile Capsule (Compact) */}
           <div className="space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs shrink-0">
-                {currentUser.avatarInitials}
-              </div>
+              {currentUser.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs shrink-0">
+                  {currentUser.avatarInitials}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-white truncate">
                   {currentUser.name}
@@ -992,6 +1005,23 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
                 Mi Espacio
               </div>
+
+              {/* Edición de perfil */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('profile');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  activeTab === 'profile'
+                    ? 'bg-white text-black font-bold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span>Mi Perfil</span>
+              </button>
 
               {/* Historial de lecturas */}
               <button
@@ -1267,6 +1297,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'register' && 'SOLICITUD DE ACREDITACIÓN'}
               {activeTab === 'history' && 'MI HISTORIAL'}
               {activeTab === 'saved' && 'MIS GUARDADOS'}
+              {activeTab === 'profile' && 'MI PERFIL'}
               {activeTab === 'ads' && (isReader ? 'MI PUBLICIDAD' : 'GESTIÓN DE PUBLICIDAD')}
             </span>
           </div>
@@ -1378,9 +1409,17 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             {/* Welcome & Identity Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
               <div className="flex items-center gap-3.5">
-                <div className="w-9 h-9 rounded-lg bg-white text-black font-black flex items-center justify-center text-xs">
-                  {currentUser.avatarInitials}
-                </div>
+                {currentUser.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.name}
+                    className="w-9 h-9 rounded-lg object-cover border border-white/10"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-lg bg-white text-black font-black flex items-center justify-center text-xs">
+                    {currentUser.avatarInitials}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
@@ -1743,6 +1782,18 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             />
           </div>
         )}
+
+      {/* TAB CONTENT: MI PERFIL (nombre y foto — todos los roles) */}
+      {activeTab === 'profile' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 font-sans">
+          <div className="max-w-3xl">
+            <ProfileEditor
+              currentUser={currentUser}
+              onSaveProfile={onSaveProfile}
+            />
+          </div>
+        </div>
+      )}
 
       {/* TAB CONTENT: MI HISTORIAL (personal — todos los roles) */}
       {activeTab === 'history' && (

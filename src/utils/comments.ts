@@ -31,6 +31,8 @@ export interface PostComment {
   authorEmail: string;
   authorName: string;
   avatarInitials: string;
+  /** URL de la foto de perfil (.AVIF) del autor, si la tiene. */
+  authorAvatar?: string;
   text: string;
   /** Epoch ms. */
   createdAt: number;
@@ -48,6 +50,7 @@ interface CommentDoc {
   authorEmail?: unknown;
   authorName?: unknown;
   avatarInitials?: unknown;
+  authorAvatar?: unknown;
   text?: unknown;
   createdAt?: unknown;
 }
@@ -72,6 +75,8 @@ export async function fetchComments(reportId: string): Promise<PostComment[]> {
           typeof x.authorName === "string" ? x.authorName : "Lector",
         avatarInitials:
           typeof x.avatarInitials === "string" ? x.avatarInitials : "L",
+        authorAvatar:
+          typeof x.authorAvatar === "string" ? x.authorAvatar : undefined,
         text: x.text,
         createdAt: x.createdAt,
       });
@@ -86,10 +91,17 @@ export async function publishComment(input: {
   authorEmail: string;
   authorName: string;
   avatarInitials: string;
+  authorAvatar?: string;
   text: string;
 }): Promise<void> {
+  // Firestore rechaza undefined: solo se incluye authorAvatar si existe
   await addDoc(collection(db, "comments"), {
-    ...input,
+    reportId: input.reportId,
+    authorEmail: input.authorEmail,
+    authorName: input.authorName,
+    avatarInitials: input.avatarInitials,
+    ...(input.authorAvatar ? { authorAvatar: input.authorAvatar } : {}),
+    text: input.text,
     createdAt: Date.now(),
   });
 }

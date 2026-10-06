@@ -148,6 +148,7 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
         authorEmail: currentUser.email,
         authorName: currentUser.name,
         avatarInitials: currentUser.avatarInitials,
+        authorAvatar: currentUser.avatarUrl,
         text,
       });
       setDraft("");
@@ -219,9 +220,17 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
         {signedIn && !meter.exhausted && (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 shrink-0 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs">
-                {currentUser.avatarInitials}
-              </div>
+              {currentUser.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.name}
+                  className="w-8 h-8 shrink-0 rounded-lg object-cover border border-white/10"
+                />
+              ) : (
+                <div className="w-8 h-8 shrink-0 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs">
+                  {currentUser.avatarInitials}
+                </div>
+              )}
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -314,9 +323,17 @@ export const PostInteractions: React.FC<PostInteractionsProps> = ({
                   key={c.id}
                   className="flex items-start gap-3 border-b border-white/5 pb-5 last:border-0 last:pb-0"
                 >
-                  <div className="w-8 h-8 shrink-0 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs">
-                    {c.avatarInitials}
-                  </div>
+                  {c.authorAvatar ? (
+                    <img
+                      src={c.authorAvatar}
+                      alt={c.authorName}
+                      className="w-8 h-8 shrink-0 rounded-lg object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 shrink-0 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-xs">
+                      {c.avatarInitials}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-semibold text-white">
