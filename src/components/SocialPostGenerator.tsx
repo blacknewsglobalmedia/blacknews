@@ -181,6 +181,16 @@ const capDescLines = (lines: string[]): string[] => {
   return capped;
 };
 
+/** Tope genérico de líneas con "…" de corte (chyron del formato TV 16:9):
+ *  el titular se corta a 3 líneas y la bajada del chyron a 2, igual en el
+ *  lienzo exportado que en la vista previa. */
+const capLines = (lines: string[], max: number): string[] => {
+  if (lines.length <= max) return lines;
+  const capped = lines.slice(0, max);
+  capped[max - 1] += "…";
+  return capped;
+};
+
 const flagImageCache = new Map<string, HTMLImageElement>();
 
 export const loadFlagImage = (
@@ -276,13 +286,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [mediaName, setMediaName] = useState<string>("Imagen predeterminada");
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Formato de salida: el mismo post se genera en 4:5 (1080×1350) o en 9:16
-  // (1080×1920, el vertical de TikTok / Shorts / Reels). Lo comparten la vista
-  // previa, el render del canvas y las dos rutas de exportación (PNG y video).
-  const [postFormat, setPostFormat] = useState<"4:5" | "9:16">("4:5");
-  const POST_W = 1080;
-  const POST_H = postFormat === "9:16" ? 1920 : 1350;
-  const formatSlug = postFormat === "9:16" ? "9x16" : "4x5";
+  // Formato de salida: el mismo post se genera en 4:5 (1080×1350), 9:16
+  // (1080×1920, el vertical de TikTok / Shorts / Reels) o 16:9 (1920×1080) con
+  // estética de señal de televisión: bug de canal arriba, chyron de titular
+  // abajo a la izquierda y ticker inferior. Lo comparten la vista previa, el
+  // render del canvas y las dos rutas de exportación (PNG y video).
+  const [postFormat, setPostFormat] = useState<"4:5" | "9:16" | "16:9">("4:5");
+  const POST_W = postFormat === "16:9" ? 1920 : 1080;
+  const POST_H =
+    postFormat === "16:9" ? 1080 : postFormat === "9:16" ? 1920 : 1350;
+  const formatSlug =
+    postFormat === "16:9" ? "16x9" : postFormat === "9:16" ? "9x16" : "4x5";
+
+  // Reloj del formato TV: en el lienzo se toma Date() al pintar (avanza en
+  // cada fotograma del vídeo); la vista previa refresca cada 15 s con este
+  // estado para que la esquina superior no quede congelada.
+  const [tvNow, setTvNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    if (postFormat !== "16:9") return;
+    const id = setInterval(() => setTvNow(new Date()), 15000);
+    return () => clearInterval(id);
+  }, [postFormat]);
+  const tvPad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
+  const tvClockLabel = `${tvPad2(tvNow.getHours())}:${tvPad2(tvNow.getMinutes())}`;
 
   // Filters & Appearance
   const [filter, setFilter] = useState<MediaFilter>("bw-high");
@@ -609,7 +635,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (Array.isArray(data.content.selectedCountries))
           setSelectedCountries(data.content.selectedCountries);
       }
-      if (data.outputFormat === "4:5" || data.outputFormat === "9:16")
+      if (
+        data.outputFormat === "4:5" ||
+        data.outputFormat === "9:16" ||
+        data.outputFormat === "16:9"
+      )
         setPostFormat(data.outputFormat);
       if (data.typography) {
         if (data.typography.fontSizeTitle)
@@ -844,7 +874,349 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Render high-res canvas (1080×1350 en 4:5, 1080×1920 en 9:16)
+  // ── Formato TV 16:9 (1920×1080): geometría compartida ─────────────────────
+  // La usan por igual renderToCanvas (el archivo exportado) y la vista previa
+  // (que escala este mismo lienzo con transform), así el chyron corta igual
+  // carácter a carácter en ambos.
+  const TV_W = 1920;
+  const TV_H = 1080;
+  const TV_PAD = 64; // margen de seguridad de emisión
+  const TV_TICKER_H = 64; // altura del ticker inferior
+  const TV_STACK_W = 1240; // ancho del chyron (columna inferior izquierda)
+  const TV_STACK_PAD = 36; // aire interior del chyron
+  const TV_ACCENT_W = 10; // filete emerald en el borde izquierdo
+  const TV_TAG_H = 56; // altura de la etiqueta de sección
+  const TV_GAP_TAG_TITLE = 26;
+  const TV_GAP_TITLE_DESC = 20;
+  const tvStackInnerW = TV_STACK_W - TV_ACCENT_W - TV_STACK_PAD * 2;
+  const tvTitleLineH = Math.round(fontSizeTitle * titleLineHeightRatio);
+  const tvDescLineH = Math.round(fontSizeDesc * descLineHeightRatio);
+  const tvTitleLines = capLines(
+    wrapLikeExport(
+      `700 ${fontSizeTitle}px 'Lexend', sans-serif`,
+      title || "Escribe un titular impactante...",
+      tvStackInnerW,
+    ),
+    3,
+  );
+  const tvDescLines = description.trim()
+    ? capLines(
+        wrapLikeExport(
+          `400 ${fontSizeDesc}px 'Lexend', sans-serif`,
+          description,
+          tvStackInnerW,
+        ),
+        2,
+      )
+    : [];
+  const tvStackH =
+    TV_STACK_PAD * 2 +
+    TV_TAG_H +
+    TV_GAP_TAG_TITLE +
+    tvTitleLines.length * tvTitleLineH +
+    (tvDescLines.length > 0
+      ? TV_GAP_TITLE_DESC + tvDescLines.length * tvDescLineH
+      : 0);
+  const tvStackY = TV_H - TV_TICKER_H - tvStackH;
+  // Cinta del ticker: cuño de marca + países, repetidos hasta llenar el ancho.
+  const tvCountriesStr = getFormattedCountries();
+  const tvTickerItems = [
+    "BLACKNEWS GLOBAL MEDIA",
+    ...(tvCountriesStr ? [tvCountriesStr.toUpperCase()] : []),
+  ];
+
+  /** Dibuja la composición completa de señal de TV sobre el lienzo 1920×1080:
+   *  fondo a sangre, velos de legibilidad, bug de canal con enlace y hora,
+   *  chyron inferior izquierda (etiqueta + titular + bajada) y ticker. */
+  const drawTvFrame = (
+    ctx: CanvasRenderingContext2D,
+    mediaElement?: HTMLImageElement | HTMLVideoElement,
+    frameOverride?: {
+      source: CanvasImageSource;
+      width: number;
+      height: number;
+      rotation?: number;
+    },
+    isOverlayOnly = false,
+    flagsData: Array<{
+      code: string;
+      img: HTMLImageElement | null;
+      text: string;
+    }> = [],
+  ) => {
+    const W = TV_W;
+    const H = TV_H;
+
+    // 1) Fondo: foto o fotograma de vídeo a sangre (cover) — en la pasada de
+    //    overlay tipográfico se queda fondo negro pleno.
+    if (isOverlayOnly) {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, W, H);
+    } else if (mediaElement || frameOverride) {
+      ctx.save();
+      const canvasFilter = getCanvasFilterString();
+      if (canvasFilter !== "brightness(1.00) contrast(1.00)") {
+        ctx.filter = canvasFilter;
+      }
+      let elW: number;
+      let elH: number;
+      if (frameOverride) {
+        elW = frameOverride.width;
+        elH = frameOverride.height;
+      } else {
+        elW =
+          (mediaElement as HTMLVideoElement).videoWidth ||
+          (mediaElement as HTMLImageElement).naturalWidth ||
+          1280;
+        elH =
+          (mediaElement as HTMLVideoElement).videoHeight ||
+          (mediaElement as HTMLImageElement).naturalHeight ||
+          720;
+      }
+      const rot = frameOverride?.rotation ?? 0;
+      const dispW = rot % 180 === 90 ? elH : elW;
+      const dispH = rot % 180 === 90 ? elW : elH;
+      const targetRatio = W / H;
+      const sourceRatio = dispW / dispH;
+      let sx = 0,
+        sy = 0,
+        sw = dispW,
+        sh = dispH;
+      if (sourceRatio > targetRatio) {
+        sw = dispH * targetRatio;
+        sx = (dispW - sw) / 2;
+      } else {
+        sh = dispW / targetRatio;
+        sy = (dispH - sh) / 2;
+      }
+      const src = (
+        frameOverride ? frameOverride.source : mediaElement!
+      ) as CanvasImageSource;
+      if (!rot) {
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+      } else {
+        let csx = sx,
+          csy = sy,
+          csw = sw,
+          csh = sh;
+        if (rot === 90) {
+          csx = sy;
+          csy = dispW - sx - sw;
+          csw = sh;
+          csh = sw;
+        } else if (rot === 180) {
+          csx = dispW - sx - sw;
+          csy = dispH - sy - sh;
+        } else if (rot === 270) {
+          csx = dispH - sy - sh;
+          csy = sx;
+          csw = sh;
+          csh = sw;
+        }
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate((rot * Math.PI) / 180);
+        const dw = rot % 180 === 90 ? H : W;
+        const dh = rot % 180 === 90 ? W : H;
+        ctx.drawImage(src, csx, csy, csw, csh, -dw / 2, -dh / 2, dw, dh);
+      }
+      ctx.restore();
+    }
+
+    // 2) Velos de legibilidad (barra de canal y chyron)
+    ctx.save();
+    const topScrim = ctx.createLinearGradient(0, 0, 0, 260);
+    topScrim.addColorStop(0, "rgba(0,0,0,0.92)");
+    topScrim.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = topScrim;
+    ctx.fillRect(0, 0, W, 260);
+    const botScrim = ctx.createLinearGradient(0, H - 640, 0, H);
+    botScrim.addColorStop(0, "rgba(0,0,0,0)");
+    botScrim.addColorStop(1, "rgba(0,0,0,0.94)");
+    ctx.fillStyle = botScrim;
+    ctx.fillRect(0, H - 640, W, 640);
+    if (blendFade) {
+      const fade = ctx.createLinearGradient(0, 0, 0, 220);
+      fade.addColorStop(0, "#000000");
+      fade.addColorStop(0.4, "rgba(0,0,0,0.55)");
+      fade.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 0, W, 220);
+    }
+    ctx.restore();
+
+    // 3) Bug de canal (superior izquierda): cuño + marca
+    ctx.save();
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(TV_PAD, 50, 40, 40);
+    ctx.font = "700 44px 'Lexend', sans-serif";
+    ctx.letterSpacing = "-0.5px";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText("BLACKNEWS.", TV_PAD + 58, 52);
+    ctx.letterSpacing = "0px";
+
+    // 4) Enlace en directo + hora de emisión (superior derecha)
+    const now = new Date();
+    const clockStr = `${tvPad2(now.getHours())}:${tvPad2(now.getMinutes())}`;
+    ctx.font = "700 40px 'Lexend', sans-serif";
+    ctx.letterSpacing = "1px";
+    const timeW = ctx.measureText(clockStr).width;
+    const timeX = W - TV_PAD - timeW;
+    ctx.font = "700 26px 'Lexend', sans-serif";
+    ctx.letterSpacing = "3px";
+    const liveW = ctx.measureText("EN DIRECTO").width;
+    const pillH = 52;
+    const pillW = 38 + liveW + 24;
+    const pillX = timeX - 28 - pillW;
+    const pillY = 46;
+    ctx.beginPath();
+    ctx.roundRect(pillX, pillY, pillW, pillH, 26);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pillX + 22, pillY + pillH / 2, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#EF4444";
+    ctx.fill();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textBaseline = "middle";
+    ctx.fillText("EN DIRECTO", pillX + 38, pillY + pillH / 2 + 1);
+    ctx.textBaseline = "top";
+    ctx.font = "700 40px 'Lexend', sans-serif";
+    ctx.letterSpacing = "1px";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText(clockStr, timeX, 52);
+    ctx.letterSpacing = "0px";
+    ctx.restore();
+
+    // 5) Chyron (bloque inferior izquierdo): etiqueta + titular + bajada
+    ctx.save();
+    const stackX = TV_PAD;
+    ctx.fillStyle = "rgba(0,0,0,0.92)";
+    ctx.fillRect(stackX, tvStackY, TV_STACK_W, tvStackH);
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    ctx.fillRect(stackX, tvStackY, TV_STACK_W, 1);
+    ctx.fillStyle = "#10B981";
+    ctx.fillRect(stackX, tvStackY, TV_ACCENT_W, tvStackH);
+    ctx.textBaseline = "top";
+
+    let chX = stackX + TV_ACCENT_W + TV_STACK_PAD;
+    let chY = tvStackY + TV_STACK_PAD;
+
+    // Etiqueta de sección (bloque emerald con texto negro)
+    const cat = (category || "GEOPOLÍTICA").trim().toUpperCase();
+    ctx.font = "700 30px 'Lexend', sans-serif";
+    ctx.letterSpacing = "2.5px";
+    const tagW = ctx.measureText(cat).width + 48;
+    ctx.fillStyle = "#10B981";
+    ctx.fillRect(chX, chY, tagW, TV_TAG_H);
+    ctx.fillStyle = "#000000";
+    ctx.textBaseline = "middle";
+    ctx.fillText(cat, chX + 24, chY + TV_TAG_H / 2 + 1);
+    ctx.textBaseline = "top";
+
+    // Países junto a la etiqueta (banderas según el formato elegido)
+    if (flagsData.length > 0) {
+      ctx.font = "600 24px 'Lexend', sans-serif";
+      ctx.letterSpacing = "1.5px";
+      let cx = chX + tagW + 22;
+      const rowMidY = chY + TV_TAG_H / 2;
+      const maxCx = W - TV_PAD - 140;
+      for (let i = 0; i < flagsData.length && cx < maxCx; i++) {
+        const item = flagsData[i];
+        if (countryFormat !== "names" && item.img) {
+          ctx.drawImage(item.img, cx, rowMidY - 12, 34, 23);
+          cx += 42;
+        }
+        ctx.fillStyle = "#94A3B8";
+        ctx.fillText(item.text, cx, rowMidY - 12);
+        cx += ctx.measureText(item.text).width;
+        if (i < flagsData.length - 1) {
+          ctx.fillStyle = "#64748B";
+          ctx.fillText("  ·  ", cx, rowMidY - 12);
+          cx += ctx.measureText("  ·  ").width;
+        }
+      }
+    }
+
+    // Titular (máx. 3 líneas) y bajada (máx. 2) con las métricas del usuario
+    chY += TV_TAG_H + TV_GAP_TAG_TITLE;
+    ctx.font = `700 ${fontSizeTitle}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = "0px";
+    ctx.fillStyle = "#FFFFFF";
+    for (const line of tvTitleLines) {
+      if (line) ctx.fillText(line, chX, chY);
+      chY += tvTitleLineH;
+    }
+    if (tvDescLines.length > 0) {
+      chY += TV_GAP_TITLE_DESC;
+      ctx.font = `400 ${fontSizeDesc}px 'Lexend', sans-serif`;
+      ctx.fillStyle = "#CBD5E1";
+      for (const line of tvDescLines) {
+        if (line) ctx.fillText(line, chX, chY);
+        chY += tvDescLineH;
+      }
+    }
+    ctx.restore();
+
+    // 6) Ticker inferior (cinta de última hora): cuño + marca + países
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, H - TV_TICKER_H, W, TV_TICKER_H);
+    ctx.clip();
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, H - TV_TICKER_H, W, TV_TICKER_H);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(0, H - TV_TICKER_H, W, 1);
+    const tickerMidY = H - TV_TICKER_H / 2;
+    ctx.font = "600 24px 'Lexend', sans-serif";
+    ctx.letterSpacing = "1.6px";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#10B981";
+    ctx.fillRect(TV_PAD, tickerMidY - 8, 16, 16);
+    let tx = TV_PAD + 34;
+    let tickerIdx = 0;
+    while (tx < W + 200 && tickerIdx < 40) {
+      const item = tvTickerItems[tickerIdx % tvTickerItems.length];
+      ctx.fillStyle =
+        item === "BLACKNEWS GLOBAL MEDIA" ? "#FFFFFF" : "#E2E8F0";
+      ctx.fillText(item, tx, tickerMidY + 1);
+      tx += ctx.measureText(item).width;
+      ctx.fillStyle = "#475569";
+      ctx.fillText("   ·   ", tx, tickerMidY + 1);
+      tx += ctx.measureText("   ·   ").width;
+      tickerIdx++;
+    }
+    ctx.restore();
+
+    // 7) Crédito de foto (derecha, sobre el ticker)
+    if (photoCaption && photoCaption.trim()) {
+      ctx.save();
+      ctx.font = "500 24px 'Lexend', sans-serif";
+      ctx.letterSpacing = "0px";
+      ctx.fillStyle = "#E2E8F0";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + 40);
+      let cap = photoCaption.trim();
+      if (maxCapW > 80 && ctx.measureText(cap).width > maxCapW) {
+        while (
+          ctx.measureText(cap + "…").width > maxCapW &&
+          cap.length > 3
+        ) {
+          cap = cap.slice(0, -1);
+        }
+        cap += "…";
+      }
+      ctx.fillText(cap, W - TV_PAD, H - TV_TICKER_H - 44);
+      ctx.restore();
+    }
+  };
+
+  // Render high-res canvas (1080×1350 en 4:5, 1080×1920 en 9:16, 1920×1080 en 16:9)
   const renderToCanvas = async (
     targetCanvas: HTMLCanvasElement,
     mediaElement?: HTMLImageElement | HTMLVideoElement,
@@ -914,6 +1286,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     } else {
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
+    }
+
+    // Formato TV 16:9: composición propia de señal de televisión.
+    if (postFormat === "16:9") {
+      drawTvFrame(ctx, mediaElement, frameOverride, isOverlayOnly, flagsData);
+      return;
     }
 
     // Padding parameters
@@ -2333,8 +2711,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // la tarjeta mide 420 px en 4:5 y 340 px en 9:16 para no disparar en alto).
   // Valores fraccionales exactos: al redondear, la vista previa partía las
   // líneas en sitios distintos a los del archivo exportado.
-  const previewCardWidth = postFormat === "9:16" ? 340 : 420;
+  const previewCardWidth =
+    postFormat === "16:9" ? 560 : postFormat === "9:16" ? 340 : 420;
   const previewScale = previewCardWidth / 1080;
+  // Ancho REAL de la tarjeta de vista previa. El formato TV escala un lienzo
+  // fijo de 1920 px, así que con este medidor el conjunto nunca se recorta
+  // cuando el contenedor es más estrecho que el ancho máximo (móvil).
+  const [previewCardElW, setPreviewCardElW] = useState(previewCardWidth);
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) setPreviewCardElW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const previewTitleSize = fontSizeTitle * previewScale;
   const previewDescSize = fontSizeDesc * previewScale;
   const padTopCanvas = postFormat === "9:16" ? PAD_TOP_9X16 : 76;
@@ -2426,6 +2819,55 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           c.code.toLowerCase().includes(countrySearch.toLowerCase()),
       )
     : POPULAR_COUNTRIES;
+
+  // Elemento de media de la vista previa: un único <video>/<img> compartido
+  // por los formatos 4:5/9:16 y por el 16:9 de TV, para que videoRef siga
+  // apuntando siempre al preview (la exportación PNG lee el mismo elemento).
+  const previewMediaEl =
+    mediaType === "video" ? (
+      <video
+        ref={videoRef}
+        src={mediaSrc}
+        crossOrigin={
+          mediaSrc.startsWith("blob:") || mediaSrc.startsWith("data:")
+            ? undefined
+            : "anonymous"
+        }
+        autoPlay
+        loop
+        muted={isMuted}
+        playsInline
+        style={{ filter: getFilterCss() }}
+        className="w-full h-full object-cover"
+        onLoadedMetadata={(e) => {
+          const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
+          if (dur > 0) {
+            setVideoDuration(dur);
+            if (trimEnd === 0 || trimEnd > dur) {
+              setTrimEnd(dur);
+            }
+          }
+        }}
+        onTimeUpdate={(e) => {
+          // Durante la exportación no se recorta: el límite lo marca el grabador
+          if (isRecordingRef.current) return;
+          if (trimEnd > trimStart) {
+            if (e.currentTarget.currentTime >= trimEnd) {
+              e.currentTarget.currentTime = trimStart;
+            } else if (e.currentTarget.currentTime < trimStart) {
+              e.currentTarget.currentTime = trimStart;
+            }
+          }
+        }}
+      />
+    ) : (
+      <img
+        src={mediaSrc}
+        alt="Post preview"
+        style={{ filter: getFilterCss() }}
+        className="w-full h-full object-cover"
+      />
+    );
 
   return (
     <div className="font-['Lexend',sans-serif] space-y-8 pb-16">
@@ -3824,13 +4266,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </span>
           </div>
 
-          {/* Selector de formato: el mismo post en 4:5 o en 9:16 */}
+          {/* Selector de formato: el mismo post en 4:5, 9:16 o 16:9 (TV) */}
           <div className="flex items-center justify-end gap-2">
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
               Formato
             </span>
             <div className="flex items-center gap-1 bg-neutral-950 border border-white/10 p-1 rounded-xl">
-              {(["4:5", "9:16"] as const).map((f) => (
+              {(["4:5", "9:16", "16:9"] as const).map((f) => (
                 <button
                   key={f}
                   type="button"
@@ -3843,7 +4285,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   title={
                     f === "4:5"
                       ? "1080×1350 · Instagram, LinkedIn, X y estados"
-                      : "1080×1920 · TikTok, YouTube Shorts y Reels"
+                      : f === "9:16"
+                        ? "1080×1920 · TikTok, YouTube Shorts y Reels"
+                        : "1920×1080 · Señal de TV, YouTube y pantallas"
                   }
                 >
                   {f}
@@ -3856,10 +4300,267 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           <div
             ref={previewContainerRef}
             className={`w-full mx-auto ${
-              postFormat === "9:16" ? "aspect-[9/16]" : "aspect-[4/5]"
+              postFormat === "9:16"
+                ? "aspect-[9/16]"
+                : postFormat === "16:9"
+                  ? "aspect-[16/9]"
+                  : "aspect-[4/5]"
             } bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl flex flex-col justify-between select-none`}
             style={{ backgroundColor: "#000000", maxWidth: previewCardWidth }}
           >
+            {postFormat === "16:9" ? (
+              <>
+                {/* Vista previa TV: el lienzo real de 1920×1080 escalado a
+                    tamaño de tarjeta, así todas las medidas de elementos son
+                    píxeles de lienzo y calcan el export carácter a carácter. */}
+                <div className="absolute inset-0 overflow-hidden">
+                  <div
+                    style={{
+                      width: TV_W,
+                      height: TV_H,
+                      transform: `scale(${previewCardElW / TV_W})`,
+                      transformOrigin: "top left",
+                    }}
+                    className="relative select-none font-['Lexend',sans-serif]"
+                  >
+                    {/* Media a sangre + velos de legibilidad */}
+                    <div className="absolute inset-0 overflow-hidden bg-black">
+                      {previewMediaEl}
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-[260px] bg-gradient-to-b from-black/95 via-black/60 to-transparent" />
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent" />
+                      {blendFade && (
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black via-black/55 to-transparent" />
+                      )}
+                    </div>
+
+                    {/* Bug de canal: cuño + marca */}
+                    <div
+                      className="absolute flex items-center"
+                      style={{ left: TV_PAD, top: 50, gap: 18 }}
+                    >
+                      <div
+                        className="shrink-0 bg-white"
+                        style={{ width: 40, height: 40 }}
+                      />
+                      <span
+                        className="font-bold text-white"
+                        style={{
+                          fontSize: 44,
+                          letterSpacing: "-0.5px",
+                          lineHeight: "44px",
+                        }}
+                      >
+                        BLACKNEWS.
+                      </span>
+                    </div>
+
+                    {/* Enlace en directo + hora de emisión */}
+                    <div
+                      className="absolute flex items-center"
+                      style={{ right: TV_PAD, top: 46, gap: 28 }}
+                    >
+                      <span
+                        className="flex items-center rounded-full border border-white/25 bg-black/60"
+                        style={{ height: 52, padding: "0 24px 0 16px", gap: 14 }}
+                      >
+                        <span
+                          className="shrink-0 rounded-full bg-red-500"
+                          style={{ width: 14, height: 14 }}
+                        />
+                        <span
+                          className="font-bold text-white"
+                          style={{
+                            fontSize: 26,
+                            letterSpacing: "3px",
+                            lineHeight: "26px",
+                          }}
+                        >
+                          EN DIRECTO
+                        </span>
+                      </span>
+                      <span
+                        className="font-bold text-white"
+                        style={{
+                          fontSize: 40,
+                          letterSpacing: "1px",
+                          lineHeight: "40px",
+                        }}
+                      >
+                        {tvClockLabel}
+                      </span>
+                    </div>
+
+                    {/* Chyron: etiqueta de sección + titular + bajada */}
+                    <div
+                      className="absolute flex border-t border-white/15 bg-black/90"
+                      style={{
+                        left: TV_PAD,
+                        bottom: TV_TICKER_H,
+                        width: TV_STACK_W,
+                      }}
+                    >
+                      <div
+                        className="shrink-0 bg-emerald-500"
+                        style={{ width: TV_ACCENT_W }}
+                      />
+                      <div style={{ padding: TV_STACK_PAD }}>
+                        <div
+                          className="flex items-center overflow-hidden"
+                          style={{ height: TV_TAG_H, gap: 22 }}
+                        >
+                          <span
+                            className="flex shrink-0 items-center bg-emerald-500 font-bold uppercase text-black"
+                            style={{
+                              height: TV_TAG_H,
+                              padding: "0 24px",
+                              fontSize: 30,
+                              letterSpacing: "2.5px",
+                            }}
+                          >
+                            {(category || "GEOPOLÍTICA").trim()}
+                          </span>
+                          {selectedCountries.length > 0 && (
+                            <span
+                              className="flex min-w-0 items-center overflow-hidden font-semibold uppercase"
+                              style={{
+                                gap: 14,
+                                fontSize: 24,
+                                letterSpacing: "1.5px",
+                                color: "#94A3B8",
+                              }}
+                            >
+                              {selectedCountries.map((c, i) => (
+                                <span
+                                  key={c.code}
+                                  className="flex shrink-0 items-center"
+                                  style={{ gap: 8 }}
+                                >
+                                  {i > 0 && (
+                                    <span style={{ color: "#64748B" }}>
+                                      ·
+                                    </span>
+                                  )}
+                                  {countryFormat !== "names" && (
+                                    <CountryFlag
+                                      code={c.code}
+                                      className="inline-block h-[23px] w-[34px] rounded-[1px] object-cover"
+                                    />
+                                  )}
+                                  <span>
+                                    {countryFormat === "flags-codes"
+                                      ? c.code
+                                      : c.name.toUpperCase()}
+                                  </span>
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </div>
+                        <h1
+                          style={{
+                            marginTop: TV_GAP_TAG_TITLE,
+                            fontSize: fontSizeTitle,
+                            lineHeight: `${tvTitleLineH}px`,
+                            letterSpacing: 0,
+                          }}
+                          className="font-bold text-white"
+                        >
+                          {tvTitleLines.map((line, i) => (
+                            <span
+                              key={i}
+                              className="block whitespace-nowrap"
+                            >
+                              {line || "\u00A0"}
+                            </span>
+                          ))}
+                        </h1>
+                        {tvDescLines.length > 0 && (
+                          <p
+                            style={{
+                              marginTop: TV_GAP_TITLE_DESC,
+                              fontSize: fontSizeDesc,
+                              lineHeight: `${tvDescLineH}px`,
+                              letterSpacing: 0,
+                              color: "#CBD5E1",
+                            }}
+                          >
+                            {tvDescLines.map((line, i) => (
+                              <span
+                                key={i}
+                                className="block whitespace-nowrap"
+                              >
+                                {line || "\u00A0"}
+                              </span>
+                            ))}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Ticker inferior: cuño + marca + países */}
+                    <div
+                      className="absolute inset-x-0 bottom-0 flex items-center overflow-hidden border-t border-white/15 bg-black"
+                      style={{
+                        height: TV_TICKER_H,
+                        paddingLeft: TV_PAD,
+                        gap: 34,
+                      }}
+                    >
+                      <span
+                        className="flex shrink-0 items-center font-semibold uppercase text-white"
+                        style={{ gap: 18, fontSize: 24, letterSpacing: "1.6px" }}
+                      >
+                        <span
+                          className="shrink-0 bg-emerald-500"
+                          style={{ width: 16, height: 16 }}
+                        />
+                        BLACKNEWS GLOBAL MEDIA
+                      </span>
+                      {tvCountriesStr && (
+                        <span
+                          className="shrink-0 font-semibold uppercase"
+                          style={{
+                            fontSize: 24,
+                            letterSpacing: "1.6px",
+                            color: "#E2E8F0",
+                          }}
+                        >
+                          {tvCountriesStr.toUpperCase()}
+                        </span>
+                      )}
+                      <span
+                        className="shrink-0 font-semibold uppercase"
+                        style={{
+                          fontSize: 24,
+                          letterSpacing: "1.6px",
+                          color: "#E2E8F0",
+                        }}
+                      >
+                        · BLACKNEWS GLOBAL MEDIA
+                      </span>
+                    </div>
+
+                    {/* Crédito de foto (derecha, sobre el ticker) */}
+                    {photoCaption && photoCaption.trim() && (
+                      <div
+                        className="absolute overflow-hidden text-right font-medium"
+                        style={{
+                          right: TV_PAD,
+                          bottom: TV_TICKER_H + 24,
+                          fontSize: 24,
+                          lineHeight: "28px",
+                          color: "#E2E8F0",
+                          maxWidth: TV_W - TV_PAD * 2 - TV_STACK_W - 40,
+                        }}
+                      >
+                        {photoCaption.trim()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
             {/* Top Text Content Area (1:1 with canvas metrics) */}
             <div
               style={{
@@ -3991,51 +4692,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               className="absolute inset-0 overflow-hidden z-0"
               style={{ top: `${previewMediaTopPct}%` }}
             >
-              {mediaType === "video" ? (
-                <video
-                  ref={videoRef}
-                  src={mediaSrc}
-                  crossOrigin={
-                    mediaSrc.startsWith("blob:") || mediaSrc.startsWith("data:")
-                      ? undefined
-                      : "anonymous"
-                  }
-                  autoPlay
-                  loop
-                  muted={isMuted}
-                  playsInline
-                  style={{ filter: getFilterCss() }}
-                  className="w-full h-full object-cover"
-                  onLoadedMetadata={(e) => {
-                    const dur =
-                      Math.round((e.currentTarget.duration || 0) * 10) / 10;
-                    if (dur > 0) {
-                      setVideoDuration(dur);
-                      if (trimEnd === 0 || trimEnd > dur) {
-                        setTrimEnd(dur);
-                      }
-                    }
-                  }}
-                  onTimeUpdate={(e) => {
-                    // Durante la exportación no se recorta: el límite lo marca el grabador
-                    if (isRecordingRef.current) return;
-                    if (trimEnd > trimStart) {
-                      if (e.currentTarget.currentTime >= trimEnd) {
-                        e.currentTarget.currentTime = trimStart;
-                      } else if (e.currentTarget.currentTime < trimStart) {
-                        e.currentTarget.currentTime = trimStart;
-                      }
-                    }
-                  }}
-                />
-              ) : (
-                <img
-                  src={mediaSrc}
-                  alt="Post preview"
-                  style={{ filter: getFilterCss() }}
-                  className="w-full h-full object-cover"
-                />
-              )}
+              {previewMediaEl}
 
               {/* Soft Gradient Fade from black on top of media */}
               {blendFade && (
@@ -4093,6 +4750,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 )}
               </div>
             </div>
+              </>
+            )}
           </div>
 
           {/* Export Action Buttons */}
@@ -4216,9 +4875,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <br />
                 </>
               )}
-              {postFormat === "9:16"
-                ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
-                : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
+              {postFormat === "16:9"
+                ? "Formato 16:9 (1920×1080) con estética de señal de TV: bug de canal con enlace y hora, chyron de titular y ticker inferior. Óptimo para YouTube, pantallas y barras de noticias."
+                : postFormat === "9:16"
+                  ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
+                  : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
               {mediaType === "video" &&
                 " El video se compone en tu navegador: no se sube a ningún servidor."}
             </p>
@@ -4345,7 +5006,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Generated media preview */}
             <div
               className={`${
-                postFormat === "9:16" ? "aspect-[9/16]" : "aspect-[4/5]"
+                postFormat === "9:16"
+                  ? "aspect-[9/16]"
+                  : postFormat === "16:9"
+                    ? "aspect-[16/9]"
+                    : "aspect-[4/5]"
               } max-h-[50vh] mx-auto rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg`}
             >
               {exportedVideoUrl ? (
