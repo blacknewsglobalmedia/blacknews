@@ -309,6 +309,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   }, [postFormat]);
   const tvPad2 = (n: number) => (n < 10 ? `0${n}` : String(n));
   const tvClockLabel = `${tvPad2(tvNow.getHours())}:${tvPad2(tvNow.getMinutes())}`;
+  // Cápsula "● EN DIRECTO" del bug superior: opcional. La hora de emisión se
+  // muestra siempre (es parte del aire del canal).
+  const [tvShowLive, setTvShowLive] = useState(true);
 
   // Filters & Appearance
   const [filter, setFilter] = useState<MediaFilter>("bw-high");
@@ -539,6 +542,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return {
       version: 2,
       outputFormat: postFormat,
+      tvShowLive,
       appName: `BlackNews ${postFormat} Generator`,
       savedAt: new Date().toISOString(),
       content: {
@@ -641,6 +645,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         data.outputFormat === "16:9"
       )
         setPostFormat(data.outputFormat);
+      if (typeof data.tvShowLive === "boolean") setTvShowLive(data.tvShowLive);
       if (data.typography) {
         if (data.typography.fontSizeTitle)
           setFontSizeTitle(data.typography.fontSizeTitle);
@@ -764,6 +769,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     videoFormat,
     maxVideoDuration,
     postFormat,
+    tvShowLive,
   ]);
 
   // Restore draft on initial load if available
@@ -1063,28 +1069,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.letterSpacing = "1px";
     const timeW = ctx.measureText(clockStr).width;
     const timeX = W - TV_PAD - timeW;
-    ctx.font = "700 26px 'Lexend', sans-serif";
-    ctx.letterSpacing = "3px";
-    const liveW = ctx.measureText("EN DIRECTO").width;
-    const pillH = 52;
-    const pillW = 38 + liveW + 24;
-    const pillX = timeX - 28 - pillW;
-    const pillY = 46;
-    ctx.beginPath();
-    ctx.roundRect(pillX, pillY, pillW, pillH, 26);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.28)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(pillX + 22, pillY + pillH / 2, 7, 0, Math.PI * 2);
-    ctx.fillStyle = "#EF4444";
-    ctx.fill();
-    ctx.fillStyle = "#FFFFFF";
-    ctx.textBaseline = "middle";
-    ctx.fillText("EN DIRECTO", pillX + 38, pillY + pillH / 2 + 1);
-    ctx.textBaseline = "top";
+    if (tvShowLive) {
+      ctx.font = "700 26px 'Lexend', sans-serif";
+      ctx.letterSpacing = "3px";
+      const liveW = ctx.measureText("EN DIRECTO").width;
+      const pillH = 52;
+      const pillW = 38 + liveW + 24;
+      const pillX = timeX - 28 - pillW;
+      const pillY = 46;
+      ctx.beginPath();
+      ctx.roundRect(pillX, pillY, pillW, pillH, 26);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pillX + 22, pillY + pillH / 2, 7, 0, Math.PI * 2);
+      ctx.fillStyle = "#EF4444";
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textBaseline = "middle";
+      ctx.fillText("EN DIRECTO", pillX + 38, pillY + pillH / 2 + 1);
+      ctx.textBaseline = "top";
+    }
     ctx.font = "700 40px 'Lexend', sans-serif";
     ctx.letterSpacing = "1px";
     ctx.fillStyle = "#FFFFFF";
@@ -4267,7 +4275,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
 
           {/* Selector de formato: el mismo post en 4:5, 9:16 o 16:9 (TV) */}
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-3">
+            {postFormat === "16:9" && (
+              <label
+                className="flex items-center gap-1.5 cursor-pointer select-none"
+                title="Mostrar la cápsula «● EN DIRECTO» junto a la hora"
+              >
+                <input
+                  type="checkbox"
+                  checked={tvShowLive}
+                  onChange={(e) => setTvShowLive(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-white cursor-pointer"
+                />
+                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                  En directo
+                </span>
+              </label>
+            )}
             <span className="text-[11px] uppercase tracking-wider text-neutral-500">
               Formato
             </span>
@@ -4359,25 +4383,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       className="absolute flex items-center"
                       style={{ right: TV_PAD, top: 46, gap: 28 }}
                     >
-                      <span
-                        className="flex items-center rounded-full border border-white/25 bg-black/60"
-                        style={{ height: 52, padding: "0 24px 0 16px", gap: 14 }}
-                      >
+                      {tvShowLive && (
                         <span
-                          className="shrink-0 rounded-full bg-red-500"
-                          style={{ width: 14, height: 14 }}
-                        />
-                        <span
-                          className="font-bold text-white"
+                          className="flex items-center rounded-full border border-white/25 bg-black/60"
                           style={{
-                            fontSize: 26,
-                            letterSpacing: "3px",
-                            lineHeight: "26px",
+                            height: 52,
+                            padding: "0 24px 0 16px",
+                            gap: 14,
                           }}
                         >
-                          EN DIRECTO
+                          <span
+                            className="shrink-0 rounded-full bg-red-500"
+                            style={{ width: 14, height: 14 }}
+                          />
+                          <span
+                            className="font-bold text-white"
+                            style={{
+                              fontSize: 26,
+                              letterSpacing: "3px",
+                              lineHeight: "26px",
+                            }}
+                          >
+                            EN DIRECTO
+                          </span>
                         </span>
-                      </span>
+                      )}
                       <span
                         className="font-bold text-white"
                         style={{
