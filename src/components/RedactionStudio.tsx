@@ -799,7 +799,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const userPublishedCount = publishedReports.filter((r) => canUserEditThisReport(r)).length;
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row pb-20 lg:pb-0">
+    <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row pb-[calc(var(--bn-nav-h)_+_4rem)] lg:pb-0">
       {/* MOBILE COMPACT HEADER (< lg) */}
       <div className="lg:hidden border-b border-white/10 bg-black px-4 py-3 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2.5">

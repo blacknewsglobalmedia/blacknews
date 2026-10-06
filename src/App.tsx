@@ -21,6 +21,7 @@ import { PoliciesPage } from "./components/PoliciesPage";
 import { PoliciesNoticeBanner } from "./components/PoliciesNoticeBanner";
 import { ReadingDock } from "./components/ReadingDock";
 import { WorldClockBar } from "./components/WorldClockBar";
+import { MobileTabBar } from "./components/MobileTabBar";
 import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
@@ -162,6 +163,8 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
+  // Menú móvil del encabezado: compartido con la barra inferior de tabs
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
@@ -890,6 +893,16 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
+  // Barra inferior de tabs (móvil): ir a portada desde cualquier vista
+  const handleGoHome = () => {
+    if (currentView === "politicas") {
+      handleClosePolicies();
+      return;
+    }
+    if (currentView !== "portada") setCurrentView("portada");
+    window.scrollTo({ top: 0 });
+  };
+
   // Bookmark toggling
   const handleToggleBookmark = (report: Report) => {
     // Plan gratuito: tope de guardados (suscriptores y redacción, sin límite).
@@ -1275,7 +1288,7 @@ export default function App() {
     <div className="min-h-dvh bg-black text-[#EDEDED] font-['Lexend',sans-serif] selection:bg-white selection:text-black flex flex-col justify-between">
       {/* Toast notification banner */}
       {toastMessage && (
-        <div className="fixed left-4 right-4 sm:left-auto sm:right-6 bottom-24 sm:bottom-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium tracking-normal rounded-lg border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="fixed left-4 right-4 sm:left-auto sm:right-6 bottom-[calc(var(--bn-nav-h)_+_93px)] sm:bottom-[calc(var(--bn-nav-h)_+_81px)] lg:bottom-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium tracking-normal rounded-lg border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
           <span className="w-1.5 h-1.5 rounded-full bg-black inline-block"></span>
           <span>{toastMessage}</span>
         </div>
@@ -1304,6 +1317,8 @@ export default function App() {
         onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
         liteMode={liteMode}
         onToggleLite={() => setLiteMode((v) => !v)}
+        isMobileMenuOpen={isMobileMenuOpen}
+        onMobileMenuOpenChange={setIsMobileMenuOpen}
       />
 
       {/* Real-time breaking ticker */}
@@ -1577,6 +1592,22 @@ export default function App() {
           onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
         />
       )}
+
+      {/* Navegación inferior estilo app (móvil/tablet): pulgar, espejo del header.
+          Antes de WorldClockBar para que su backdrop la tape cuando esté abierta. */}
+      <MobileTabBar
+        onGoHome={handleGoHome}
+        isPortada={currentView === "portada"}
+        isMenuOpen={isMobileMenuOpen}
+        onMenuOpenChange={setIsMobileMenuOpen}
+        isSearchOpen={isSearchOpen}
+        onOpenSearch={() => setIsSearchOpen(true)}
+        isBookmarksOpen={isBookmarksOpen}
+        onOpenBookmarks={() => setIsBookmarksOpen(true)}
+        bookmarksCount={bookmarkedIds.size}
+        isSubscribeOpen={isSubscriptionModalOpen}
+        onOpenSubscribe={() => setIsSubscriptionModalOpen(true)}
+      />
 
       {/* Relojes del mundo: marquee pegado al borde inferior, en todo el sitio */}
       <WorldClockBar />

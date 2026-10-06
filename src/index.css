@@ -8,9 +8,15 @@
        La usan las sub-cabeceras y las anclas para no quedar debajo.
        Medida en navegador: 125px <640, 133px ≥640 (sm) */
     --bn-header-h: calc(125px + env(safe-area-inset-top, 0px));
+    /* Altura de la navegación inferior estilo app (barra de tabs, solo <lg).
+       Suma la barra home del iPhone; en ≥lg no existe → 0. */
+    --bn-nav-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   }
   @media (min-width: 640px) {
     :root { --bn-header-h: calc(133px + env(safe-area-inset-top, 0px)); }
+  }
+  @media (min-width: 1024px) {
+    :root { --bn-nav-h: 0px; }
   }
 
   html, body {

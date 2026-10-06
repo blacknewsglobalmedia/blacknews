@@ -2526,7 +2526,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in">
+        <div className="fixed bottom-[calc(var(--bn-nav-h)_+_2.75rem)] lg:bottom-6 right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in">
           <span className="w-2 h-2 rounded-full bg-black inline-block"></span>
           <span>{toastMessage}</span>
         </div>

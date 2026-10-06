@@ -78,7 +78,7 @@ export function WorldClockBar() {
         />
       )}
 
-      <div className="bn-safe-bottom fixed bottom-0 inset-x-0 z-40 font-sans select-none">
+      <div className="fixed inset-x-0 bottom-[var(--bn-nav-h)] z-40 font-sans select-none">
         {/* Panel con todos los relojes */}
         {open && (
           <div className="bg-black border-t border-white/10 max-h-[65dvh] overflow-y-auto overscroll-contain">

@@ -38,7 +38,7 @@ export const RedactorFloatingBar: React.FC<RedactorFloatingBarProps> = ({
   return (
     <aside 
       aria-label="Barra de acciones del redactor"
-      className="fixed bottom-9 left-1/2 -translate-x-1/2 z-40 max-w-xl w-[94vw] sm:w-auto animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto"
+      className="fixed left-1/2 -translate-x-1/2 z-40 bottom-[calc(var(--bn-nav-h)_+_2.25rem)] sm:bottom-[calc(var(--bn-nav-h)_+_1.5rem)] lg:bottom-9 max-w-xl w-[94vw] sm:w-auto animate-in slide-in-from-bottom-5 duration-300 pointer-events-auto"
     >
       <div className="bg-neutral-950/90 backdrop-blur-xl border border-white/10 rounded-2xl p-2 sm:p-2.5 flex items-center justify-between sm:justify-center gap-2 sm:gap-3 shadow-2xl shadow-black font-sans">
         {/* Status / Saved Indicator for Desktop */}

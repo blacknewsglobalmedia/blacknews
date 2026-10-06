@@ -32,6 +32,9 @@ interface TopBarProps {
   onOpenGoogleAuth?: () => void;
   liteMode: boolean;
   onToggleLite: () => void;
+  /** Menú móvil controlado desde App (lo abre también la barra inferior de tabs) */
+  isMobileMenuOpen?: boolean;
+  onMobileMenuOpenChange?: (open: boolean) => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -50,8 +53,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenGoogleAuth,
   liteMode,
   onToggleLite,
+  isMobileMenuOpen: isMobileMenuOpenProp,
+  onMobileMenuOpenChange,
 }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
+  const isMobileMenuOpen =
+    isMobileMenuOpenProp ?? internalMobileMenuOpen;
+  const setIsMobileMenuOpen =
+    onMobileMenuOpenChange ?? setInternalMobileMenuOpen;
   const stripRef = useRef<HTMLDivElement>(null);
 
   // Tira de categorías (móvil/tablet): la sección activa se centra sola
