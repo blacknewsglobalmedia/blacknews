@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopBar } from "./components/TopBar";
 import { BreakingTicker } from "./components/BreakingTicker";
 import { LeadStory } from "./components/LeadStory";
@@ -53,6 +53,16 @@ import {
 import { fetchSubscriptionStatus, PLAN_NAMES, type PlanTier } from "./utils/paypalSubscription";
 import { captureAdOrder } from "./utils/paypalAds";
 import { healPublishedAt } from "./utils/publishedAt";
+import {
+  markReportUnsynced,
+  markReportSynced,
+  listUnsyncedReportIds,
+  markReportDeletePending,
+  clearPendingReportDelete,
+  listPendingReportDeletes,
+  retryPendingReportSync,
+  mergeReports,
+} from "./utils/reportSync";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import {
   doc,
@@ -170,6 +180,7 @@ export default function App() {
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Persistent reports list
   const [reportsList, setReportsList] = useState<Report[]>(() => {
@@ -537,12 +548,21 @@ export default function App() {
   // Contenido publicado: Firestore es la fuente de verdad para todos los
   // navegadores (en una pestaña de incógnito no existe la copia local).
   // Se recupera en segundo plano al arrancar; si algo falla (sin red o sin
-  // permisos) se mantiene lo que haya en este dispositivo.
+  // permisos) se mantiene lo que haya en este dispositivo. Antes de leer
+  // la nube se reintentan las operaciones pendientes (subidas/borrados
+  // rechazados) y luego la lista se fusiona en vez de sobrescribirse, de
+  // modo que un post publicado aquí sin permisos no desaparece al cargar
+  // una versión nueva (ver utils/reportSync).
   useEffect(() => {
     let alive = true;
 
     const pullReports = async () => {
       try {
+        // 1) Reintenta lo que quedó pendiente en la sesión anterior: subir
+        //    los posts que la nube rechazó y borrar los que faltó retirar.
+        //    Así un fallo de permisos momentáneo no deja posts huérfanos.
+        await retryPendingReportSync();
+
         const snap = await getDocs(collection(db, "reports"));
         if (!alive) return;
         const remote = snap.docs
@@ -554,9 +574,17 @@ export default function App() {
           // Los ids llevan marca de tiempo (rep-custom-<ms>): lo más reciente primero
           .sort((a, b) => b.id.localeCompare(a.id));
         if (remote.length === 0) return;
-        setReportsList(remote);
+        // 2) Fusión en vez de pisar: lo remoto manda, pero los posts que
+        //    todavía no han subido (marcados en reportSync) se conservan y
+        //    los pendientes de borrar no vuelven a aparecer.
+        const merged = mergeReports(
+          remote,
+          listUnsyncedReportIds(),
+          listPendingReportDeletes(),
+        );
+        setReportsList(merged);
         try {
-          localStorage.setItem("blacknews_reports", JSON.stringify(remote));
+          localStorage.setItem("blacknews_reports", JSON.stringify(merged));
         } catch {}
       } catch {
         /* sin conexión: sigue mandando la copia local */
@@ -743,9 +771,10 @@ export default function App() {
     } catch {}
   };
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, ms = 3000) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMessage(null), ms);
   };
 
   // Sync Layout Config
@@ -969,11 +998,23 @@ export default function App() {
     setReportsList(updated);
     try {
       localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+    } catch {}
+    // La copia local ya está; ahora la nube. Si Firestore rechaza la
+    // escritura (sin sesión o sin permisos) el post NO desaparece: queda
+    // marcado como pendiente, se conserva en la fusión de arranque y se
+    // reintenta solo (ver utils/reportSync).
+    markReportUnsynced(newReport.id);
+    try {
       await setDoc(doc(db, "reports", newReport.id), newReport);
+      markReportSynced(newReport.id);
+      showToast(`¡"${newReport.title.slice(0, 38)}..." publicado en portada!`);
     } catch (err) {
-      console.warn("[BLACKNEWS] Local storage backup saved for report");
+      console.warn("[BLACKNEWS] Firestore rechazó el informe; queda local", err);
+      showToast(
+        `Publicado solo en este dispositivo (pendiente de subir a la nube): "${newReport.title.slice(0, 30)}..." no se perderá al actualizar.`,
+        5000,
+      );
     }
-    showToast(`¡"${newReport.title.slice(0, 38)}..." publicado en portada!`);
   };
 
   // Updating an existing report (only author or admin)
@@ -984,11 +1025,19 @@ export default function App() {
     setReportsList(updated);
     try {
       localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+    } catch {}
+    markReportUnsynced(updatedReport.id);
+    try {
       await setDoc(doc(db, "reports", updatedReport.id), updatedReport);
+      markReportSynced(updatedReport.id);
+      showToast(`¡Informe "${updatedReport.title.slice(0, 32)}..." actualizado!`);
     } catch (err) {
-      console.warn("[BLACKNEWS] Local storage backup saved for updated report");
+      console.warn("[BLACKNEWS] Firestore rechazó la edición; queda local", err);
+      showToast(
+        "Edición guardada solo en este dispositivo (pendiente de subir a la nube): no se perderá al actualizar.",
+        5000,
+      );
     }
-    showToast(`¡Informe "${updatedReport.title.slice(0, 32)}..." actualizado!`);
   };
 
   // Deleting a report (author or admin)
@@ -997,11 +1046,23 @@ export default function App() {
     setReportsList(updated);
     try {
       localStorage.setItem("blacknews_reports", JSON.stringify(updated));
+    } catch {}
+    // Sin contenido que subir de este id; el borrado remoto se reintenta.
+    markReportSynced(id);
+    clearPendingReportDelete(id);
+    try {
       // Retira también la copia remota: sin esto la noticia volvería a
       // aparecer en los demás navegadores al sincronizar al arrancar.
       await deleteDoc(doc(db, "reports", id));
-    } catch {}
-    showToast("Informe retirado de portada");
+      showToast("Informe retirado de portada");
+    } catch (err) {
+      console.warn("[BLACKNEWS] Firestore rechazó el borrado", err);
+      markReportDeletePending(id);
+      showToast(
+        "Informe retirado de portada. La nube aún lo conserva: se reintentará el borrado.",
+        5000,
+      );
+    }
   };
 
   // Assign user role (ADMIN, MODERADOR, REDACTOR, LECTOR)
@@ -1175,6 +1236,9 @@ export default function App() {
     showToast(
       `Sesión verificada con Google: ${nextProfile.name} [${nextProfile.role}]`,
     );
+    // Con la sesión con permisos de escritura no hace falta esperar al
+    // siguiente arranque: se suben ya los posts que fallaron sin sesión.
+    if (isOwnerEmail(email)) void retryPendingReportSync();
   };
 
   const handleLogout = async () => {
@@ -1242,15 +1306,20 @@ export default function App() {
       : reportsList.filter((r) => r.category === selectedCategory);
 
   // Layout slots computed for 'TODAS'
+  // Sin ids repetidos y sin el lead (que ya tiene su propio hueco): una
+  // configuración guardada con huecos repetidos —rotaciones antiguas con
+  // menos de 6 despachos— no debe renderizar la misma tarjeta dos veces
+  // ni romper las claves de React.
   const configuredLead =
     reportsList.find((r) => r.id === layoutConfig.leadReportId) ||
     reportsList[0];
-  const configuredBlock1 = layoutConfig.block1ReportIds
-    .map((id) => reportsList.find((r) => r.id === id))
-    .filter((r): r is Report => Boolean(r));
-  const configuredBlock2 = layoutConfig.block2ReportIds
-    .map((id) => reportsList.find((r) => r.id === id))
-    .filter((r): r is Report => Boolean(r));
+  const leadId = configuredLead?.id;
+  const slotReports = (ids: string[]) =>
+    [...new Set(ids)]
+      .map((id) => reportsList.find((r) => r.id === id))
+      .filter((r): r is Report => Boolean(r) && r.id !== leadId);
+  const configuredBlock1 = slotReports(layoutConfig.block1ReportIds);
+  const configuredBlock2 = slotReports(layoutConfig.block2ReportIds);
   const configuredDossier = reportsList.find(
     (r) => r.id === layoutConfig.dossierReportId,
   );

@@ -28,7 +28,7 @@ const fmtBytes = (bytes: number): string => {
 const fmtChars = (chars: number): string => fmtBytes(chars * 2);
 
 const categoryOf = (key: string): string => {
-  if (key === 'blacknews_reports') return 'Despachos';
+  if (key === 'blacknews_reports' || key === 'blacknews_unsynced_report_ids' || key === 'blacknews_pending_report_deletes') return 'Despachos';
   if (key.startsWith('blacknews_drafts_') || key === 'blacknews_post_generator_draft') return 'Borradores';
   if (key === 'blacknews_flash_news') return 'Teletipo';
   if (key === 'blacknews_ads') return 'Anuncios';

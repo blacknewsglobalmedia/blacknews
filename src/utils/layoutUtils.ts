@@ -15,6 +15,24 @@ export const DEFAULT_LAYOUT_CONFIG: FrontPageLayoutConfig = {
   autoRefreshEnabled: true,
 };
 
+/**
+ * Toma hasta `size` despachos del pool que todavía no estén colocados.
+ * Rellenaba los huecos con `|| lead` y, con menos de 6 informes, repetía
+ * el mismo id en varios huecos → tarjetas duplicadas y claves duplicadas
+ * en React. Si el pool se agota, el hueco queda vacío y la portada omite
+ * ese bloque en vez de repetir posts.
+ */
+function takeIds(pool: Report[], size: number, used: Set<string>): string[] {
+  const out: string[] = [];
+  for (const report of pool) {
+    if (out.length >= size) break;
+    if (!report?.id || used.has(report.id)) continue;
+    used.add(report.id);
+    out.push(report.id);
+  }
+  return out;
+}
+
 export function computeLayoutPreset(
   preset: AutomationPreset,
   reports: Report[],
@@ -31,18 +49,17 @@ export function computeLayoutPreset(
 
   if (preset === 'auto-latest') {
     // Top 7 most recent
+    const used = new Set<string>();
     const lead = reports[0]?.id || 'rep-001';
-    const b1_1 = reports[1]?.id || lead;
-    const b1_2 = reports[2]?.id || lead;
-    const b2_1 = reports[3]?.id || lead;
-    const b2_2 = reports[4]?.id || lead;
-    const b2_3 = reports[5]?.id || lead;
+    used.add(lead);
+    const b1 = takeIds(reports, 2, used);
+    const b2 = takeIds(reports, 3, used);
     const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || reports[reports.length - 1]?.id || lead;
 
     return {
       leadReportId: lead,
-      block1ReportIds: [b1_1, b1_2],
-      block2ReportIds: [b2_1, b2_2, b2_3],
+      block1ReportIds: b1,
+      block2ReportIds: b2,
       dossierReportId: dossier,
       automationPreset: 'auto-latest',
       lastUpdated: nowStr,
@@ -61,18 +78,17 @@ export function computeLayoutPreset(
       (id) => pool.find((r) => r.id === id)!
     );
 
+    const used = new Set<string>();
     const lead = uniquePool[0]?.id || reports[0].id;
-    const b1_1 = uniquePool[1]?.id || reports[1]?.id || lead;
-    const b1_2 = uniquePool[2]?.id || reports[2]?.id || lead;
-    const b2_1 = uniquePool[3]?.id || reports[3]?.id || lead;
-    const b2_2 = uniquePool[4]?.id || reports[4]?.id || lead;
-    const b2_3 = uniquePool[5]?.id || reports[5]?.id || lead;
+    used.add(lead);
+    const b1 = takeIds(uniquePool, 2, used);
+    const b2 = takeIds(uniquePool, 3, used);
     const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || uniquePool[6]?.id || lead;
 
     return {
       leadReportId: lead,
-      block1ReportIds: [b1_1, b1_2],
-      block2ReportIds: [b2_1, b2_2, b2_3],
+      block1ReportIds: b1,
+      block2ReportIds: b2,
       dossierReportId: dossier,
       automationPreset: 'auto-impact',
       lastUpdated: nowStr,
@@ -100,18 +116,21 @@ export function computeLayoutPreset(
       }
     });
 
-    const lead = pickedIds[0] || reports[0].id;
-    const b1_1 = pickedIds[1] || reports[1]?.id || lead;
-    const b1_2 = pickedIds[2] || reports[2]?.id || lead;
-    const b2_1 = pickedIds[3] || reports[3]?.id || lead;
-    const b2_2 = pickedIds[4] || reports[4]?.id || lead;
-    const b2_3 = pickedIds[5] || reports[5]?.id || lead;
+    const pool = pickedIds
+      .map((id) => reports.find((r) => r.id === id))
+      .filter((r): r is Report => Boolean(r));
+
+    const used = new Set<string>();
+    const lead = pool[0]?.id || reports[0].id;
+    used.add(lead);
+    const b1 = takeIds(pool, 2, used);
+    const b2 = takeIds(pool, 3, used);
     const dossier = reports.find((r) => r.category === 'INVESTIGACIÓN')?.id || pickedIds[6] || lead;
 
     return {
       leadReportId: lead,
-      block1ReportIds: [b1_1, b1_2],
-      block2ReportIds: [b2_1, b2_2, b2_3],
+      block1ReportIds: b1,
+      block2ReportIds: b2,
       dossierReportId: dossier,
       automationPreset: 'auto-diversity',
       lastUpdated: nowStr,
