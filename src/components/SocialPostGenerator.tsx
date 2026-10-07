@@ -329,6 +329,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Cápsula "● EN DIRECTO" del bug superior: opcional. La hora de emisión se
   // muestra siempre (es parte del aire del canal).
   const [tvShowLive, setTvShowLive] = useState(true);
+  // Hora de emisión en el bug superior: opcional (por defecto visible).
+  const [tvShowClock, setTvShowClock] = useState(true);
   // Intro animada del formato TV: el titular entra escalonado sobre la imagen
   // en B&N y sin audio; al irse se revela el vídeo en color original. El
   // chyron desaparece tras la intro y el titular pasa al ticker inferior.
@@ -565,6 +567,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       version: 2,
       outputFormat: postFormat,
       tvShowLive,
+      tvShowClock,
       tvIntro,
       tvIntroDur,
       appName: `BlackNews ${postFormat} Generator`,
@@ -670,6 +673,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       )
         setPostFormat(data.outputFormat);
       if (typeof data.tvShowLive === "boolean") setTvShowLive(data.tvShowLive);
+      if (typeof data.tvShowClock === "boolean") setTvShowClock(data.tvShowClock);
       if (typeof data.tvIntro === "boolean") setTvIntro(data.tvIntro);
       if (typeof data.tvIntroDur === "number" && data.tvIntroDur > 0) {
         setTvIntroDur(data.tvIntroDur);
@@ -798,6 +802,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     maxVideoDuration,
     postFormat,
     tvShowLive,
+    tvShowClock,
     tvIntro,
     tvIntroDur,
   ]);
@@ -922,6 +927,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const TV_H = 1080;
   const TV_PAD = 64; // margen de seguridad de emisión
   const TV_TICKER_H = 64; // altura del ticker inferior
+  // Velocidad del marquee inferior (px/s a escala 1920): la comparten el
+  // lienzo (desfase por segundo de salida) y la vista previa (duración de la
+  // animación CSS, calculada sobre la celda medida).
+  const TV_TICKER_SPEED = 140;
   const TV_STACK_W = 1240; // ancho del chyron (columna inferior izquierda)
   const TV_STACK_PAD = 36; // aire interior del chyron
   const TV_ACCENT_W = 10; // filete emerald en el borde izquierdo
@@ -958,13 +967,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ? TV_GAP_TITLE_DESC + tvDescLines.length * tvDescLineH
       : 0);
   const tvStackY = TV_H - TV_TICKER_H - tvStackH;
-  // Cinta del ticker: cuño de marca + (con intro: el titular) + países,
-  // repetidos hasta llenar el ancho. Con la intro activa el titular también
-  // viaja por el ticker para que no desaparezca de la señal al irse el chyron.
+  // Cinta del ticker: cuño de marca + (con intro: el titular) + países, que
+  // forman la celda que el marquee inferior desplaza en bucle infinito durante
+  // el vídeo. Con la intro activa el titular también viaja por el ticker para
+  // que no desaparezca de la señal al irse el chyron.
   const tvCountriesStr = getFormattedCountries();
   const tvTickerTitle = title.replace(/\s+/g, " ").trim().toUpperCase();
   const tvTickerItems = [
-    "BLACKNEWS GLOBAL MEDIA",
+    "BLACKNEWS",
     ...(tvIntro && tvTickerTitle
       ? [tvTickerTitle.length > 110 ? `${tvTickerTitle.slice(0, 110)}…` : tvTickerTitle]
       : []),
@@ -973,10 +983,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   /** Dibuja la composición completa de señal de TV sobre el lienzo 1920×1080:
    *  fondo a sangre, velos de legibilidad, bug de canal con enlace y hora,
-   *  chyron inferior izquierda (etiqueta + titular + bajada) y ticker.
-   *  Con la intro activa, `introTime` es el segundo de la salida: mientras
-   *  dure la intro el chyron anima su entrada sobre la imagen en B&N y, al
-   *  terminar, desaparece para dejar el vídeo limpio en color original. */
+   *  chyron inferior izquierda (etiqueta + titular + bajada) y marquee inferior.
+   *  `outTime` es el segundo de la salida (faltante o 0 = estado estático):
+   *  con la intro activa manda sus fases (entrada sobre imagen en B&N y salida
+   *  al revelarse el vídeo en color) y siempre desplaza el marquee del ticker. */
   const drawTvFrame = (
     ctx: CanvasRenderingContext2D,
     mediaElement?: HTMLImageElement | HTMLVideoElement,
@@ -992,15 +1002,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       img: HTMLImageElement | null;
       text: string;
     }> = [],
-    introTime?: number,
+    outTime?: number,
   ) => {
     const W = TV_W;
     const H = TV_H;
 
     // Fases de la intro TV: `introOn` sólo cuando llega un tiempo explícito
-    // (la exportación PNG de póster usa el estado en HOLD vía introTime).
-    const introOn = tvIntro && typeof introTime === "number";
-    const introT = introOn ? introTime : 0;
+    // (la exportación PNG de póster usa el estado en HOLD vía outTime).
+    const introOn = tvIntro && typeof outTime === "number";
+    const introT = introOn ? outTime : 0;
     const inIntro = introOn && introT < tvIntroDur;
     const revealed = introOn && !inIntro;
 
@@ -1116,7 +1126,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillText("BLACKNEWS.", TV_PAD + 58, 52);
     ctx.letterSpacing = "0px";
 
-    // 4) Enlace en directo + hora de emisión (superior derecha)
+    // 4) Enlace en directo + hora de emisión (superior derecha), ambos opcionales
     const now = new Date();
     const clockStr = `${tvPad2(now.getHours())}:${tvPad2(now.getMinutes())}`;
     ctx.font = "700 40px 'Lexend', sans-serif";
@@ -1129,7 +1139,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const liveW = ctx.measureText("EN DIRECTO").width;
       const pillH = 52;
       const pillW = 38 + liveW + 24;
-      const pillX = timeX - 28 - pillW;
+      // Con hora visible la cápsula va a su izquierda; sin hora, a ras del
+      // margen de emisión.
+      const pillX = (tvShowClock ? timeX - 28 : W - TV_PAD) - pillW;
       const pillY = 46;
       ctx.beginPath();
       ctx.roundRect(pillX, pillY, pillW, pillH, 26);
@@ -1147,11 +1159,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.fillText("EN DIRECTO", pillX + 38, pillY + pillH / 2 + 1);
       ctx.textBaseline = "top";
     }
-    ctx.font = "700 40px 'Lexend', sans-serif";
-    ctx.letterSpacing = "1px";
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(clockStr, timeX, 52);
-    ctx.letterSpacing = "0px";
+    if (tvShowClock) {
+      ctx.font = "700 40px 'Lexend', sans-serif";
+      ctx.letterSpacing = "1px";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText(clockStr, timeX, 52);
+      ctx.letterSpacing = "0px";
+    }
     ctx.restore();
 
     // 5) Chyron (bloque inferior izquierdo): etiqueta + titular + bajada.
@@ -1268,7 +1282,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.restore(); // fin grupo del chyron
     }
 
-    // 6) Ticker inferior (cinta de última hora): cuño + marca + países
+    // 6) Marquee inferior (cinta de última hora): cuño emerald fijo + celda
+    //    de marca/titular/países desplazándose en bucle infinito. El desfase
+    //    sale del tiempo de salida, así que avanza con el vídeo (y queda fijo
+    //    en el PNG, que es un solo fotograma).
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, H - TV_TICKER_H, W, TV_TICKER_H);
@@ -1281,20 +1298,40 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.font = "600 24px 'Lexend', sans-serif";
     ctx.letterSpacing = "1.6px";
     ctx.textBaseline = "middle";
+    // Cuño fijo a la izquierda (el texto del marquee pasa a su lado).
     ctx.fillStyle = "#10B981";
     ctx.fillRect(TV_PAD, tickerMidY - 8, 16, 16);
-    let tx = TV_PAD + 34;
-    let tickerIdx = 0;
-    while (tx < W + 200 && tickerIdx < 40) {
-      const item = tvTickerItems[tickerIdx % tvTickerItems.length];
-      ctx.fillStyle =
-        item === "BLACKNEWS GLOBAL MEDIA" ? "#FFFFFF" : "#E2E8F0";
-      ctx.fillText(item, tx, tickerMidY + 1);
-      tx += ctx.measureText(item).width;
-      ctx.fillStyle = "#475569";
-      ctx.fillText("   ·   ", tx, tickerMidY + 1);
-      tx += ctx.measureText("   ·   ").width;
-      tickerIdx++;
+    const tickerTextX = TV_PAD + 34;
+    const tickerSep = "   ·   ";
+    const tickerSepW = ctx.measureText(tickerSep).width;
+    const tickerItemWs = tvTickerItems.map((it) => ctx.measureText(it).width);
+    const tickerCellW = tickerItemWs.reduce((sum, w) => sum + w + tickerSepW, 0);
+    if (Number.isFinite(tickerCellW) && tickerCellW > 0) {
+      const tickerCycle =
+        (((typeof outTime === "number" ? outTime : 0) * TV_TICKER_SPEED) %
+          tickerCellW +
+          tickerCellW) %
+        tickerCellW;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(tickerTextX, H - TV_TICKER_H, W - tickerTextX, TV_TICKER_H);
+      ctx.clip();
+      for (
+        let copyX = tickerTextX - tickerCycle;
+        copyX < W;
+        copyX += tickerCellW
+      ) {
+        let cx = copyX;
+        for (let i = 0; i < tvTickerItems.length; i++) {
+          ctx.fillStyle = i === 0 ? "#FFFFFF" : "#E2E8F0";
+          ctx.fillText(tvTickerItems[i], cx, tickerMidY + 1);
+          cx += tickerItemWs[i];
+          ctx.fillStyle = "#475569";
+          ctx.fillText(tickerSep, cx, tickerMidY + 1);
+          cx += tickerSepW;
+        }
+      }
+      ctx.restore();
     }
     ctx.restore();
 
@@ -1341,9 +1378,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       height: number;
       rotation?: number;
     },
-    // Segundo de la salida para la intro TV (16:9): undefined = sin intro
-    // (o estado en curso) y se pinta la composición normal.
-    introTime?: number,
+    // Segundo de la salida para la intro TV (16:9) y el marquee del ticker:
+    // faltante = composición estática (marquee en su posición 0).
+    outTime?: number,
   ): Promise<void> => {
     const W = POST_W;
     const H = POST_H;
@@ -1405,7 +1442,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         frameOverride,
         isOverlayOnly,
         flagsData,
-        introTime,
+        outTime,
       );
       return;
     }
@@ -1802,7 +1839,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           undefined,
           false,
           undefined,
-          tvIntro ? tvIntroDur * 0.5 : undefined,
+          tvIntro ? tvIntroDur * 0.5 : 0,
         );
       } else {
         const img = await loadImageSafely(mediaSrc);
@@ -1812,7 +1849,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           undefined,
           false,
           undefined,
-          tvIntro ? tvIntroDur * 0.5 : undefined,
+          tvIntro ? tvIntroDur * 0.5 : 0,
         );
       }
 
@@ -1888,7 +1925,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         undefined,
         false,
         undefined,
-        tvIntro ? tvIntroDur * 0.5 : undefined,
+        tvIntro ? tvIntroDur * 0.5 : 0,
       );
 
       canvas.toBlob(async (blob) => {
@@ -2285,14 +2322,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
-      // Fuentes y overlay base (arranque de la intro TV cuando procede).
+      // Fuentes y overlay base (marquee en su posición 0 / arranque de intro).
       await renderToCanvas(
         canvas,
         undefined,
         cachedFlags,
         false,
         undefined,
-        tvIntro ? 0 : undefined,
+        0,
       );
       setRecordingProgress(10);
       snap("warmup");
@@ -2340,10 +2377,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   height: frame.displayHeight,
                   rotation: rot,
                 },
-                // Tiempo de salida del fotograma (intro TV16:9)
-                tvIntro
-                  ? Math.max(0, (frameTimeSec - start) / speed)
-                  : undefined,
+                // Segundo de salida del fotograma: fases de la intro y marquee
+                Math.max(0, (frameTimeSec - start) / speed),
               );
 
               const outPtsUs = Math.round(encoded * targetFrameDurationUs);
@@ -2603,7 +2638,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         cachedFlags,
         false,
         undefined,
-        tvIntro ? 0 : undefined,
+        0,
       );
       setRecordingProgress(10);
 
@@ -2836,7 +2871,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             cachedFlags,
             false,
             undefined,
-            tvIntro ? outT : undefined,
+            outT,
           );
           const ms = performance.now() - tRender;
           frameStats.n++;
@@ -2983,6 +3018,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       : tvInIntro
         ? `${getFilterCss()} grayscale(100%)`
         : getFilterCss(true);
+
+  // ── Marquee del ticker en la vista previa ────────────────────────────────
+  // La celda (marca + titular + países) se mide en px de lienzo 1920 para
+  // que la animación CSS recorra exactamente a TV_TICKER_SPEED px/s: la
+  // misma velocidad que aplica el lienzo exportado por segundo de salida.
+  const tickerCellRef = useRef<HTMLDivElement>(null);
+  const [tickerCellW, setTickerCellW] = useState(0);
+  const tvTickerKey = tvTickerItems.join("\u0000");
+  useEffect(() => {
+    const el = tickerCellRef.current;
+    if (!el) return;
+    const measure = () => setTickerCellW(el.offsetWidth);
+    measure();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
+    return () => ro?.disconnect();
+  }, [tvTickerKey, postFormat]);
+  const tickerMarqueeDur =
+    tickerCellW > 0 ? tickerCellW / TV_TICKER_SPEED : 20;
 
   const previewTitleSize = fontSizeTitle * previewScale;
   const previewDescSize = fontSizeDesc * previewScale;
@@ -4565,6 +4623,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {postFormat === "16:9" && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
+                title="Mostrar la hora de emisión junto al bug de canal"
+              >
+                <input
+                  type="checkbox"
+                  checked={tvShowClock}
+                  onChange={(e) => setTvShowClock(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-white cursor-pointer"
+                />
+                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                  Hora
+                </span>
+              </label>
+            )}
+            {postFormat === "16:9" && (
+              <label
+                className="flex items-center gap-1.5 cursor-pointer select-none"
                 title="Mostrar la cápsula «● EN DIRECTO» junto a la hora"
               >
                 <input
@@ -4694,16 +4768,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           </span>
                         </span>
                       )}
-                      <span
-                        className="font-bold text-white"
-                        style={{
-                          fontSize: 40,
-                          letterSpacing: "1px",
-                          lineHeight: "40px",
-                        }}
-                      >
-                        {tvClockLabel}
-                      </span>
+                      {tvShowClock && (
+                        <span
+                          className="font-bold text-white"
+                          style={{
+                            fontSize: 40,
+                            letterSpacing: "1px",
+                            lineHeight: "40px",
+                          }}
+                        >
+                          {tvClockLabel}
+                        </span>
+                      )}
                     </div>
 
                     {/* Chyron: etiqueta de sección + titular + bajada.
@@ -4848,61 +4924,77 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </div>
                     )}
 
-                    {/* Ticker inferior: cuño + marca + países */}
+                    {/* Marquee inferior: cuño fijo + celda (marca, titular y
+                        países) en bucle infinito mientras se reproduce. */}
+                    <style>{`@keyframes bn-ticker-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
                     <div
                       className="absolute inset-x-0 bottom-0 flex items-center overflow-hidden border-t border-white/15 bg-black"
                       style={{
                         height: TV_TICKER_H,
                         paddingLeft: TV_PAD,
-                        gap: 34,
+                        gap: 18,
                       }}
                     >
                       <span
-                        className="flex shrink-0 items-center font-semibold uppercase text-white"
-                        style={{ gap: 18, fontSize: 24, letterSpacing: "1.6px" }}
-                      >
-                        <span
-                          className="shrink-0 bg-emerald-500"
-                          style={{ width: 16, height: 16 }}
-                        />
-                        BLACKNEWS GLOBAL MEDIA
-                      </span>
-                      {tvIntro && tvTickerTitle && (
-                        <span
-                          className="shrink-0 font-semibold uppercase"
+                        className="shrink-0 bg-emerald-500"
+                        style={{ width: 16, height: 16 }}
+                      />
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <div
                           style={{
-                            fontSize: 24,
-                            letterSpacing: "1.6px",
-                            color: "#E2E8F0",
+                            display: "flex",
+                            width: "max-content",
+                            animation: `bn-ticker-marquee ${tickerMarqueeDur}s linear infinite`,
+                            animationPlayState:
+                              mediaType === "video" && isVideoPlaying
+                                ? "running"
+                                : "paused",
                           }}
                         >
-                          {tvTickerTitle.length > 110
-                            ? `${tvTickerTitle.slice(0, 110)}…`
-                            : tvTickerTitle}
-                        </span>
-                      )}
-                      {tvCountriesStr && (
-                        <span
-                          className="shrink-0 font-semibold uppercase"
-                          style={{
-                            fontSize: 24,
-                            letterSpacing: "1.6px",
-                            color: "#E2E8F0",
-                          }}
-                        >
-                          {tvCountriesStr.toUpperCase()}
-                        </span>
-                      )}
-                      <span
-                        className="shrink-0 font-semibold uppercase"
-                        style={{
-                          fontSize: 24,
-                          letterSpacing: "1.6px",
-                          color: "#E2E8F0",
-                        }}
-                      >
-                        · BLACKNEWS GLOBAL MEDIA
-                      </span>
+                          {[0, 1].map((copy) => (
+                            <div
+                              key={copy}
+                              ref={copy === 0 ? tickerCellRef : undefined}
+                              aria-hidden={copy === 1}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                flexShrink: 0,
+                                gap: 18,
+                              }}
+                            >
+                              {tvTickerItems.map((item, i) => (
+                                <span
+                                  key={i}
+                                  className="flex shrink-0 items-center"
+                                  style={{ gap: 18 }}
+                                >
+                                  <span
+                                    className="font-semibold uppercase"
+                                    style={{
+                                      fontSize: 24,
+                                      letterSpacing: "1.6px",
+                                      color: i === 0 ? "#FFFFFF" : "#E2E8F0",
+                                    }}
+                                  >
+                                    {item}
+                                  </span>
+                                  <span
+                                    className="shrink-0 font-semibold uppercase"
+                                    style={{
+                                      fontSize: 24,
+                                      letterSpacing: "1.6px",
+                                      color: "#475569",
+                                    }}
+                                  >
+                                    ·
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Crédito de foto (derecha, sobre el ticker) */}
@@ -5241,7 +5333,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </>
               )}
               {postFormat === "16:9"
-                ? "Formato 16:9 (1920×1080) con estética de señal de TV: bug de canal con enlace y hora, chyron de titular y ticker inferior (con la intro activa, el titular viaja por el ticker). Óptimo para YouTube, pantallas y barras de noticias."
+                ? "Formato 16:9 (1920×1080) con estética de señal de TV: bug de canal con enlace, hora y «EN DIRECTO» opcionales, chyron de titular y marquee inferior en bucle infinito (con la intro activa, el titular viaja por el marquee). Óptimo para YouTube, pantallas y barras de noticias."
                 : postFormat === "9:16"
                   ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
                   : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
