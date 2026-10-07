@@ -7,6 +7,7 @@ import {
   timeIn,
   visitorClockCity,
 } from "../utils/clock";
+import { CountryFlag, codeFromFlagEmoji } from "./CountryFlag";
 
 /**
  * Barra inferior tipo marquee, pegada al borde de la ventana (baja con el
@@ -57,7 +58,15 @@ export function WorldClockBar() {
             {isReference && (
               <span className="text-neutral-500 font-normal">HORA OFICIAL</span>
             )}
-            <span aria-hidden="true">{city.flag}</span>
+            {/* Banderas por imagen: los emoji de bandera Windows los pinta
+                como dos letras en vez de bandera. */}
+            <span aria-hidden="true" className="inline-flex shrink-0">
+              <CountryFlag
+                code={codeFromFlagEmoji(city.flag) ?? ""}
+                fallback={city.flag}
+                className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block"
+              />
+            </span>
             <span>{city.name}</span>
             <span className="tabular-nums">{timeIn(city.tz, now)}</span>
             <span className="text-neutral-700 font-normal">·</span>
@@ -85,8 +94,12 @@ export function WorldClockBar() {
             <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-2.5 pb-3">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-500 mb-2">
                 <span>Hora en el mundo</span>
-                <span className="text-neutral-400 normal-case tracking-normal">
-                  Referencia: Uruguay 🇺🇾
+                <span className="text-neutral-400 normal-case tracking-normal flex items-center gap-1.5">
+                  Referencia: Uruguay
+                  <CountryFlag
+                    code="UY"
+                    className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block"
+                  />
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-0.5">
@@ -102,7 +115,13 @@ export function WorldClockBar() {
                       }`}
                     >
                       <span className="flex items-center gap-1.5 min-w-0">
-                        <span aria-hidden="true">{city.flag}</span>
+                        <span aria-hidden="true" className="inline-flex shrink-0">
+                          <CountryFlag
+                            code={codeFromFlagEmoji(city.flag) ?? ""}
+                            fallback={city.flag}
+                            className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block"
+                          />
+                        </span>
                         <span className="truncate">{city.name}</span>
                         {isReference && (
                           <span className="text-[9px] uppercase tracking-widest text-neutral-500 shrink-0">

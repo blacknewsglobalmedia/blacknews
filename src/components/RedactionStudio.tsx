@@ -67,7 +67,14 @@ import {
 import { FrontPageManager } from './FrontPageManager';
 import { ImageOptimizationStudio } from './ImageOptimizationStudio';
 import { CategoryManager } from './CategoryManager';
-import { SocialPostGenerator, POPULAR_COUNTRIES, CountryFlag } from './SocialPostGenerator';
+import { SocialPostGenerator, CountryFlag } from './SocialPostGenerator';
+import {
+  addCustomCountry,
+  countryKey,
+  removeCustomCountry,
+  searchCountries,
+  useCountryCatalog,
+} from '../data/countries';
 import { ImportArticleModal } from './ImportArticleModal';
 import { DraftsModal, ArticleDraft } from './DraftsModal';
 import { ServiceUsagePanel } from './ServiceUsagePanel';
@@ -247,6 +254,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [articleCountries, setArticleCountries] = useState<string[]>([]);
   const [countryQuery, setCountryQuery] = useState('');
   const [customCountryName, setCustomCountryName] = useState('');
+  const [customCountryIso, setCustomCountryIso] = useState('');
+  // Catálogo reactivo: destacados + personalizados + resto del mundo.
+  const countryCatalog = useCountryCatalog();
   const [selectedImage, setSelectedImage] = useState(PRESET_IMAGES[0].url);
   const [imageCaption, setImageCaption] = useState('');
   const [customImageUrl, setCustomImageUrl] = useState('');
@@ -392,32 +402,32 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   };
 
   // — Países del acontecimiento: filtro, selección y alta manual —
-  const countryQueryTrimmed = countryQuery.trim().toLowerCase();
-  const filteredCountryItems = countryQueryTrimmed
-    ? POPULAR_COUNTRIES.filter(
-        (c) =>
-          c.name.toLowerCase().includes(countryQueryTrimmed) ||
-          c.code.toLowerCase().includes(countryQueryTrimmed),
-      )
-    : POPULAR_COUNTRIES;
+  // El catálogo amplío llega de useCountryCatalog(); la búsqueda ignora
+  // acentos y también casa por código ISO.
+  const filteredCountryItems = searchCountries(countryQuery, countryCatalog);
 
   const toggleArticleCountry = (name: string) => {
-    setArticleCountries((prev) =>
-      prev.includes(name)
-        ? prev.filter((c) => c !== name)
-        : [...prev, name],
-    );
+    setArticleCountries((prev) => {
+      const key = countryKey(name);
+      return prev.some((c) => countryKey(c) === key)
+        ? prev.filter((c) => countryKey(c) !== key)
+        : [...prev, name];
+    });
   };
 
-  const addCustomArticleCountry = (raw: string) => {
-    const name = raw.trim();
-    if (!name) return;
+  const addCustomArticleCountry = (raw: string, iso?: string) => {
+    // Si el nombre ya está en el catálogo devuelve el país real (con su
+    // bandera); si no, lo da de alta como personalizado y queda guardado
+    // en el listado para próximos artículos.
+    const resolved = addCustomCountry(raw, iso);
+    if (!resolved) return;
     setArticleCountries((prev) =>
-      prev.some((c) => c.toLowerCase() === name.toLowerCase())
+      prev.some((c) => countryKey(c) === countryKey(resolved.name))
         ? prev
-        : [...prev, name],
+        : [...prev, resolved.name],
     );
     setCustomCountryName('');
+    setCustomCountryIso('');
   };
 
   const handleLoadDraft = (draft: ArticleDraft) => {
@@ -427,6 +437,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setArticleCountries(Array.isArray(draft.countries) ? draft.countries : []);
     setCountryQuery('');
     setCustomCountryName('');
+    setCustomCountryIso('');
     if (draft.selectedImage) setSelectedImage(draft.selectedImage);
     if (draft.customImageUrl) setCustomImageUrl(draft.customImageUrl);
     setImageCaption(draft.imageCaption || '');
@@ -468,6 +479,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setArticleCountries([]);
     setCountryQuery('');
     setCustomCountryName('');
+    setCustomCountryIso('');
     setCurrentDraftId(null);
     setEditingReportId(null);
     setPreviewMode(false);
@@ -488,6 +500,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setArticleCountries(Array.isArray(imported.countries) ? imported.countries : []);
     setCountryQuery('');
     setCustomCountryName('');
+    setCustomCountryIso('');
     setLead(imported.lead);
     setReadTime(imported.readTime);
     if (imported.imageCaption) {
@@ -535,6 +548,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     setArticleCountries(report.countries || []);
     setCountryQuery('');
     setCustomCountryName('');
+    setCustomCountryIso('');
     setSelectedImage(report.image);
     setSelectedOptimizedImage(report.optimizedImage);
     setImageCaption(report.imageCaption || '');
@@ -2548,13 +2562,15 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                         <p className="text-[11px] text-neutral-500 font-light mb-2">
                           Se muestran en el mapa de cobertura de portada. Sin
                           países, la noticia se atribuye a «Internacional».
+                          Listado de {countryCatalog.length} países y
+                          territorios; los que añadas abajo quedan guardados.
                         </p>
 
                         {articleCountries.length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 mb-2">
                             {articleCountries.map((name) => {
-                              const item = POPULAR_COUNTRIES.find(
-                                (c) => c.name === name,
+                              const item = countryCatalog.find(
+                                (c) => countryKey(c.name) === countryKey(name),
                               );
                               return (
                                 <span
@@ -2596,16 +2612,29 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                           type="text"
                           value={countryQuery}
                           onChange={(e) => setCountryQuery(e.target.value)}
-                          placeholder="Filtrar países (Israel, Irán, EE.UU...)"
+                          placeholder={`Filtrar entre ${countryCatalog.length} países (Israel, Perú, Portugal...)`}
                           className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 mb-2"
                         />
 
-                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/5">
                           {filteredCountryItems.map((c) => {
-                            const isSelected = articleCountries.includes(c.name);
+                            const isSelected = articleCountries.some((n) =>
+                              countryKey(n) === countryKey(c.name),
+                            );
+                            // Los personalizados se pueden dar de baja del
+                            // listado sin deseleccionar el país con otro click.
+                            const dropCustom = (e: React.SyntheticEvent) => {
+                              e.stopPropagation();
+                              removeCustomCountry(c.name);
+                              setArticleCountries((prev) =>
+                                prev.filter(
+                                  (n) => countryKey(n) !== countryKey(c.name),
+                                ),
+                              );
+                            };
                             return (
                               <button
-                                key={c.code}
+                                key={c.name}
                                 type="button"
                                 onClick={() => toggleArticleCountry(c.name)}
                                 className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] transition-all cursor-pointer ${
@@ -2620,6 +2649,23 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                                   className="w-3.5 h-2.5 object-cover rounded-[1px]"
                                 />
                                 <span>{c.name}</span>
+                                {c.custom && (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Quitar ${c.name} del listado`}
+                                    title="Quitar del listado"
+                                    onClick={dropCustom}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        dropCustom(e);
+                                      }
+                                    }}
+                                    className="p-0.5 -mr-0.5 rounded hover:bg-black/20 text-neutral-500 hover:text-red-400 cursor-pointer"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </span>
+                                )}
                               </button>
                             );
                           })}
@@ -2633,7 +2679,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                         <form
                           onSubmit={(e) => {
                             e.preventDefault();
-                            addCustomArticleCountry(customCountryName);
+                            addCustomArticleCountry(
+                              customCountryName,
+                              customCountryIso,
+                            );
                           }}
                           className="flex items-center gap-1 mt-2"
                         >
@@ -2641,17 +2690,37 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                             type="text"
                             value={customCountryName}
                             onChange={(e) => setCustomCountryName(e.target.value)}
-                            placeholder="Otro país..."
+                            placeholder="Otro país (p. ej. Kosovo)..."
                             className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+                          />
+                          <input
+                            type="text"
+                            value={customCountryIso}
+                            onChange={(e) =>
+                              setCustomCountryIso(
+                                e.target.value
+                                  .toUpperCase()
+                                  .replace(/[^A-Z]/g, '')
+                                  .slice(0, 2),
+                              )
+                            }
+                            placeholder="ISO"
+                            maxLength={2}
+                            title="Código ISO de 2 letras para la bandera (opcional)"
+                            className="w-16 text-center bg-neutral-900 border border-white/10 rounded-xl px-2 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
                           />
                           <button
                             type="submit"
                             className="p-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl cursor-pointer transition-colors"
-                            title="Añadir país personalizado"
+                            title="Guardar país en el listado"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </form>
+                        <p className="text-[10px] text-neutral-500 font-light mt-1 leading-snug">
+                          El país nuevo queda guardado en el listado para
+                          próximos artículos; con código ISO muestra bandera.
+                        </p>
                       </div>
 
                       {/* Fotografía Editorial con Conversión AVIF */}

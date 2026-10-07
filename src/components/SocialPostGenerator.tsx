@@ -37,51 +37,27 @@ import {
 import { Report } from "../types/news";
 import { CATEGORIES } from "../data/newsData";
 import fixWebmDuration from "fix-webm-duration";
+import {
+  addCustomCountry,
+  findCountryByName,
+  searchCountries,
+  useCountryCatalog,
+  type CountryItem,
+} from "../data/countries";
+import {
+  CountryFlag,
+  loadFlagImage,
+  isRegionalFlagEmoji,
+} from "./CountryFlag";
+
+// Las banderas viven en CountryFlag.tsx (compartido con la barra de relojes):
+// se reexportan aquí por compatibilidad con los importers existentes.
+export { CountryFlag, loadFlagImage };
 
 interface SocialPostGeneratorProps {
   reports?: Report[];
   categories?: string[];
 }
-
-export interface CountryItem {
-  name: string;
-  code: string;
-  flag: string;
-}
-
-export const POPULAR_COUNTRIES: CountryItem[] = [
-  { name: "Israel", code: "IL", flag: "🇮🇱" },
-  { name: "Irán", code: "IR", flag: "🇮🇷" },
-  { name: "EE.UU.", code: "US", flag: "🇺🇸" },
-  { name: "China", code: "CN", flag: "🇨🇳" },
-  { name: "Rusia", code: "RU", flag: "🇷🇺" },
-  { name: "Ucrania", code: "UA", flag: "🇺🇦" },
-  { name: "Arabia Saudí", code: "SA", flag: "🇸🇦" },
-  { name: "Líbano", code: "LB", flag: "🇱🇧" },
-  { name: "Siria", code: "SY", flag: "🇸🇾" },
-  { name: "Yemen", code: "YE", flag: "🇾🇪" },
-  { name: "Taiwán", code: "TW", flag: "🇹🇼" },
-  { name: "Corea del Sur", code: "KR", flag: "🇰🇷" },
-  { name: "Corea del Norte", code: "KP", flag: "🇰🇵" },
-  { name: "España", code: "ES", flag: "🇪🇸" },
-  { name: "Reino Unido", code: "GB", flag: "🇬🇧" },
-  { name: "Francia", code: "FR", flag: "🇫🇷" },
-  { name: "Alemania", code: "DE", flag: "🇩🇪" },
-  { name: "Argentina", code: "AR", flag: "🇦🇷" },
-  { name: "Venezuela", code: "VE", flag: "🇻🇪" },
-  { name: "Brasil", code: "BR", flag: "🇧🇷" },
-  { name: "México", code: "MX", flag: "🇲🇽" },
-  { name: "Colombia", code: "CO", flag: "🇨🇴" },
-  { name: "Chile", code: "CL", flag: "🇨🇱" },
-  { name: "Perú", code: "PE", flag: "🇵🇪" },
-  { name: "Japón", code: "JP", flag: "🇯🇵" },
-  { name: "India", code: "IN", flag: "🇮🇳" },
-  { name: "Turquía", code: "TR", flag: "🇹🇷" },
-  { name: "Egipto", code: "EG", flag: "🇪🇬" },
-  { name: "Qatar", code: "QA", flag: "🇶🇦" },
-  { name: "Unión Europea", code: "EU", flag: "🇪🇺" },
-  { name: "Internacional", code: "GLOBAL", flag: "🌐" },
-];
 
 // Categorías canónicas del sitio: fuente única en data/newsData.ts.
 // El selector y los chips usan exactamente la misma lista que la portada.
@@ -89,7 +65,16 @@ export const EXPANDED_CATEGORIES: string[] = CATEGORIES.filter(
   (c) => c !== "TODAS",
 );
 
-// In-memory cache for loaded flag images for canvas rendering
+/** Segmento de la cinta del ticker: `code` dibuja la bandera como imagen
+ *  (flagcdn) y `emoji` es el respaldo de glifo sólo si no es un emoji de
+ *  bandera (en Windows los de bandera salen como letras). */
+interface TickerSeg {
+  text: string;
+  code?: string;
+  emoji?: string;
+}
+type TickerItem = string | TickerSeg[];
+
 /** Imagen por defecto del generador; también es el respaldo del borrador
  *  cuando la URL guardada de un vídeo local ya no existe. */
 const DEFAULT_MEDIA_SRC =
@@ -208,57 +193,6 @@ const tvIntroBoxIn = (t: number) => easeOutCubic(t / 0.35);
 const tvIntroExit = (t: number, dur: number) =>
   clamp01((t - (dur - 0.7)) / 0.6);
 
-const flagImageCache = new Map<string, HTMLImageElement>();
-
-export const loadFlagImage = (
-  code: string,
-): Promise<HTMLImageElement | null> => {
-  if (!code || code === "GLOBAL") return Promise.resolve(null);
-  const lower = code.toLowerCase();
-  if (flagImageCache.has(lower)) {
-    return Promise.resolve(flagImageCache.get(lower)!);
-  }
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      flagImageCache.set(lower, img);
-      resolve(img);
-    };
-    img.onerror = () => resolve(null);
-    img.src = `https://flagcdn.com/w40/${lower}.png`;
-  });
-};
-
-export const CountryFlag: React.FC<{
-  code: string;
-  className?: string;
-  fallback?: string;
-  style?: React.CSSProperties;
-}> = ({
-  code,
-  className = "w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs",
-  fallback = "🌐",
-  style,
-}) => {
-  const [failed, setFailed] = useState(false);
-  if (!code || code === "GLOBAL" || failed) {
-    return (
-      <span className="inline-block text-[11px] leading-none">{fallback}</span>
-    );
-  }
-  return (
-    <img
-      src={`https://flagcdn.com/w40/${code.toLowerCase()}.png`}
-      alt={code}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className={className}
-      style={style}
-    />
-  );
-};
-
 type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
@@ -297,6 +231,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     "names" | "flags-names" | "flags-codes"
   >("names");
   const [countrySearch, setCountrySearch] = useState("");
+  // Catálogo reactivo (destacados + personalizados + resto + Internacional)
+  const countryCatalog = useCountryCatalog();
   const [autoFitHeader, setAutoFitHeader] = useState(true);
   const [headerSize, setHeaderSize] = useState(20);
 
@@ -452,52 +388,43 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return Math.round(((e - s) / videoSpeed) * 10) / 10;
   })();
 
-  // Toggle country selection
+  // Toggle country selection — la identidad es el nombre: dos países
+  // distintos pueden compartir código ISO (p. ej. un personalizado con el
+  // código de Puerto Rico) y no deben interferirse entre sí.
   const handleToggleCountry = (country: CountryItem) => {
+    const name = country.name.toLowerCase();
     setSelectedCountries((prev) => {
-      const exists = prev.some(
-        (c) =>
-          c.code === country.code ||
-          c.name.toLowerCase() === country.name.toLowerCase(),
-      );
+      const exists = prev.some((c) => c.name.toLowerCase() === name);
       if (exists) {
-        return prev.filter(
-          (c) =>
-            c.code !== country.code &&
-            c.name.toLowerCase() !== country.name.toLowerCase(),
-        );
+        return prev.filter((c) => c.name.toLowerCase() !== name);
       } else {
-        return [...prev, country];
+        return [...prev.filter((c) => c.name.toLowerCase() !== name), country];
       }
     });
   };
 
-  // Add custom country
+  // Add custom country: si el nombre ya existe en el catálogo se usa el
+  // país real (con su bandera); si no, se da de alta en el listado
+  // personalizado para reutilizarlo en próximos artículos y posts.
   const handleAddCustomCountry = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = customCountryName.trim();
     if (!trimmed) return;
 
-    const newCountry: CountryItem = {
-      name: trimmed,
-      code: trimmed.toUpperCase().slice(0, 4),
-      flag: "📍",
-    };
+    const target = findCountryByName(trimmed) ?? addCustomCountry(trimmed);
+    if (!target) return;
 
-    if (
-      !selectedCountries.some(
-        (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
-      )
-    ) {
-      setSelectedCountries([...selectedCountries, newCountry]);
+    if (!selectedCountries.some((c) => c.name.toLowerCase() === target.name.toLowerCase())) {
+      setSelectedCountries([...selectedCountries, target]);
     }
     setCustomCountryName("");
-    showToast(`País/Región "${trimmed}" añadido al post`);
+    showToast(`País/Región "${target.name}" añadido al post`);
   };
 
-  // Remove country
-  const handleRemoveCountry = (code: string) => {
-    setSelectedCountries((prev) => prev.filter((c) => c.code !== code));
+  // Remove country — por nombre (identidad única entre seleccionados)
+  const handleRemoveCountry = (country: CountryItem) => {
+    const name = country.name.toLowerCase();
+    setSelectedCountries((prev) => prev.filter((c) => c.name.toLowerCase() !== name));
   };
 
   // Pre-fill from an existing article
@@ -979,6 +906,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const TV_TICKER_SQ = tvUi(16); // cuño cuadrado del marquee
   const TV_TICKER_DX = tvUi(34); // texto del marquee tras el cuño
   const TV_TICKER_GAP = tvUi(18); // hueco cuño → celda (preview)
+  const TV_TICKER_FLAG_W = tvUi(26); // bandera de país en el marquee
+  const TV_TICKER_FLAG_H = tvUi(18); // alto de la bandera en el marquee
+  const TV_TICKER_FLAG_GAP = tvUi(8); // aire bandera → texto
   const TV_CAP_FS = tvUi(24); // crédito de foto sobre el ticker
   const tvStackInnerW = TV_STACK_W - TV_ACCENT_W - TV_STACK_PAD * 2;
   // Fuentes del chyron escaladas a la interfaz: el preview del 16:9 y el
@@ -1018,14 +948,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // forman la celda que el marquee inferior desplaza en bucle infinito durante
   // el vídeo. Con la intro activa el titular también viaja por el ticker para
   // que no desaparezca de la señal al irse el chyron.
-  const tvCountriesStr = getFormattedCountries();
+  //
+  // Los países viajan por segmentos (bandera + nombre): los emoji de bandera
+  // no se renderizan en Windows, así que el marquee dibuja la imagen de la
+  // bandera (flagcdn) igual que ya hace el chyron.
+  const tvTickerCountries: TickerSeg[] = [];
+  if (countryFormat !== "names") {
+    selectedCountries.forEach((c, i) => {
+      if (i > 0) tvTickerCountries.push({ text: " · " });
+      tvTickerCountries.push({
+        code: c.code,
+        emoji: c.flag,
+        text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+      });
+    });
+  } else {
+    selectedCountries.forEach((c, i) => {
+      if (i > 0) tvTickerCountries.push({ text: " · " });
+      tvTickerCountries.push({ text: c.name.toUpperCase() });
+    });
+  }
   const tvTickerTitle = title.replace(/\s+/g, " ").trim().toUpperCase();
-  const tvTickerItems = [
+  const tvTickerItems: TickerItem[] = [
     "BLACKNEWS",
     ...(tvIntro && tvTickerTitle
       ? [tvTickerTitle.length > 110 ? `${tvTickerTitle.slice(0, 110)}…` : tvTickerTitle]
       : []),
-    ...(tvCountriesStr ? [tvCountriesStr.toUpperCase()] : []),
+    ...(tvTickerCountries.length ? [tvTickerCountries] : []),
   ];
 
   /** Dibuja la composición completa de señal de TV sobre el lienzo 1920×1080:
@@ -1368,7 +1317,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const tickerTextX = TV_PAD + TV_TICKER_DX;
     const tickerSep = "   ·   ";
     const tickerSepW = ctx.measureText(tickerSep).width;
-    const tickerItemWs = tvTickerItems.map((it) => ctx.measureText(it).width);
+    // Banderas ya cargadas por el mismo origen que el chyron (flagsData).
+    const flagImgByCode = new Map<string, HTMLImageElement>();
+    for (const f of flagsData) {
+      if (f.img) flagImgByCode.set(f.code, f.img);
+    }
+    /** Ancho de un segmento: bandera (imagen o emoji dibujable) + texto. */
+    const tickerSegW = (seg: TickerSeg): number => {
+      let w = 0;
+      if (seg.code) {
+        const img = flagImgByCode.get(seg.code);
+        if (img) w += TV_TICKER_FLAG_W + TV_TICKER_FLAG_GAP;
+        else if (seg.emoji && !isRegionalFlagEmoji(seg.emoji))
+          w += ctx.measureText(seg.emoji).width + TV_TICKER_FLAG_GAP;
+      }
+      return w + ctx.measureText(seg.text).width;
+    };
+    const tickerItemW = (it: TickerItem): number =>
+      typeof it === "string"
+        ? ctx.measureText(it).width
+        : it.reduce((sum, seg) => sum + tickerSegW(seg), 0);
+    const tickerItemWs = tvTickerItems.map(tickerItemW);
     const tickerCellW = tickerItemWs.reduce((sum, w) => sum + w + tickerSepW, 0);
     if (Number.isFinite(tickerCellW) && tickerCellW > 0) {
       const tickerCycle =
@@ -1388,7 +1357,36 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         let cx = copyX;
         for (let i = 0; i < tvTickerItems.length; i++) {
           ctx.fillStyle = i === 0 ? "#FFFFFF" : "#E2E8F0";
-          ctx.fillText(tvTickerItems[i], cx, tickerMidY + 1);
+          const item = tvTickerItems[i];
+          if (typeof item === "string") {
+            ctx.fillText(item, cx, tickerMidY + 1);
+          } else {
+            // País: bandera como imagen (los emoji de bandera no se pintan
+            // en Windows) seguida de su nombre o código.
+            let sx = cx;
+            for (const seg of item) {
+              if (seg.code) {
+                const img = flagImgByCode.get(seg.code);
+                if (img) {
+                  ctx.drawImage(
+                    img,
+                    sx,
+                    tickerMidY - TV_TICKER_FLAG_H / 2 + 1,
+                    TV_TICKER_FLAG_W,
+                    TV_TICKER_FLAG_H,
+                  );
+                  sx += TV_TICKER_FLAG_W + TV_TICKER_FLAG_GAP;
+                } else if (seg.emoji && !isRegionalFlagEmoji(seg.emoji)) {
+                  ctx.fillText(seg.emoji, sx, tickerMidY + 1);
+                  sx += ctx.measureText(seg.emoji).width + TV_TICKER_FLAG_GAP;
+                }
+              }
+              if (seg.text) {
+                ctx.fillText(seg.text, sx, tickerMidY + 1);
+                sx += ctx.measureText(seg.text).width;
+              }
+            }
+          }
           cx += tickerItemWs[i];
           ctx.fillStyle = "#475569";
           ctx.fillText(tickerSep, cx, tickerMidY + 1);
@@ -3234,7 +3232,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // misma velocidad que aplica el lienzo exportado por segundo de salida.
   const tickerCellRef = useRef<HTMLDivElement>(null);
   const [tickerCellW, setTickerCellW] = useState(0);
-  const tvTickerKey = tvTickerItems.join("\u0000");
+  const tvTickerKey = tvTickerItems
+    .map((it) =>
+      typeof it === "string"
+        ? it
+        : it.map((seg) => `${seg.code ?? ""}\u0001${seg.text}`).join("\u0002"),
+    )
+    .join("\u0000");
   useEffect(() => {
     const el = tickerCellRef.current;
     if (!el) return;
@@ -3334,14 +3338,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? "0.08em"
         : "0.14em";
 
-  // Filtered countries for search
-  const filteredCountries = countrySearch.trim()
-    ? POPULAR_COUNTRIES.filter(
-        (c) =>
-          c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-          c.code.toLowerCase().includes(countrySearch.toLowerCase()),
-      )
-    : POPULAR_COUNTRIES;
+  // Filtered countries for search (catálogo amplio + personalizados;
+  // la búsqueda ignora acentos y también casa por código ISO)
+  const filteredCountries = searchCountries(countrySearch, countryCatalog);
 
   // Elemento de media de la vista previa: un único <video>/<img> compartido
   // por los formatos 4:5/9:16 y por el 16:9 de TV, para que videoRef siga
@@ -3995,7 +3994,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </span>
                   {selectedCountries.map((c) => (
                     <span
-                      key={c.code}
+                      key={c.name}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white/10 text-white rounded-lg text-xs font-semibold border border-white/15"
                     >
                       <CountryFlag
@@ -4006,7 +4005,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span>{c.name}</span>
                       <button
                         type="button"
-                        onClick={() => handleRemoveCountry(c.code)}
+                        onClick={() => handleRemoveCountry(c)}
                         className="hover:text-red-400 transition-colors ml-0.5 cursor-pointer"
                         title={`Quitar ${c.name}`}
                       >
@@ -4035,7 +4034,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   type="text"
                   value={countrySearch}
                   onChange={(e) => setCountrySearch(e.target.value)}
-                  placeholder="Filtrar países (ej. Israel, Irán, EE.UU., China...)"
+                  placeholder={`Filtrar entre ${countryCatalog.length} países (Israel, Perú, Portugal...)`}
                   className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
                 />
 
@@ -4064,13 +4063,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/5">
                 {filteredCountries.map((c) => {
                   const isSelected = selectedCountries.some(
-                    (item) =>
-                      item.code === c.code ||
-                      item.name.toLowerCase() === c.name.toLowerCase(),
+                    (item) => item.name.toLowerCase() === c.name.toLowerCase(),
                   );
                   return (
                     <button
-                      key={c.code}
+                      key={c.name}
                       type="button"
                       onClick={() => handleToggleCountry(c)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
@@ -5036,7 +5033,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                               >
                                 {selectedCountries.map((c, i) => (
                                   <span
-                                    key={c.code}
+                                    key={c.name}
                                     className="flex shrink-0 items-center"
                                     style={{ gap: TV_CTRY_SEP_GAP }}
                                   >
@@ -5175,16 +5172,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                   className="flex shrink-0 items-center"
                                   style={{ gap: TV_TICKER_GAP }}
                                 >
-                                  <span
-                                    className="font-semibold uppercase"
-                                    style={{
-                                      fontSize: TV_TICKER_FS,
-                                      letterSpacing: "1.6px",
-                                      color: i === 0 ? "#FFFFFF" : "#E2E8F0",
-                                    }}
-                                  >
-                                    {item}
-                                  </span>
+                                  {typeof item === "string" ? (
+                                    <span
+                                      className="font-semibold uppercase"
+                                      style={{
+                                        fontSize: TV_TICKER_FS,
+                                        letterSpacing: "1.6px",
+                                        color: i === 0 ? "#FFFFFF" : "#E2E8F0",
+                                      }}
+                                    >
+                                      {item}
+                                    </span>
+                                  ) : (
+                                    /* País: bandera por imagen (los emoji de
+                                       bandera salen como letras en Windows). */
+                                    <span className="flex shrink-0 items-center">
+                                      {item.map((seg, j) => (
+                                        <span
+                                          key={j}
+                                          className="flex shrink-0 items-center"
+                                          style={{ gap: TV_TICKER_FLAG_GAP }}
+                                        >
+                                          {seg.code && (
+                                            <CountryFlag
+                                              code={seg.code}
+                                              fallback={
+                                                seg.emoji &&
+                                                !isRegionalFlagEmoji(seg.emoji)
+                                                  ? seg.emoji
+                                                  : undefined
+                                              }
+                                              className="inline-block shrink-0 object-cover rounded-[1px]"
+                                              style={{
+                                                width: TV_TICKER_FLAG_W,
+                                                height: TV_TICKER_FLAG_H,
+                                              }}
+                                            />
+                                          )}
+                                          {seg.text && (
+                                            <span
+                                              className="font-semibold uppercase"
+                                              style={{
+                                                fontSize: TV_TICKER_FS,
+                                                letterSpacing: "1.6px",
+                                                color:
+                                                  i === 0
+                                                    ? "#FFFFFF"
+                                                    : "#E2E8F0",
+                                              }}
+                                            >
+                                              {seg.text}
+                                            </span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
                                   <span
                                     className="shrink-0 font-semibold uppercase"
                                     style={{
@@ -5262,7 +5305,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
                       >
                         {selectedCountries.map((c, idx) => (
-                          <React.Fragment key={c.code}>
+                          <React.Fragment key={c.name}>
                             {idx > 0 && (
                               <span className="text-neutral-500 text-[10px]">
                                 ·
@@ -5298,7 +5341,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 >
                   {selectedCountries.map((c) => (
                     <span
-                      key={c.code}
+                      key={c.name}
                       className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
                     >
                       <CountryFlag

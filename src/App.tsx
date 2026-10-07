@@ -29,6 +29,7 @@ import { InstallPromo } from "./components/InstallPromo";
 import { TrustSection } from "./components/TrustSection";
 import { SubscriptionModal } from "./components/SubscriptionModal";
 import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS, OLD_CATEGORY_ALIASES } from "./data/newsData";
+import { hydrateCustomCountries } from "./data/countries";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
@@ -633,6 +634,9 @@ export default function App() {
       pullCategories(),
       pullFrontLayout(),
       pullAds(),
+      // Países personalizados del creador: Firestore como fuente de verdad
+      // (se fusiona con la copia local; sin permisos o red no falla).
+      hydrateCustomCountries(),
     ]);
 
     return () => {

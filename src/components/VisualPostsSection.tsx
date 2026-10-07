@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Report, CategoryId } from '../types/news';
 import { CountryFlag } from './SocialPostGenerator';
+import { findCountryByName, matchCountryInText } from '../data/countries';
 import { OptimizedPicture } from './OptimizedPicture';
 
 interface VisualPostsSectionProps {
@@ -21,9 +22,31 @@ interface VisualPostsSectionProps {
   onOpenInStudio?: (report: Report) => void;
 }
 
-// Helper to deduce country from author bureau or tags
+// País que se muestra en las tarjetas de portada, por orden de prioridad:
+//  1) la lista real elegida en el creador de artículos (report.countries);
+//  2) etiquetas y titular contrastados con el catálogo de países;
+//  3) ciudades y alias de los informes antiguos;
+//  4) sin datos → alcance internacional (🌐).
+// El «bureau» del autor a propósito NO se usa: es la sede de la redacción
+// (p. ej. «Zúrich / Central») y atribuía Suiza a todos los despachos.
 export const resolveReportCountry = (report: Report): { name: string; code: string } => {
-  const textToSearch = `${report.author.bureau} ${report.tags.join(' ')} ${report.title}`.toLowerCase();
+  const assigned = (report.countries ?? [])
+    .map((c) => (c || '').trim())
+    .find((c) => c.length > 0);
+  if (assigned) {
+    const item = findCountryByName(assigned);
+    if (item) return { name: item.name.toUpperCase(), code: item.code };
+    // Personalizado fuera del catálogo: nombre visible, sin bandera conocida.
+    return { name: assigned.toUpperCase(), code: 'GLOBAL' };
+  }
+
+  const tagsText = report.tags.join(' ');
+  const fromTags = matchCountryInText(tagsText);
+  if (fromTags) return { name: fromTags.name.toUpperCase(), code: fromTags.code };
+  const fromTitle = matchCountryInText(report.title);
+  if (fromTitle) return { name: fromTitle.name.toUpperCase(), code: fromTitle.code };
+
+  const textToSearch = `${tagsText} ${report.title}`.toLowerCase();
 
   if (textToSearch.includes('zúrich') || textToSearch.includes('ginebra') || textToSearch.includes('suiza')) {
     return { name: 'SUIZA', code: 'CH' };
