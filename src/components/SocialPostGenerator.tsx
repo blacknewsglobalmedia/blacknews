@@ -234,10 +234,12 @@ export const CountryFlag: React.FC<{
   code: string;
   className?: string;
   fallback?: string;
+  style?: React.CSSProperties;
 }> = ({
   code,
   className = "w-4 h-2.5 object-cover rounded-[1px] inline-block shadow-xs",
   fallback = "🌐",
+  style,
 }) => {
   const [failed, setFailed] = useState(false);
   if (!code || code === "GLOBAL" || failed) {
@@ -252,6 +254,7 @@ export const CountryFlag: React.FC<{
       loading="lazy"
       onError={() => setFailed(true)}
       className={className}
+      style={style}
     />
   );
 };
@@ -331,9 +334,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [tvShowLive, setTvShowLive] = useState(true);
   // Hora de emisión en el bug superior: opcional (por defecto visible).
   const [tvShowClock, setTvShowClock] = useState(true);
-  // Intro animada del formato TV: el titular entra escalonado sobre la imagen
-  // en B&N y sin audio; al irse se revela el vídeo en color original. El
-  // chyron desaparece tras la intro y el titular pasa al ticker inferior.
+  // Intro animada del formato TV: es una pasada propia en la que el vídeo
+  // arranca desde su principio en B&N y sin sonido; al terminar la intro el
+  // vídeo vuelve a empezar en color y con sonido. El chyron desaparece tras
+  // la intro y el titular pasa al ticker inferior.
   const [tvIntro, setTvIntro] = useState(true);
   const [tvIntroDur, setTvIntroDur] = useState(5); // segundos de intro
 
@@ -925,24 +929,67 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // carácter a carácter en ambos.
   const TV_W = 1920;
   const TV_H = 1080;
+  // Escala de la interfaz gráfica de la señal (bug, chyron y ticker): se
+  // pidió un 15% más pequeña. Sólo se reducen TAMAÑOS (fuentes, cajas y
+  // huecos); los márgenes de emisión (TV_PAD y las y superiores) no cambian.
+  const TV_UI = 0.85;
+  const tvUi = (n: number) => Math.round(n * TV_UI);
   const TV_PAD = 64; // margen de seguridad de emisión
-  const TV_TICKER_H = 64; // altura del ticker inferior
+  const TV_TICKER_H = tvUi(64); // altura del ticker inferior
   // Velocidad del marquee inferior (px/s a escala 1920): la comparten el
   // lienzo (desfase por segundo de salida) y la vista previa (duración de la
-  // animación CSS, calculada sobre la celda medida).
-  const TV_TICKER_SPEED = 140;
-  const TV_STACK_W = 1240; // ancho del chyron (columna inferior izquierda)
-  const TV_STACK_PAD = 36; // aire interior del chyron
-  const TV_ACCENT_W = 10; // filete emerald en el borde izquierdo
-  const TV_TAG_H = 56; // altura de la etiqueta de sección
-  const TV_GAP_TAG_TITLE = 26;
-  const TV_GAP_TITLE_DESC = 20;
+  // animación CSS, calculada sobre la celda medida). Escala con la interfaz
+  // para conservar el mismo ritmo relativo al tamaño del texto.
+  const TV_TICKER_SPEED = tvUi(140);
+  const TV_STACK_W = tvUi(1240); // ancho del chyron (columna inferior izquierda)
+  const TV_STACK_PAD = tvUi(36); // aire interior del chyron
+  const TV_ACCENT_W = tvUi(10); // filete emerald en el borde izquierdo
+  const TV_TAG_H = tvUi(56); // altura de la etiqueta de sección
+  const TV_GAP_TAG_TITLE = tvUi(26);
+  const TV_GAP_TITLE_DESC = tvUi(20);
+  // Detalles de la interfaz, todos a TV_UI y compartidos por el lienzo y la
+  // vista previa para que sigan calmando carácter a carácter.
+  const TV_BUG_SQ = tvUi(40); // cuadro blanco del cuño
+  const TV_BUG_FS = tvUi(44); // «BLACKNEWS.»
+  const TV_BUG_DX = tvUi(58); // texto del bug desde TV_PAD
+  const TV_BUG_GAP = tvUi(18); // hueco cuadro → texto (preview)
+  const TV_CLOCK_FS = tvUi(40); // hora de emisión
+  const TV_LIVE_FS = tvUi(26); // «● EN DIRECTO»
+  const TV_LIVE_H = tvUi(52); // alto de la cápsula
+  const TV_LIVE_GAP = tvUi(28); // hueco cápsula → hora
+  const TV_LIVE_PAD_L = tvUi(16); // padding izquierdo de la cápsula
+  const TV_LIVE_PAD_R = tvUi(24); // padding derecho (y cierre del ancho)
+  const TV_LIVE_DOT = tvUi(14); // punto rojo y hueco punto → texto
+  const TV_LIVE_DX = tvUi(38); // texto desde el borde de la cápsula
+  const TV_TAG_FS = tvUi(30); // «GEOPOLÍTICA» de la etiqueta
+  const TV_TAG_PADX = tvUi(24); // texto dentro de la etiqueta
+  const TV_TAG_WPAD = tvUi(48); // ancho extra de la etiqueta
+  const TV_TAG_DY = tvUi(40); // desfase de entrada de la etiqueta
+  const TV_CTRY_FS = tvUi(24); // fila de países
+  const TV_CTRY_GAP = tvUi(22); // etiqueta → países (fila)
+  const TV_CTRY_ITEM_GAP = tvUi(14); // hueco entre países (preview)
+  const TV_CTRY_SEP_GAP = tvUi(8); // hueco del «·» de cada país (preview)
+  const TV_CTRY_DY = tvUi(12); // línea base de la fila de países
+  const TV_FLAG_W = tvUi(34);
+  const TV_FLAG_H = tvUi(23);
+  const TV_FLAG_DX = tvUi(42); // paso por bandera
+  const TV_LINE_DY = tvUi(50); // desfase de entrada de titular/bajada
+  const TV_EXIT_DY = tvUi(60); // desfase de salida del chyron
+  const TV_TICKER_FS = tvUi(24); // texto del marquee
+  const TV_TICKER_SQ = tvUi(16); // cuño cuadrado del marquee
+  const TV_TICKER_DX = tvUi(34); // texto del marquee tras el cuño
+  const TV_TICKER_GAP = tvUi(18); // hueco cuño → celda (preview)
+  const TV_CAP_FS = tvUi(24); // crédito de foto sobre el ticker
   const tvStackInnerW = TV_STACK_W - TV_ACCENT_W - TV_STACK_PAD * 2;
-  const tvTitleLineH = Math.round(fontSizeTitle * titleLineHeightRatio);
-  const tvDescLineH = Math.round(fontSizeDesc * descLineHeightRatio);
+  // Fuentes del chyron escaladas a la interfaz: el preview del 16:9 y el
+  // lienzo usan estas medidas (en 4:5/9:16 mandan las originales).
+  const tvTitleFs = Math.round(fontSizeTitle * TV_UI);
+  const tvDescFs = Math.round(fontSizeDesc * TV_UI);
+  const tvTitleLineH = Math.round(tvTitleFs * titleLineHeightRatio);
+  const tvDescLineH = Math.round(tvDescFs * descLineHeightRatio);
   const tvTitleLines = capLines(
     wrapLikeExport(
-      `700 ${fontSizeTitle}px 'Lexend', sans-serif`,
+      `700 ${tvTitleFs}px 'Lexend', sans-serif`,
       title || "Escribe un titular impactante...",
       tvStackInnerW,
     ),
@@ -951,7 +998,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tvDescLines = description.trim()
     ? capLines(
         wrapLikeExport(
-          `400 ${fontSizeDesc}px 'Lexend', sans-serif`,
+          `400 ${tvDescFs}px 'Lexend', sans-serif`,
           description,
           tvStackInnerW,
         ),
@@ -1119,48 +1166,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.save();
     ctx.textBaseline = "top";
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillRect(TV_PAD, 50, 40, 40);
-    ctx.font = "700 44px 'Lexend', sans-serif";
+    ctx.fillRect(TV_PAD, 50, TV_BUG_SQ, TV_BUG_SQ);
+    ctx.font = `700 ${TV_BUG_FS}px 'Lexend', sans-serif`;
     ctx.letterSpacing = "-0.5px";
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillText("BLACKNEWS.", TV_PAD + 58, 52);
+    ctx.fillText("BLACKNEWS.", TV_PAD + TV_BUG_DX, 52);
     ctx.letterSpacing = "0px";
 
     // 4) Enlace en directo + hora de emisión (superior derecha), ambos opcionales
     const now = new Date();
     const clockStr = `${tvPad2(now.getHours())}:${tvPad2(now.getMinutes())}`;
-    ctx.font = "700 40px 'Lexend', sans-serif";
+    ctx.font = `700 ${TV_CLOCK_FS}px 'Lexend', sans-serif`;
     ctx.letterSpacing = "1px";
     const timeW = ctx.measureText(clockStr).width;
     const timeX = W - TV_PAD - timeW;
     if (tvShowLive) {
-      ctx.font = "700 26px 'Lexend', sans-serif";
+      ctx.font = `700 ${TV_LIVE_FS}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "3px";
       const liveW = ctx.measureText("EN DIRECTO").width;
-      const pillH = 52;
-      const pillW = 38 + liveW + 24;
+      const pillH = TV_LIVE_H;
+      const pillW = TV_LIVE_DX + liveW + TV_LIVE_PAD_R;
       // Con hora visible la cápsula va a su izquierda; sin hora, a ras del
       // margen de emisión.
-      const pillX = (tvShowClock ? timeX - 28 : W - TV_PAD) - pillW;
+      const pillX = (tvShowClock ? timeX - TV_LIVE_GAP : W - TV_PAD) - pillW;
       const pillY = 46;
       ctx.beginPath();
-      ctx.roundRect(pillX, pillY, pillW, pillH, 26);
+      ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.28)";
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(pillX + 22, pillY + pillH / 2, 7, 0, Math.PI * 2);
+      ctx.arc(
+        pillX + TV_LIVE_PAD_L + TV_LIVE_DOT / 2,
+        pillY + pillH / 2,
+        TV_LIVE_DOT / 2,
+        0,
+        Math.PI * 2,
+      );
       ctx.fillStyle = "#EF4444";
       ctx.fill();
       ctx.fillStyle = "#FFFFFF";
       ctx.textBaseline = "middle";
-      ctx.fillText("EN DIRECTO", pillX + 38, pillY + pillH / 2 + 1);
+      ctx.fillText("EN DIRECTO", pillX + TV_LIVE_DX, pillY + pillH / 2 + 1);
       ctx.textBaseline = "top";
     }
     if (tvShowClock) {
-      ctx.font = "700 40px 'Lexend', sans-serif";
+      ctx.font = `700 ${TV_CLOCK_FS}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "1px";
       ctx.fillStyle = "#FFFFFF";
       ctx.fillText(clockStr, timeX, 52);
@@ -1177,7 +1230,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const boxIn = inIntro ? tvIntroBoxIn(introT) : 1;
       const exitQ = inIntro ? tvIntroExit(introT, tvIntroDur) : 0;
       const gAlpha = 1 - exitQ * exitQ;
-      const gDy = exitQ * exitQ * 60;
+      const gDy = exitQ * exitQ * TV_EXIT_DY;
       const tagP = inIntro ? tvIntroTagIn(introT) : 1;
       const boxW = TV_STACK_W * boxIn;
       const stackX = TV_PAD;
@@ -1205,23 +1258,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Etiqueta de sección (bloque emerald con texto negro)
       ctx.save();
       ctx.globalAlpha = gAlpha * tagP;
-      ctx.translate(0, (1 - tagP) * 40);
+      ctx.translate(0, (1 - tagP) * TV_TAG_DY);
       const cat = (category || "GEOPOLÍTICA").trim().toUpperCase();
-      ctx.font = "700 30px 'Lexend', sans-serif";
+      ctx.font = `700 ${TV_TAG_FS}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "2.5px";
-      const tagW = ctx.measureText(cat).width + 48;
+      const tagW = ctx.measureText(cat).width + TV_TAG_WPAD;
       ctx.fillStyle = "#10B981";
       ctx.fillRect(chX, chY, tagW, TV_TAG_H);
       ctx.fillStyle = "#000000";
       ctx.textBaseline = "middle";
-      ctx.fillText(cat, chX + 24, chY + TV_TAG_H / 2 + 1);
+      ctx.fillText(cat, chX + TV_TAG_PADX, chY + TV_TAG_H / 2 + 1);
       ctx.textBaseline = "top";
 
       // Países junto a la etiqueta (banderas según el formato elegido)
       if (flagsData.length > 0) {
-        ctx.font = "600 24px 'Lexend', sans-serif";
+        ctx.font = `600 ${TV_CTRY_FS}px 'Lexend', sans-serif`;
         ctx.letterSpacing = "1.5px";
-        let cx = chX + tagW + 22;
+        let cx = chX + tagW + TV_CTRY_GAP;
         const rowMidY = chY + TV_TAG_H / 2;
         // Tope del recorte de la fila en la vista previa (borde del chyron
         // menos su aire interior): así países y banderas cortan igual.
@@ -1229,15 +1282,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         for (let i = 0; i < flagsData.length && cx < maxCx; i++) {
           const item = flagsData[i];
           if (countryFormat !== "names" && item.img) {
-            ctx.drawImage(item.img, cx, rowMidY - 12, 34, 23);
-            cx += 42;
+            ctx.drawImage(
+              item.img,
+              cx,
+              rowMidY - TV_CTRY_DY,
+              TV_FLAG_W,
+              TV_FLAG_H,
+            );
+            cx += TV_FLAG_DX;
           }
           ctx.fillStyle = "#94A3B8";
-          ctx.fillText(item.text, cx, rowMidY - 12);
+          ctx.fillText(item.text, cx, rowMidY - TV_CTRY_DY);
           cx += ctx.measureText(item.text).width;
           if (i < flagsData.length - 1) {
             ctx.fillStyle = "#64748B";
-            ctx.fillText("  ·  ", cx, rowMidY - 12);
+            ctx.fillText("  ·  ", cx, rowMidY - TV_CTRY_DY);
             cx += ctx.measureText("  ·  ").width;
           }
         }
@@ -1246,14 +1305,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       // Titular (máx. 3 líneas) y bajada (máx. 2) con las métricas del usuario
       chY += TV_TAG_H + TV_GAP_TAG_TITLE;
-      ctx.font = `700 ${fontSizeTitle}px 'Lexend', sans-serif`;
+      ctx.font = `700 ${tvTitleFs}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "0px";
       ctx.fillStyle = "#FFFFFF";
       for (let i = 0; i < tvTitleLines.length; i++) {
         const p = inIntro ? tvIntroLineIn(introT, i) : 1;
         ctx.save();
         ctx.globalAlpha = gAlpha * p;
-        ctx.translate(0, (1 - p) * 50);
+        ctx.translate(0, (1 - p) * TV_LINE_DY);
         if (tvTitleLines[i]) {
           ctx.fillText(tvTitleLines[i], chX, chY);
         }
@@ -1262,7 +1321,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
       if (tvDescLines.length > 0) {
         chY += TV_GAP_TITLE_DESC;
-        ctx.font = `400 ${fontSizeDesc}px 'Lexend', sans-serif`;
+        ctx.font = `400 ${tvDescFs}px 'Lexend', sans-serif`;
         ctx.fillStyle = "#CBD5E1";
         for (let j = 0; j < tvDescLines.length; j++) {
           const p = inIntro
@@ -1270,7 +1329,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             : 1;
           ctx.save();
           ctx.globalAlpha = gAlpha * p;
-          ctx.translate(0, (1 - p) * 50);
+          ctx.translate(0, (1 - p) * TV_LINE_DY);
           if (tvDescLines[j]) {
             ctx.fillText(tvDescLines[j], chX, chY);
           }
@@ -1295,13 +1354,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillStyle = "rgba(255,255,255,0.16)";
     ctx.fillRect(0, H - TV_TICKER_H, W, 1);
     const tickerMidY = H - TV_TICKER_H / 2;
-    ctx.font = "600 24px 'Lexend', sans-serif";
+    ctx.font = `600 ${TV_TICKER_FS}px 'Lexend', sans-serif`;
     ctx.letterSpacing = "1.6px";
     ctx.textBaseline = "middle";
     // Cuño fijo a la izquierda (el texto del marquee pasa a su lado).
     ctx.fillStyle = "#10B981";
-    ctx.fillRect(TV_PAD, tickerMidY - 8, 16, 16);
-    const tickerTextX = TV_PAD + 34;
+    ctx.fillRect(
+      TV_PAD,
+      tickerMidY - TV_TICKER_SQ / 2,
+      TV_TICKER_SQ,
+      TV_TICKER_SQ,
+    );
+    const tickerTextX = TV_PAD + TV_TICKER_DX;
     const tickerSep = "   ·   ";
     const tickerSepW = ctx.measureText(tickerSep).width;
     const tickerItemWs = tvTickerItems.map((it) => ctx.measureText(it).width);
@@ -1338,12 +1402,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 7) Crédito de foto (derecha, sobre el ticker)
     if (photoCaption && photoCaption.trim()) {
       ctx.save();
-      ctx.font = "500 24px 'Lexend', sans-serif";
+      ctx.font = `500 ${TV_CAP_FS}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "0px";
       ctx.fillStyle = "#E2E8F0";
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
-      const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + 40);
+      const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + tvUi(40));
       let cap = photoCaption.trim();
       if (maxCapW > 80 && ctx.measureText(cap).width > maxCapW) {
         while (
@@ -2152,6 +2216,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
       const speed = videoSpeed > 0 ? videoSpeed : 1;
       const outDur = (end - start) / speed;
+      // Con intro TV la salida suma una pasada previa: el clip se muestra en
+      // B/N y sin sonido durante tvIntroDur s (dando vueltas si es más corto)
+      // y, al terminar, vuelve a empezar en color con sonido — la misma
+      // estructura que la ruta clásica. La salida total es introPad + outDur.
+      const introPad = tvIntro ? tvIntroDur : 0;
 
       const inRange = samples.filter((s) => {
         const t = s.cts / ts;
@@ -2167,6 +2236,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const syncPts = new Set<number>();
       for (const s of inRange) if (s.is_sync) syncPts.add(outUs(s));
       syncPts.add(sortedPts[0]);
+      // Orden de la salida: pasada de intro (vueltas al clip hasta introPad)
+      // y después la pasada completa. Cada chunk se sella con su tiempo de
+      // SALIDA (µs): el decodificador lo entrega en ese orden y, como sólo se
+      // alimenta lo que va a la pantalla, no hace falta filtrar por rango.
+      const feed: Array<{ s: (typeof inRange)[number]; outUs: number }> = [];
+      if (introPad > 0) {
+        for (let lap = 0; lap * outDur < introPad; lap++) {
+          for (const s of inRange) {
+            const disp = lap * outDur + outUs(s) / 1e6;
+            if (disp >= introPad) break;
+            feed.push({ s, outUs: Math.round(disp * 1e6) });
+          }
+        }
+      }
+      for (const s of inRange) {
+        feed.push({ s, outUs: Math.round(introPad * 1e6 + outUs(s)) });
+      }
 
       // ── 3. Audio: decodificación completa + corte/velocidad en modo offline ──
       let renderedAudio: AudioBuffer | null = null;
@@ -2209,7 +2295,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         while (waiters.length) waiters.shift()!();
       };
       const hardStop =
-        performance.now() + Math.max(45000, outDur * 1000 + 45000);
+        performance.now() +
+        Math.max(45000, (introPad + outDur) * 1000 + 45000);
       const waitWhile = async (cond: () => boolean): Promise<void> => {
         while (cond()) {
           if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
@@ -2342,7 +2429,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const targetFrameDurationUs = Math.round(1_000_000 / targetFps);
 
       const updateProgress = () => {
-        const totalEstimate = Math.max(1, inRange.length);
+        const totalEstimate = Math.max(1, feed.length);
         const pct = Math.min(
           99,
           10 + Math.round((encoded / totalEstimate) * 85),
@@ -2359,41 +2446,39 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           while (decodedQueue.length > 0) {
             if (isCancelledRef.current) break;
             const frame = decodedQueue.shift()!;
-            const frameTimeSec = frame.timestamp / 1e6;
+            await waitWhile(
+              () => (encoder as VideoEncoder).encodeQueueSize > 10,
+            );
+            // Segundo de salida (contador de fotogramas emitidos): manda las
+            // fases de la intro, el marquee y los timestamps del archivo.
+            // No se filtra por rango: sólo entra en el decodificador lo que
+            // se va a emitir (pasada de intro + pasada completa).
+            const outPtsUs = Math.round(encoded * targetFrameDurationUs);
+            await renderToCanvas(
+              canvas,
+              undefined,
+              cachedFlags,
+              false,
+              {
+                source: frame,
+                width: frame.displayWidth,
+                height: frame.displayHeight,
+                rotation: rot,
+              },
+              outPtsUs / 1e6,
+            );
 
-            // Procesar fotogramas dentro del rango [start, end]
-            if (frameTimeSec >= start - 0.03 && frameTimeSec <= end + 0.05) {
-              await waitWhile(
-                () => (encoder as VideoEncoder).encodeQueueSize > 10,
-              );
-              await renderToCanvas(
-                canvas,
-                undefined,
-                cachedFlags,
-                false,
-                {
-                  source: frame,
-                  width: frame.displayWidth,
-                  height: frame.displayHeight,
-                  rotation: rot,
-                },
-                // Segundo de salida del fotograma: fases de la intro y marquee
-                Math.max(0, (frameTimeSec - start) / speed),
-              );
+            const out = new VideoFrame(canvas, {
+              timestamp: outPtsUs,
+              duration: targetFrameDurationUs,
+            });
 
-              const outPtsUs = Math.round(encoded * targetFrameDurationUs);
-              const out = new VideoFrame(canvas, {
-                timestamp: outPtsUs,
-                duration: targetFrameDurationUs,
-              });
+            const isKey = encoded % 60 === 0;
+            (encoder as VideoEncoder).encode(out, { keyFrame: isKey });
+            out.close();
 
-              const isKey = encoded % 60 === 0;
-              (encoder as VideoEncoder).encode(out, { keyFrame: isKey });
-              out.close();
-
-              encoded += 1;
-              updateProgress();
-            }
+            encoded += 1;
+            updateProgress();
             frame.close();
           }
         } catch (e) {
@@ -2415,17 +2500,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       });
       decoder.configure({ codec: String(vTrack.codec), description });
 
-      for (const s of inRange) {
+      for (const item of feed) {
         await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
         (decoder as VideoDecoder).decode(
           new EncodedVideoChunk({
-            type: s.is_sync ? "key" : "delta",
-            timestamp: outUs(s),
+            type: item.s.is_sync ? "key" : "delta",
+            timestamp: item.outUs,
             duration: Math.max(
               1,
-              Math.round((s.duration / ts) * (1 / speed) * 1e6),
+              Math.round((item.s.duration / ts) * (1 / speed) * 1e6),
             ),
-            data: s.data,
+            data: item.s.data,
           }),
         );
       }
@@ -2446,24 +2531,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         const ch0 = ra.getChannelData(0);
         const ch1 = ra.numberOfChannels > 1 ? ra.getChannelData(1) : ch0;
         const frameSize = 1024;
-        // Intro TV: los primeros segundos de salida salen en silencio (el
-        // audio del clip entra al revelarse el vídeo, como en la vía clásica).
-        const introSilence = tvIntro
-          ? Math.min(
-              ra.length,
-              Math.round(Math.min(tvIntroDur, outDur) * 48000),
-            )
-          : 0;
-        for (let i = 0; i < ra.length; i += frameSize) {
+        // Intro TV: la salida arranca con introPad s de silencio y el audio
+        // completo entra cuando el vídeo reinicia (color y con sonido).
+        const introSamples = introPad > 0 ? Math.round(introPad * 48000) : 0;
+        const outLen = introSamples + ra.length;
+        for (let i = 0; i < outLen; i += frameSize) {
           await waitWhile(() => ae.encodeQueueSize > 8);
-          const n = Math.min(frameSize, ra.length - i);
+          const n = Math.min(frameSize, outLen - i);
           const data = new Float32Array(n * 2);
-          data.set(ch0.subarray(i, i + n), 0);
-          data.set(ch1.subarray(i, i + n), n);
-          if (i < introSilence) {
-            const z = Math.min(n, introSilence - i);
-            data.fill(0, 0, z); // canal izquierdo (plano 0)
-            data.fill(0, n, n + z); // canal derecho (plano 1)
+          // Tramo del bloque que cae dentro del audio renderizado; lo demás
+          // queda en silencio (es la pasada de la intro).
+          const from = Math.max(0, introSamples - i);
+          const to = Math.min(n, introSamples + ra.length - i);
+          if (to > from) {
+            const s0 = from + i - introSamples;
+            const len = to - from;
+            data.set(ch0.subarray(s0, s0 + len), from);
+            data.set(ch1.subarray(s0, s0 + len), n + from);
           }
           ae.encode(
             new AudioData({
@@ -2646,12 +2730,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       video.loop = false;
       video.playbackRate = videoSpeed;
       // Con intro, la salida arranca en silencio; `step()` abre el audio al
-      // revelarse el vídeo en color.
+      // terminar la intro, cuando el vídeo reinicia en color con sonido.
       video.muted = isMuted || tvIntro;
 
-      if (Math.abs(video.currentTime - start) > 0.05) {
-        video.currentTime = start;
-        await new Promise<void>((resolve) => {
+      const seekTo = (t: number) =>
+        new Promise<void>((resolve) => {
           let settled = false;
           const onSeeked = () => {
             if (settled) return;
@@ -2660,8 +2743,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             resolve();
           };
           video.addEventListener("seeked", onSeeked);
+          try {
+            video.currentTime = t;
+          } catch {
+            onSeeked();
+          }
           window.setTimeout(onSeeked, 3000);
         });
+
+      if (Math.abs(video.currentTime - start) > 0.05) {
+        await seekTo(start);
       }
 
       let audioTrack: MediaStreamTrack | null = null;
@@ -2731,8 +2822,32 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Arranca ya consumido: el primer setRecordingProgress en caliente dispara
       // un re-render del generador y provoca un tirón visible al inicio.
       let lastProgressAt = performance.now();
+      // Reloj de la intro (TV16:9): los primeros tvIntroDur s de salida son
+      // una pasada propia — el clip desde su principio, en B/N y sin sonido —
+      // y al terminar el vídeo vuelve a empezar en color y con sonido. La
+      // salida total suma ese desfase (introPad) a la duración del clip.
+      const introPad = tvIntro ? tvIntroDur : 0;
+      let introPhase2 = false;
+      let introWall0 = 0;
+      const outTNow = () => {
+        const mediaT = Math.max(
+          0,
+          (video.currentTime - start) / Math.max(videoSpeed, 0.01),
+        );
+        if (!tvIntro) return mediaT;
+        if (!introPhase2) {
+          return Math.min(
+            introWall0 > 0 ? (performance.now() - introWall0) / 1000 : 0,
+            tvIntroDur,
+          );
+        }
+        return introPad + mediaT;
+      };
       let hardDeadline =
-        performance.now() + ((end - start) / videoSpeed) * 1000 + 8000;
+        performance.now() +
+        introPad * 1000 +
+        ((end - start) / videoSpeed) * 1000 +
+        8000;
 
       const stopRecording = () => {
         if (stopped) return;
@@ -2788,11 +2903,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // fotogramas caducos: el vídeo exportado salía entrecortado y sin audio.
       const frameStats = { n: 0, sum: 0, max: 0, slow: 0, lastMediaT: start };
       const reportProgress = () => {
-        const dur = Math.max(end - start, 0.001);
-        const frac = Math.min(
-          1,
-          Math.max(0, (video.currentTime - start) / dur),
-        );
+        const dur = Math.max(end - start, 0.001) / Math.max(videoSpeed, 0.01);
+        const totalOut = introPad + dur;
+        const frac = Math.min(1, Math.max(0, outTNow() / totalOut));
         const pct = Math.min(99, Math.max(lastPct, Math.round(14 + frac * 85)));
         if (pct > lastPct) {
           lastPct = pct;
@@ -2828,17 +2941,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           document.documentElement.setAttribute("data-export-clasica", summary);
           resolve();
         };
-        const onEnded = () => finish("ended-del-video");
+        const onEnded = () => {
+          // En la intro el clip se da vuelta hasta completar tvIntroDur.
+          if (tvIntro && !introPhase2) {
+            video.currentTime = start;
+            if (video.paused) video.play().catch(() => {});
+            return;
+          }
+          finish("ended-del-video");
+        };
         const doneReason = () =>
           isCancelledRef.current
             ? "cancelado"
             : stopped
               ? "detenido"
-              : video.ended
-                ? "fin-del-video"
-                : video.currentTime >= end - 0.02
-                  ? "llego-al-trim"
-                  : null;
+              : tvIntro && !introPhase2
+                ? // En la intro el clip se repite: el fin llega con la
+                  // segunda pasada (o con el cancelado/detenido).
+                  null
+                : video.ended
+                  ? "fin-del-video"
+                  : video.currentTime >= end - 0.02
+                    ? "llego-al-trim"
+                    : null;
         const schedule = () => {
           if (!active) return;
           const anyVideo = video as unknown as {
@@ -2855,11 +2980,34 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (!active) return;
           const early = doneReason();
           if (early) return finish(early);
+          // Intro TV: los primeros tvIntroDur s son una pasada propia. Al
+          // llegar al final el vídeo vuelve a empezar (color y sonido); si el
+          // clip es más corto que la intro, se da vuelta hasta completarla.
+          if (tvIntro && !introPhase2) {
+            const wrap = async () => {
+              await seekTo(start);
+              if (video.paused) {
+                try {
+                  await video.play();
+                } catch {}
+              }
+            };
+            if (performance.now() - introWall0 >= tvIntroDur * 1000) {
+              introPhase2 = true;
+              await wrap();
+              return schedule();
+            }
+            if (
+              video.ended ||
+              video.currentTime >= end - 0.02 ||
+              video.currentTime < start - 0.05
+            ) {
+              await wrap();
+              return schedule();
+            }
+          }
           // Segundo de salida (intro TV16:9): manda el render y el audio.
-          const outT = Math.max(
-            0,
-            (video.currentTime - start) / Math.max(videoSpeed, 0.01),
-          );
+          const outT = outTNow();
           if (tvIntro) {
             const wantMuted = isMuted || outT < tvIntroDur;
             if (video.muted !== wantMuted) video.muted = wantMuted;
@@ -2894,8 +3042,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // política de reproducción, pestaña oculta…), se cierra igualmente.
         deadlineTimer = window.setTimeout(
           () => finish("plazo-de-seguridad"),
-          ((end - start) / Math.max(videoSpeed, 0.01)) * 1000 + 6000,
+          (introPad + (end - start) / Math.max(videoSpeed, 0.01)) * 1000 + 6000,
         );
+        introWall0 = performance.now();
         video
           .play()
           .then(() => schedule())
@@ -2947,11 +3096,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // Real-time proportional metrics for live preview (canvas: 1080px wide;
-  // la tarjeta mide 420 px en 4:5 y 340 px en 9:16 para no disparar en alto).
+  // la tarjeta mide 480 px en 16:9, 420 px en 4:5 y 340 px en 9:16 para no
+  // disparar en alto).
   // Valores fraccionales exactos: al redondear, la vista previa partía las
   // líneas en sitios distintos a los del archivo exportado.
   const previewCardWidth =
-    postFormat === "16:9" ? 560 : postFormat === "9:16" ? 340 : 420;
+    postFormat === "16:9" ? 480 : postFormat === "9:16" ? 340 : 420;
   const previewScale = previewCardWidth / 1080;
   // Ancho REAL de la tarjeta de vista previa. El formato TV escala un lienzo
   // fijo de 1920 px, así que con este medidor el conjunto nunca se recorta
@@ -2969,32 +3119,91 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   }, []);
 
   // ── Intro TV en la vista previa ──────────────────────────────────────────
-  // Segundo de la salida: un rAF sigue el currentTime real (con trim y
-  // velocidad) y sólo actualiza el estado cuando el valor cambia, así un
-  // vídeo en pausa no dispara re-renders.
+  // La intro es una pasada propia: al arrancar el vídeo parte desde su
+  // principio (sin sonido ni color) y, al terminar la intro, vuelve a empezar
+  // en color y con sonido. El reloj acumula tiempo de reproducción en vivo —
+  // no el currentTime, que vuelve a 0 en cada vuelta o en el reinicio — y
+  // queda latcheado al final de la intro para que no se repita sola.
   const [tvIntroT, setTvIntroT] = useState(0);
+  const tvIntroDoneRef = useRef(false);
+  const tvIntroAccumRef = useRef(0);
+  const tvIntroWallRef = useRef(0);
+  const isMutedRef = useRef(isMuted);
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  const updateIntroClock = (v: HTMLVideoElement) => {
+    if (isRecordingRef.current) return;
+    if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
+    if (tvIntroDoneRef.current) {
+      // Intro terminada: el vídeo ya reinició; el reloj se queda al final y
+      // el elemento se sincroniza con el silencio elegido por el usuario.
+      if (v.muted !== isMutedRef.current) v.muted = isMutedRef.current;
+      setTvIntroT((prev) => (prev >= tvIntroDur ? prev : tvIntroDur));
+      return;
+    }
+    const now = performance.now();
+    const last = tvIntroWallRef.current || now;
+    tvIntroWallRef.current = now;
+    if (!v.paused && !v.ended) {
+      // Tope de 250 ms para que un rAF atrasado (o el respaldo ~4 Hz de
+      // timeupdate) no dispare el salto de la intro.
+      tvIntroAccumRef.current += Math.min(250, now - last) / 1000;
+    }
+    const acc = tvIntroAccumRef.current;
+    if (acc >= tvIntroDur) {
+      // Fin de la intro: el vídeo vuelve a empezar con color y con sonido.
+      tvIntroDoneRef.current = true;
+      v.currentTime = trimStart;
+      v.muted = isMutedRef.current;
+      setTvIntroT(tvIntroDur);
+      return;
+    }
+    v.muted = true;
+    setTvIntroT((prev) => (Math.abs(prev - acc) >= 0.02 ? acc : prev));
+  };
+
   useEffect(() => {
     if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
     const v = videoRef.current;
     if (!v) return;
     let raf = 0;
-    let last = -1;
     const tick = () => {
-      if (!isRecordingRef.current) {
-        const t = Math.max(
-          0,
-          (v.currentTime - trimStart) / Math.max(videoSpeed, 0.01),
-        );
-        if (Math.abs(t - last) >= 0.02) {
-          last = t;
-          setTvIntroT(t);
-        }
-      }
+      updateIntroClock(v);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [postFormat, tvIntro, mediaType, trimStart, videoSpeed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postFormat, tvIntro, mediaType, trimStart, tvIntroDur]);
+
+  // Arranque de la intro: el vídeo parte desde su principio y en silencio;
+  // al terminar, el reloj de arriba lo reinicia en color y con sonido. Se
+  // rearma al activar la intro, volver al formato 16:9, cambiar la duración
+  // o cargar otro vídeo: cada activación repite la pasada completa.
+  useEffect(() => {
+    if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
+    if (isRecordingRef.current) return;
+    tvIntroDoneRef.current = false;
+    tvIntroAccumRef.current = 0;
+    tvIntroWallRef.current = 0;
+    setTvIntroT(0);
+    const v = videoRef.current;
+    if (v) {
+      if (Math.abs(v.currentTime - trimStart) > 0.05) v.currentTime = trimStart;
+      v.muted = true;
+      // «Cuando arranque la intro, arranca el vídeo»: con la intro armada la
+      // reproducción arranca aunque el elemento estuviera pausado.
+      v.play().catch(() => {});
+    }
+    return () => {
+      // Al desarmarse se restaura el silencio elegido por el usuario.
+      const el = videoRef.current;
+      if (el && !isRecordingRef.current) el.muted = isMutedRef.current;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tvIntro, postFormat, mediaType, mediaSrc, tvIntroDur]);
 
   // Fase de la intro para la vista previa: con vídeo se sigue el tiempo real;
   // con imagen se pinta el estado "HOLD" (el mismo que exporta el PNG).
@@ -3174,14 +3383,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           }
           // Respaldo del seguimiento de la intro TV: el rAF puede caer a 1 Hz
           // en segundo plano y timeupdate llega ~4 veces por segundo.
-          if (postFormat === "16:9" && tvIntro) {
-            const t = Math.max(
-              0,
-              (e.currentTarget.currentTime - trimStart) /
-                Math.max(videoSpeed, 0.01),
-            );
-            setTvIntroT((prev) => (Math.abs(prev - t) >= 0.02 ? t : prev));
-          }
+          updateIntroClock(e.currentTarget);
         }}
       />
     ) : (
@@ -4595,7 +4797,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {postFormat === "16:9" && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
-                title="Intro animada: el titular entra escalonado sobre la imagen en B&N y sin audio; al irse se revela el vídeo en color original"
+                title="Intro animada: el vídeo arranca desde su principio en B&N y sin sonido y, al terminar la intro, vuelve a empezar en color y con sonido"
               >
                 <input
                   type="checkbox"
@@ -4613,7 +4815,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 value={tvIntroDur}
                 onChange={(e) => setTvIntroDur(Number(e.target.value))}
                 className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-300 rounded-lg px-1.5 py-1 cursor-pointer"
-                title="Duración de la intro (segundos que el titular se lee antes de revelarse el vídeo)"
+                title="Duración de la intro en segundos: pasado ese tiempo el vídeo reinicia desde el principio en color y con sonido"
               >
                 <option value={3}>Intro 3 s</option>
                 <option value={5}>Intro 5 s</option>
@@ -4720,18 +4922,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {/* Bug de canal: cuño + marca */}
                     <div
                       className="absolute flex items-center"
-                      style={{ left: TV_PAD, top: 50, gap: 18 }}
+                      style={{ left: TV_PAD, top: 50, gap: TV_BUG_GAP }}
                     >
                       <div
                         className="shrink-0 bg-white"
-                        style={{ width: 40, height: 40 }}
+                        style={{ width: TV_BUG_SQ, height: TV_BUG_SQ }}
                       />
                       <span
                         className="font-bold text-white"
                         style={{
-                          fontSize: 44,
+                          fontSize: TV_BUG_FS,
                           letterSpacing: "-0.5px",
-                          lineHeight: "44px",
+                          lineHeight: `${TV_BUG_FS}px`,
                         }}
                       >
                         BLACKNEWS.
@@ -4741,27 +4943,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {/* Enlace en directo + hora de emisión */}
                     <div
                       className="absolute flex items-center"
-                      style={{ right: TV_PAD, top: 46, gap: 28 }}
+                      style={{ right: TV_PAD, top: 46, gap: TV_LIVE_GAP }}
                     >
                       {tvShowLive && (
                         <span
                           className="flex items-center rounded-full border border-white/25 bg-black/60"
                           style={{
-                            height: 52,
-                            padding: "0 24px 0 16px",
-                            gap: 14,
+                            height: TV_LIVE_H,
+                            padding: `0 ${TV_LIVE_PAD_R}px 0 ${TV_LIVE_PAD_L}px`,
+                            gap: TV_LIVE_DOT,
                           }}
                         >
                           <span
                             className="shrink-0 rounded-full bg-red-500"
-                            style={{ width: 14, height: 14 }}
+                            style={{ width: TV_LIVE_DOT, height: TV_LIVE_DOT }}
                           />
                           <span
                             className="font-bold text-white"
                             style={{
-                              fontSize: 26,
+                              fontSize: TV_LIVE_FS,
                               letterSpacing: "3px",
-                              lineHeight: "26px",
+                              lineHeight: `${TV_LIVE_FS}px`,
                             }}
                           >
                             EN DIRECTO
@@ -4772,9 +4974,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         <span
                           className="font-bold text-white"
                           style={{
-                            fontSize: 40,
+                            fontSize: TV_CLOCK_FS,
                             letterSpacing: "1px",
-                            lineHeight: "40px",
+                            lineHeight: `${TV_CLOCK_FS}px`,
                           }}
                         >
                           {tvClockLabel}
@@ -4794,7 +4996,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           bottom: TV_TICKER_H,
                           width: TV_STACK_W * tvBoxIn,
                           opacity: 1 - tvExitQ * tvExitQ,
-                          transform: `translateY(${tvExitQ * tvExitQ * 60}px)`,
+                          transform: `translateY(${tvExitQ * tvExitQ * TV_EXIT_DY}px)`,
                         }}
                       >
                         <div
@@ -4806,17 +5008,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                             className="flex items-center overflow-hidden"
                             style={{
                               height: TV_TAG_H,
-                              gap: 22,
+                              gap: TV_CTRY_GAP,
                               opacity: tvTagP,
-                              transform: `translateY(${(1 - tvTagP) * 40}px)`,
+                              transform: `translateY(${(1 - tvTagP) * TV_TAG_DY}px)`,
                             }}
                           >
                             <span
                               className="flex shrink-0 items-center bg-emerald-500 font-bold uppercase text-black"
                               style={{
                                 height: TV_TAG_H,
-                                padding: "0 24px",
-                                fontSize: 30,
+                                padding: `0 ${TV_TAG_PADX}px`,
+                                fontSize: TV_TAG_FS,
                                 letterSpacing: "2.5px",
                               }}
                             >
@@ -4826,8 +5028,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                               <span
                                 className="flex min-w-0 items-center overflow-hidden font-semibold uppercase"
                                 style={{
-                                  gap: 14,
-                                  fontSize: 24,
+                                  gap: TV_CTRY_ITEM_GAP,
+                                  fontSize: TV_CTRY_FS,
                                   letterSpacing: "1.5px",
                                   color: "#94A3B8",
                                 }}
@@ -4836,7 +5038,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                   <span
                                     key={c.code}
                                     className="flex shrink-0 items-center"
-                                    style={{ gap: 8 }}
+                                    style={{ gap: TV_CTRY_SEP_GAP }}
                                   >
                                     {i > 0 && (
                                       <span style={{ color: "#64748B" }}>
@@ -4846,7 +5048,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                     {countryFormat !== "names" && (
                                       <CountryFlag
                                         code={c.code}
-                                        className="inline-block h-[23px] w-[34px] rounded-[1px] object-cover"
+                                        className="inline-block rounded-[1px] object-cover"
+                                        style={{
+                                          height: TV_FLAG_H,
+                                          width: TV_FLAG_W,
+                                        }}
                                       />
                                     )}
                                     <span>
@@ -4862,7 +5068,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           <h1
                             style={{
                               marginTop: TV_GAP_TAG_TITLE,
-                              fontSize: fontSizeTitle,
+                              fontSize: tvTitleFs,
                               lineHeight: `${tvTitleLineH}px`,
                               letterSpacing: 0,
                             }}
@@ -4879,7 +5085,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                   className="block whitespace-nowrap"
                                   style={{
                                     opacity: p,
-                                    transform: `translateY(${(1 - p) * 50}px)`,
+                                    transform: `translateY(${(1 - p) * TV_LINE_DY}px)`,
                                   }}
                                 >
                                   {line || "\u00A0"}
@@ -4891,7 +5097,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                             <p
                               style={{
                                 marginTop: TV_GAP_TITLE_DESC,
-                                fontSize: fontSizeDesc,
+                                fontSize: tvDescFs,
                                 lineHeight: `${tvDescLineH}px`,
                                 letterSpacing: 0,
                                 color: "#CBD5E1",
@@ -4911,7 +5117,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                     className="block whitespace-nowrap"
                                     style={{
                                       opacity: p,
-                                      transform: `translateY(${(1 - p) * 50}px)`,
+                                      transform: `translateY(${(1 - p) * TV_LINE_DY}px)`,
                                     }}
                                   >
                                     {line || "\u00A0"}
@@ -4932,12 +5138,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       style={{
                         height: TV_TICKER_H,
                         paddingLeft: TV_PAD,
-                        gap: 18,
+                        gap: TV_TICKER_GAP,
                       }}
                     >
                       <span
                         className="shrink-0 bg-emerald-500"
-                        style={{ width: 16, height: 16 }}
+                        style={{ width: TV_TICKER_SQ, height: TV_TICKER_SQ }}
                       />
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <div
@@ -4960,19 +5166,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                 display: "flex",
                                 alignItems: "center",
                                 flexShrink: 0,
-                                gap: 18,
+                                gap: TV_TICKER_GAP,
                               }}
                             >
                               {tvTickerItems.map((item, i) => (
                                 <span
                                   key={i}
                                   className="flex shrink-0 items-center"
-                                  style={{ gap: 18 }}
+                                  style={{ gap: TV_TICKER_GAP }}
                                 >
                                   <span
                                     className="font-semibold uppercase"
                                     style={{
-                                      fontSize: 24,
+                                      fontSize: TV_TICKER_FS,
                                       letterSpacing: "1.6px",
                                       color: i === 0 ? "#FFFFFF" : "#E2E8F0",
                                     }}
@@ -4982,7 +5188,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                   <span
                                     className="shrink-0 font-semibold uppercase"
                                     style={{
-                                      fontSize: 24,
+                                      fontSize: TV_TICKER_FS,
                                       letterSpacing: "1.6px",
                                       color: "#475569",
                                     }}
@@ -5004,10 +5210,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         style={{
                           right: TV_PAD,
                           bottom: TV_TICKER_H + 24,
-                          fontSize: 24,
+                          fontSize: TV_CAP_FS,
                           lineHeight: "28px",
                           color: "#E2E8F0",
-                          maxWidth: TV_W - TV_PAD * 2 - TV_STACK_W - 40,
+                          maxWidth: TV_W - TV_PAD * 2 - TV_STACK_W - tvUi(40),
                         }}
                       >
                         {photoCaption.trim()}
@@ -5333,7 +5539,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </>
               )}
               {postFormat === "16:9"
-                ? "Formato 16:9 (1920×1080) con estética de señal de TV: bug de canal con enlace, hora y «EN DIRECTO» opcionales, chyron de titular y marquee inferior en bucle infinito (con la intro activa, el titular viaja por el marquee). Óptimo para YouTube, pantallas y barras de noticias."
+                ? "Formato 16:9 (1920×1080) con estética de señal de TV: bug de canal con enlace, hora y «EN DIRECTO» opcionales, chyron de titular y marquee inferior en bucle infinito (con la intro activa, el vídeo arranca en B/N sin sonido y, al terminar la intro, reinicia en color con sonido mientras el titular viaja por el marquee). Óptimo para YouTube, pantallas y barras de noticias."
                 : postFormat === "9:16"
                   ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
                   : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
