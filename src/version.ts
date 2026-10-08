@@ -6,15 +6,26 @@ import { dateIn, timeIn, REFERENCE_TZ } from './utils/clock';
 export const APP_VERSION = '2.4.0';
 
 /**
- * Sello de build inyectado por Vite (`define` en vite.config.ts).
- * Cambia automáticamente en cada compilación, por lo que el footer permite
- * verificar en cada despliegue que la producción ejecuta el último build.
- * En tiempo de desarrollo (sin inyección) cae a "dev".
+ * Sello de build inyectado por el plugin `bn-build-stamp` de vite.config.ts
+ * como `<meta name="build-stamp">` en el <head> de index.html. Cambia en cada
+ * compilación, por lo que el footer permite verificar en cada despliegue que
+ * la producción ejecuta el último build.
+ *
+ * Se lee del HTML —cuya URL «/» es estable— y no del bundle: una marca de
+ * tiempo embebida en el JS alteraría su hash en cada build, renombraría
+ * assets/index-*.js sin que el código cambie y desincronizaría el service
+ * worker de los visitantes.
+ *
+ * El módulo se evalúa tras parsearse el HTML (el script es `type="module"`,
+ * diferido), así que la meta ya existe. En tiempo de desarrollo el plugin no
+ * inyecta nada y cae a "dev".
  */
-declare const __BUILD_STAMP__: string;
-
 export const BUILD_STAMP: string =
-  typeof __BUILD_STAMP__ === 'string' ? __BUILD_STAMP__ : 'dev';
+  (typeof document !== 'undefined'
+    ? document
+        .querySelector<HTMLMetaElement>('meta[name="build-stamp"]')
+        ?.content.trim()
+    : undefined) || 'dev';
 
 /**
  * Sello legible a partir de `BUILD_STAMP` (que llega en UTC, YYYYMMDD-

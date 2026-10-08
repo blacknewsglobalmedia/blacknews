@@ -8,17 +8,43 @@ export default defineConfig(() => {
   // Sello de build: cambia en cada compilación (local o en Cloudflare) y se
   // muestra en el footer, para comprobar en cada despliegue que la producción
   // ejecuta el último build. Formato UTC: YYYYMMDD-HHMMSS.
+  //
+  // El sello vive en <head> de index.html (URL estable «/»), NUNCA dentro del
+  // bundle JS. Inyectado en el JS, esta marca de tiempo altera el hash de
+  // contenido en cada compilación y renombra assets/index-*.js aunque el
+  // código no haya cambiado: los bundles anteriores desaparecen (Cloudflare
+  // devuelve su HTML de fallback con 200 text/html) y el service worker de los
+  // visitantes queda un paso atrás sirviendo código viejo. En el HTML el
+  // sello sigue cambiando —el pie sigue siendo una prueba fiable del build
+  // desplegado— pero el JS conserva su nombre mientras el código sea igual.
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const buildStamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`;
 
   return {
-    define: {
-      __BUILD_STAMP__: JSON.stringify(buildStamp),
-    },
     plugins: [
       react(),
       tailwindcss(),
+      // Sello de build. Sólo en `build`: en dev no se inyecta la meta y el
+      // pie muestra «dev», como hasta ahora.
+      {
+        name: 'bn-build-stamp',
+        apply: 'build',
+        transformIndexHtml: {
+          order: 'post',
+          handler() {
+            return {
+              tags: [
+                {
+                  tag: 'meta',
+                  attrs: {name: 'build-stamp', content: buildStamp},
+                  injectTo: 'head',
+                },
+              ],
+            };
+          },
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
