@@ -792,11 +792,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
-  // Import JSON configuration
-  const handleApplyJson = (rawText: string) => {
+  // Import JSON configuration. `silent` la usa la restauración del borrador al
+  // montar: aplica la configuración sin tocar el modal de JSON ni el toast, y
+  // sin marcar error si el guardado viene corrupto (así un borrador malo nunca
+  // tumbla el generador).
+  const handleApplyJson = (rawText: string, silent = false) => {
     try {
       if (!rawText.trim()) {
-        setJsonError("Pega un contenido JSON válido.");
+        if (!silent) setJsonError("Pega un contenido JSON válido.");
         return;
       }
       const data = JSON.parse(rawText);
@@ -813,8 +816,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setCountryPlacement(data.content.countryPlacement);
         if (data.content.countryFormat)
           setCountryFormat(data.content.countryFormat);
-        if (Array.isArray(data.content.selectedCountries))
-          setSelectedCountries(data.content.selectedCountries);
+        if (Array.isArray(data.content.selectedCountries)) {
+          // Sólo entran países con forma {code, flag, name}: una cadena o un
+          // objeto incompleto rompía el render en `c.name.toUpperCase()`.
+          const validCountries = data.content.selectedCountries.filter(
+            (c: unknown): c is CountryItem => {
+              if (!c || typeof c !== "object") return false;
+              const cand = c as Partial<CountryItem>;
+              return (
+                typeof cand.name === "string" &&
+                cand.name.trim() !== "" &&
+                typeof cand.code === "string" &&
+                typeof cand.flag === "string"
+              );
+            },
+          );
+          setSelectedCountries(validCountries);
+        }
       }
       if (
         data.outputFormat === "4:5" ||
@@ -895,14 +913,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (mediaUrl) setMediaSrc(mediaUrl);
         else if (videoFallback) setMediaSrc(DEFAULT_MEDIA_SRC);
       }
-      setIsJsonModalOpen(false);
-      setJsonError(null);
-      setJsonInputText("");
-      showToast("✓ ¡Post restaurado con éxito desde JSON!");
+      if (!silent) {
+        setIsJsonModalOpen(false);
+        setJsonError(null);
+        setJsonInputText("");
+        showToast("✓ ¡Post restaurado con éxito desde JSON!");
+      }
     } catch (err: any) {
-      setJsonError(
-        "Formato JSON no válido: " + (err.message || "error de sintaxis"),
-      );
+      // Un borrador ilegible no debe romper el generador ni poner un error en
+      // pantalla al cargar: en modo silencioso simplemente no se restaura nada.
+      if (!silent)
+        setJsonError(
+          "Formato JSON no válido: " + (err.message || "error de sintaxis"),
+        );
     }
   };
 
@@ -918,9 +941,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     reader.readAsText(file);
   };
 
+  // El borrador sólo se restaura una vez al montar; mientras tanto el
+  // autoguardado de abajo no debe escribir, o pisaría la configuración
+  // guardada (formato 16:9, modo vídeo, controles de TV) con los valores por
+  // defecto y se perdería para siempre.
+  const draftRestoredRef = useRef(false);
+
   // Auto-save to localStorage so updates or refreshes never wipe their work
   useEffect(() => {
     const timeout = setTimeout(() => {
+      if (!draftRestoredRef.current) return;
       try {
         const config = getPostConfigObject();
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
@@ -966,11 +996,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.content?.title && parsed.content.title.trim() !== "") {
-          handleApplyJson(saved);
+        // Se restaura siempre que sea un objeto de borrador, aunque el titular
+        // esté vacío: el formato de salida, el modo vídeo y los ajustes de TV
+        // viven aquí y perderlos por un campo vacío dejaba el generador en los
+        // valores por defecto (4:5 + imagen, sin Intro ni Cierre BlackNews).
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          handleApplyJson(saved, true);
         }
       }
-    } catch {}
+    } catch {} finally {
+      draftRestoredRef.current = true;
+    }
   }, []);
 
   // Las líneas de la vista previa se miden con la métrica real de Lexend: al
