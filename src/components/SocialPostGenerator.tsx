@@ -2621,6 +2621,111 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
+  // ─── Miniatura de portada (vista previa en vivo) ────────────────────────
+  // La miniatura se pinta con el MISMO renderPortadaToCanvas de la descarga,
+  // así que lo que se ve es exactamente lo que se baja (1920×1080, a esa
+  // resolución y no en un lienzo de mentira). Como medir y rellenar el titular
+  // en 1920×1080 no es gratis, el repintado va con retardo de 400 ms: nunca se
+  // redibuja por cada tecla mientras se escribe.
+  const portadaCanvasRef = useRef<HTMLCanvasElement>(null);
+  const portadaImgCacheRef = useRef<{
+    src: string;
+    img: HTMLImageElement | null;
+  }>({ src: "", img: null });
+  const portadaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const portadaRenderRef = useRef<() => Promise<void>>(async () => {});
+
+  const renderPortadaPreview = async () => {
+    const canvas = portadaCanvasRef.current;
+    if (!canvas) return;
+
+    let mediaEl: HTMLImageElement | HTMLVideoElement | undefined;
+    if (mediaType === "video") {
+      const v = videoRef.current;
+      if (v && v.readyState >= 2) mediaEl = v;
+    } else {
+      // La foto se cachea por URL: sin ella se crearía un <img> nuevo (y una
+      // decodificación) en cada repintado, que va a ritmo de un segundo.
+      if (portadaImgCacheRef.current.src !== mediaSrc) {
+        const img = await loadImageSafely(mediaSrc);
+        portadaImgCacheRef.current = { src: mediaSrc, img };
+      }
+      const img = portadaImgCacheRef.current.img;
+      if (img && img.complete && img.naturalWidth > 0) mediaEl = img;
+    }
+
+    const flagsData = await Promise.all(
+      selectedCountries.map(async (c) => ({
+        code: c.code,
+        img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+        text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+      })),
+    );
+
+    await renderPortadaToCanvas(canvas, mediaEl, flagsData);
+  };
+
+  // Los bucles de más abajo (intervalo del vídeo y «seeked») viven mucho
+  // tiempo: apuntan a esta referencia para que siempre repinten con el titular
+  // y los países de ahora, no con los del render en que se montaron.
+  useEffect(() => {
+    portadaRenderRef.current = renderPortadaPreview;
+  });
+
+  // Primer pintado sin esperar al retardo, para que el hueco no salga negro.
+  useEffect(() => {
+    void portadaRenderRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (portadaTimerRef.current) clearTimeout(portadaTimerRef.current);
+    portadaTimerRef.current = setTimeout(() => {
+      void portadaRenderRef.current();
+    }, 400);
+    return () => {
+      if (portadaTimerRef.current) clearTimeout(portadaTimerRef.current);
+    };
+  }, [
+    title,
+    description,
+    category,
+    selectedCountries,
+    countryFormat,
+    filter,
+    brightness,
+    contrast,
+    mediaSrc,
+    mediaType,
+    isVideoPlaying,
+    videoDuration,
+  ]);
+
+  // Con el vídeo en marcha la miniatura sigue el fotograma (uno por segundo):
+  // el fotograma de la portada se elige pausando, y al pausar el cambio de
+  // isVideoPlaying ya dispara el repintado con retardo.
+  useEffect(() => {
+    if (mediaType !== "video") return;
+    const id = setInterval(() => {
+      const v = videoRef.current;
+      if (!v || v.paused || v.ended || v.readyState < 2) return;
+      void portadaRenderRef.current();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [mediaType]);
+
+  // Al arrastrar el recorte (seek) no cambia ningún estado: sin este listener
+  // la miniatura se quedaría en el fotograma anterior hasta el siguiente
+  // segundo en marcha.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onSeek = () => {
+      void portadaRenderRef.current();
+    };
+    v.addEventListener("seeked", onSeek);
+    return () => v.removeEventListener("seeked", onSeek);
+  }, [mediaType, mediaSrc]);
+
   // ─── Exportación de video 100% en el navegador ─────────────────────────
   // El post (frame del video + overlay tipográfico) se compone en un canvas y se
   // exporta en el equipo del usuario: nada se sube a un servidor (el antiguo
@@ -6407,6 +6512,41 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             )}
           </div>
 
+          {/* Miniatura de portada: la misma composición que se descarga,
+              pintada en vivo. El botón queda debajo, a un clic de la vista
+              previa que lo muestra. */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+                Miniatura · Portada 16:9
+              </span>
+              <span className="text-[10px] font-mono text-neutral-500">
+                1920×1080
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
+              <canvas
+                ref={portadaCanvasRef}
+                width={1920}
+                height={1080}
+                className="block w-full h-auto"
+                aria-label="Vista previa de la portada 16:9"
+              />
+            </div>
+
+            <button
+              type="button"
+              disabled={isExporting || isRecordingVideo}
+              onClick={handleExportPortada}
+              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider rounded-xl border border-emerald-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Descargar Portada · 1920×1080</span>
+            </button>
+          </div>
+
           {/* Export Action Buttons */}
           <div className="space-y-2.5 pt-2">
             {/* Primary: Export Video or Export PNG depending on mediaType */}
@@ -6512,18 +6652,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </>
               )}
             </div>
-
-            {/* Portada: fotograma actual + titular + logo, 16:9 a sangre */}
-            <button
-              type="button"
-              disabled={isExporting || isRecordingVideo}
-              onClick={handleExportPortada}
-              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider rounded-xl border border-emerald-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
-            >
-              <ImageIcon className="w-4 h-4" />
-              <span>Descargar Portada · 1920×1080</span>
-            </button>
 
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
               {mediaType === "video" && exportClipSeconds !== null && (
