@@ -49,6 +49,9 @@ import {
   loadFlagImage,
   isRegionalFlagEmoji,
 } from "./CountryFlag";
+// Cierre de marca (opcional, apagado por defecto): se añade al final de los
+// vídeos exportados y de la vista previa. Vite lo sirve como asset estático.
+import outroVideoSrc from "../assets/videos/Blacknews.mp4";
 
 // Las banderas viven en CountryFlag.tsx (compartido con la barra de relojes):
 // se reexportan aquí por compatibilidad con los importers existentes.
@@ -176,6 +179,191 @@ const capLines = (lines: string[], max: number): string[] => {
   return capped;
 };
 
+/** Duración de respaldo del cierre (Blacknews.mp4) mientras no carguen los
+ *  metadatos del <video>: sólo la muestra la UI y cierra plazos del export. */
+const OUTRO_DUR_FALLBACK = 11.3;
+
+/** Pinta un fotograma del cierre de marca a sangre del lienzo SIN overlays
+ *  (sin chyron, sin ticker, sin velos): es un sello de cierre, no una toma del
+ *  reportaje. Encuadre «contain» sobre negro para no recortar el sello en los
+ *  formatos verticales; con el negro AMOLED las bandas pasan desapercibidas y
+ *  en 16:9 (1920×1000 en 1920×1080) apenas se notan 40 px. Los tamaños van en
+ *  enteros para no dejar costuras de medio píxel contra el negro. */
+const paintOutroFrame = (
+  targetCanvas: HTMLCanvasElement,
+  W: number,
+  H: number,
+  source: CanvasImageSource,
+  sw: number,
+  sh: number,
+  rot = 0,
+): void => {
+  if (targetCanvas.width !== W) targetCanvas.width = W;
+  if (targetCanvas.height !== H) targetCanvas.height = H;
+  const ctx = targetCanvas.getContext("2d");
+  if (!ctx || !sw || !sh) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.filter = "none";
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, W, H);
+  const spin = ((rot % 360) + 360) % 360;
+  const dispW = spin % 180 === 90 ? sh : sw;
+  const dispH = spin % 180 === 90 ? sw : sh;
+  const scale = Math.min(W / dispW, H / dispH);
+  const dw = Math.round(dispW * scale);
+  const dh = Math.round(dispH * scale);
+  if (!spin) {
+    ctx.drawImage(source, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+    return;
+  }
+  // Con giro (tkhd de móvil): se rota alrededor del centro con la caja previa
+  // al giro, para que tras girar ocupe exactamente dw×dh.
+  const bw = spin % 180 === 90 ? dh : dw;
+  const bh = spin % 180 === 90 ? dw : dh;
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate((spin * Math.PI) / 180);
+  ctx.drawImage(source, -bw / 2, -bh / 2, bw, bh);
+  ctx.restore();
+};
+
+/** Muestras y metadata de un MP4 H.264 listas para WebCodecs. */
+interface DemuxedAvcClip {
+  samples: Array<{
+    cts: number;
+    duration: number;
+    is_sync: boolean;
+    data: Uint8Array;
+  }>;
+  /** timescale de la pista de vídeo (p. ej. 90000). */
+  ts: number;
+  /** duración declarada de la pista en segundos (0 si es fragmentado). */
+  srcDur: number;
+  /** avcC empaquetado (ISO 14496-15) para VideoDecoder.configure. */
+  description: Uint8Array;
+  /** giro de tkhd en grados (0/90/180/270). */
+  rot: number;
+  codec: string;
+}
+
+/** Demux MP4 → muestras en orden de decodificación + descripción avcC.
+ *  Devuelve null si el archivo no es AVC decodificable (la ruta rápida lo
+ *  salta a la clásica); lanza si mp4box encuentra un error real del archivo. */
+const demuxAvcClip = async (
+  raw: ArrayBuffer,
+): Promise<DemuxedAvcClip | null> => {
+  const { createFile } = await import("mp4box");
+  const mp4 = createFile(true);
+  const samples: DemuxedAvcClip["samples"] = [];
+  let readyInfo: any = null;
+  let demuxError: string | null = null;
+  mp4.onError = (e) => {
+    demuxError = String(e);
+  };
+  mp4.onReady = (ready) => {
+    readyInfo = ready;
+    const vt = (ready as any).tracks?.find((t: any) => t.type === "video");
+    if (vt) {
+      // Extrae todas las muestras de golpe (se dispara dentro de appendBuffer)
+      mp4.setExtractionOptions(vt.id, null, { nbSamples: 1000000 });
+      mp4.start();
+    }
+  };
+  mp4.onSamples = (_id, _user, batch) => {
+    for (const s of batch as any[]) samples.push(s);
+  };
+  const buf = raw as ArrayBuffer & { fileStart: number };
+  buf.fileStart = 0;
+  mp4.appendBuffer(buf);
+  if (typeof (mp4 as any).flush === "function") (mp4 as any).flush();
+  if (demuxError) throw new Error(demuxError);
+
+  const vTrack = readyInfo?.tracks?.find((t: any) => t.type === "video");
+  if (!vTrack || samples.length < 2 || !/^avc1/.test(String(vTrack.codec)))
+    return null;
+
+  // avcC → descripción binaria que necesita VideoDecoder (ISO 14496-15)
+  const stsd = (mp4.getTrackById(vTrack.id) as any)?.mdia?.minf?.stbl?.stsd;
+  const avcCBox = stsd?.entries?.[0]?.avcC;
+  // mp4box v2 envuelve cada NALU en { length, data } donde data son los bytes
+  const toNalBytes = (nal: unknown): Uint8Array => {
+    const anyNal = nal as any;
+    const src =
+      anyNal instanceof Uint8Array || Array.isArray(anyNal)
+        ? anyNal
+        : anyNal?.data;
+    if (src instanceof Uint8Array) return src;
+    if (Array.isArray(src)) return Uint8Array.from(src);
+    if (src && typeof src === "object") return Uint8Array.from(Object.values(src));
+    return new Uint8Array(0);
+  };
+  const spsList = ((avcCBox?.SPS ?? []) as unknown[])
+    .map(toNalBytes)
+    .filter((b) => b.length > 0);
+  const ppsList = ((avcCBox?.PPS ?? []) as unknown[])
+    .map(toNalBytes)
+    .filter((b) => b.length > 0);
+  if (spsList.length === 0) return null;
+  const descSize =
+    7 +
+    spsList.reduce((n, s) => n + 2 + s.length, 0) +
+    ppsList.reduce((n, p) => n + 2 + p.length, 0);
+  const description = new Uint8Array(descSize);
+  let dOff = 0;
+  description[dOff++] = 1; // configurationVersion
+  description[dOff++] = avcCBox.AVCProfileIndication ?? 0x4d;
+  description[dOff++] = avcCBox.profile_compatibility ?? 0x00;
+  description[dOff++] = avcCBox.AVCLevelIndication ?? 0x1f;
+  description[dOff++] = 0xff; // reservado + lengthSizeMinusOne = 3
+  description[dOff++] = 0xe0 | spsList.length;
+  for (const nal of spsList) {
+    description[dOff++] = (nal.length >> 8) & 0xff;
+    description[dOff++] = nal.length & 0xff;
+    description.set(nal, dOff);
+    dOff += nal.length;
+  }
+  description[dOff++] = ppsList.length;
+  for (const nal of ppsList) {
+    description[dOff++] = (nal.length >> 8) & 0xff;
+    description[dOff++] = nal.length & 0xff;
+    description.set(nal, dOff);
+    dOff += nal.length;
+  }
+
+  // Rotación declarada en tkhd: los móviles guardan el vídeo "acostado" y el
+  // <video> la aplica solo; los fotogramas decodificados llegan en crudo.
+  const norm = (v: number) => (v > 0x7fffffff ? v - 0x100000000 : v);
+  const m: ArrayLike<number> | undefined = (
+    mp4.getTrackById(vTrack.id) as any
+  )?.tkhd?.matrix;
+  let rot = 0;
+  if (m && m.length >= 5) {
+    const a = norm(Number(m[0]));
+    const b = norm(Number(m[1]));
+    const c = norm(Number(m[3]));
+    const d = norm(Number(m[4]));
+    // ISO 14496: x' = a·x + c·y ; y' = b·x + d·y (píxeles que ve el <video>).
+    // b=−1,c=+1 ⇒ la derecha del origen queda arriba = giro antihorario ⇒
+    // ctx.rotate(270°); b=+1 es el sentido contrario ⇒ ctx.rotate(90°).
+    if (a === 0 && b === -65536 && c === 65536 && d === 0) rot = 270;
+    else if (a === -65536 && b === 0 && c === 0 && d === -65536) rot = 180;
+    else if (a === 0 && b === 65536 && c === -65536 && d === 0) rot = 90;
+  }
+
+  const ts = Number(vTrack.timescale) || 90000;
+  return {
+    samples,
+    ts,
+    srcDur: Number(vTrack.duration) / ts,
+    description,
+    rot,
+    codec: String(vTrack.codec),
+  };
+};
+
 // ── Intro animada del formato TV (16:9) ─────────────────────────────────────
 // Curvas compartidas por el lienzo y la vista previa: el titular del chyron
 // entra escalonado durante los primeros segundos, se mantiene y sale al final
@@ -276,6 +464,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // la intro y el titular pasa al ticker inferior.
   const [tvIntro, setTvIntro] = useState(true);
   const [tvIntroDur, setTvIntroDur] = useState(5); // segundos de intro
+  // Cierre de marca opcional (Blacknews.mp4): APAGADO por defecto. Cuando está
+  // activo, la vista previa y el archivo exportado terminan reproduciendo el
+  // sello de cierre — a sangre del lienzo, sin chyron ni ticker — y con su
+  // audio (salvo que se exporte en silencio). Todos los formatos: 4:5, 9:16 y
+  // 16:9.
+  const [videoOutro, setVideoOutro] = useState(false);
+  const [outroDuration, setOutroDuration] = useState(OUTRO_DUR_FALLBACK);
+  // true mientras el cierre ocupa la vista previa (y durante su fase en la
+  // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
+  const [outroActive, setOutroActive] = useState(false);
+  const outroActiveRef = useRef(false);
 
   // Filters & Appearance
   const [filter, setFilter] = useState<MediaFilter>("bw-high");
@@ -340,6 +539,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const recBarRef = useRef<HTMLDivElement>(null);
   const recPctRef = useRef<HTMLSpanElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // <video> del cierre de marca: lo comparten la vista previa y la fase de
+  // cierre de la ruta clásica (queda visible mientras graba, para que el
+  // navegador decodifique fotogramas y el usuario vea lo que se está grabando).
+  const outroRef = useRef<HTMLVideoElement>(null);
+  // Nodo WebAudio del cierre: un elemento sólo puede enrutarce una vez, así que
+  // se guarda junto a su elemento por si React lo vuelve a montar.
+  const outroAudioNodeRef = useRef<{
+    el: HTMLVideoElement;
+    node: MediaElementAudioSourceNode;
+  } | null>(null);
   // WebAudio graph for the preview video (created on first export with sound and
   // reused afterwards: a media element can only be routed through one source node)
   const audioGraphRef = useRef<{
@@ -387,6 +596,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (!(e > s)) return null;
     return Math.round(((e - s) / videoSpeed) * 10) / 10;
   })();
+  // Total con el cierre BlackNews encendido: lo que de verdad durará el
+  // archivo. La intro TV16:9 no se suma aquí porque sólo alarga la salida.
+  const exportTotalSeconds =
+    exportClipSeconds === null
+      ? null
+      : Math.round(
+          (exportClipSeconds + (videoOutro ? outroDuration : 0)) * 10,
+        ) / 10;
 
   // Toggle country selection — la identidad es el nombre: dos países
   // distintos pueden compartir código ISO (p. ej. un personalizado con el
@@ -538,6 +755,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         videoQuality,
         videoFormat,
         maxVideoDuration,
+        // Cierre de marca (Blacknews.mp4) al final del vídeo. Por defecto false.
+        videoOutro,
         mediaUrl: mediaSrc.startsWith("blob:") ? null : mediaSrc,
       },
     };
@@ -671,6 +890,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setVideoFormat(data.mediaSettings.videoFormat);
         if (typeof data.mediaSettings.maxVideoDuration === "number")
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
+        if (typeof data.mediaSettings.videoOutro === "boolean")
+          setVideoOutro(data.mediaSettings.videoOutro);
         if (mediaUrl) setMediaSrc(mediaUrl);
         else if (videoFallback) setMediaSrc(DEFAULT_MEDIA_SRC);
       }
@@ -731,6 +952,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     videoQuality,
     videoFormat,
     maxVideoDuration,
+    videoOutro,
     postFormat,
     tvShowLive,
     tvShowClock,
@@ -1450,7 +1672,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 1) Todo el trabajo asíncrono ANTES de tocar el lienzo: si esperamos fuentes
     //    o banderas despejándolo, el capturador del grabador de video puede leer un
     //    fotograma a medio pintar (parpadeos, "rayas" y macrobloques en el archivo).
-    if (!cachedFlags && document.fonts) {
+    //    Esperamos las fuentes también con banderas precargadas: si Lexend 600
+    //    llegara a mitad de export, `measureText` cambiaría y la cinta saltaría.
+    if (document.fonts) {
       await document.fonts.ready;
     }
     const flagsData =
@@ -2065,6 +2289,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setIsVideoPlaying(false);
 
     let decoder: VideoDecoder | null = null;
+    let outroDecoder: VideoDecoder | null = null;
     let encoder: VideoEncoder | null = null;
     let audioEncoder: AudioEncoder | null = null;
     // Tiempos por fase: visibles en DevTools con nivel "Verbose" ([export-rapida])
@@ -2075,117 +2300,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       );
 
     try {
-      const { createFile } = await import("mp4box");
       const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
       // ── 1. Demux: muestras de vídeo en orden de decodificación ──
-      const mp4 = createFile(true);
-      const samples: Array<{
-        cts: number;
-        duration: number;
-        is_sync: boolean;
-        data: Uint8Array;
-      }> = [];
-      let readyInfo: any = null;
-      let demuxError: string | null = null;
-      mp4.onError = (e) => {
-        demuxError = String(e);
-      };
-      mp4.onReady = (ready) => {
-        readyInfo = ready;
-        const vt = (ready as any).tracks?.find((t: any) => t.type === "video");
-        if (vt) {
-          // Extrae todas las muestras de golpe (se dispara dentro de appendBuffer)
-          mp4.setExtractionOptions(vt.id, null, { nbSamples: 1000000 });
-          mp4.start();
-        }
-      };
-      mp4.onSamples = (_id, _user, batch) => {
-        for (const s of batch as any[]) samples.push(s);
-      };
-      const buf = raw as ArrayBuffer & { fileStart: number };
-      buf.fileStart = 0;
-      mp4.appendBuffer(buf);
-      if (typeof (mp4 as any).flush === "function") (mp4 as any).flush();
-      if (demuxError) throw new Error(demuxError);
+      const clip = await demuxAvcClip(raw);
       snap("demux");
-
-      const vTrack = readyInfo?.tracks?.find((t: any) => t.type === "video");
-      if (!vTrack || samples.length < 2 || !/^avc1/.test(String(vTrack.codec)))
-        return "unsupported";
-
-      // avcC → descripción binaria que necesita VideoDecoder (ISO 14496-15)
-      const stsd = (mp4.getTrackById(vTrack.id) as any)?.mdia?.minf?.stbl?.stsd;
-      const avcCBox = stsd?.entries?.[0]?.avcC;
-      // mp4box v2 envuelve cada NALU en { length, data } donde data son los bytes
-      const toNalBytes = (nal: unknown): Uint8Array => {
-        const anyNal = nal as any;
-        const src =
-          anyNal instanceof Uint8Array || Array.isArray(anyNal)
-            ? anyNal
-            : anyNal?.data;
-        if (src instanceof Uint8Array) return src;
-        if (Array.isArray(src)) return Uint8Array.from(src);
-        if (src && typeof src === "object")
-          return Uint8Array.from(Object.values(src));
-        return new Uint8Array(0);
-      };
-      const spsList = ((avcCBox?.SPS ?? []) as unknown[])
-        .map(toNalBytes)
-        .filter((b) => b.length > 0);
-      const ppsList = ((avcCBox?.PPS ?? []) as unknown[])
-        .map(toNalBytes)
-        .filter((b) => b.length > 0);
-      if (spsList.length === 0) return "unsupported";
-      const descSize =
-        7 +
-        spsList.reduce((n, s) => n + 2 + s.length, 0) +
-        ppsList.reduce((n, p) => n + 2 + p.length, 0);
-      const description = new Uint8Array(descSize);
-      let dOff = 0;
-      description[dOff++] = 1; // configurationVersion
-      description[dOff++] = avcCBox.AVCProfileIndication ?? 0x4d;
-      description[dOff++] = avcCBox.profile_compatibility ?? 0x00;
-      description[dOff++] = avcCBox.AVCLevelIndication ?? 0x1f;
-      description[dOff++] = 0xff; // reservado + lengthSizeMinusOne = 3
-      description[dOff++] = 0xe0 | spsList.length;
-      for (const nal of spsList) {
-        description[dOff++] = (nal.length >> 8) & 0xff;
-        description[dOff++] = nal.length & 0xff;
-        description.set(nal, dOff);
-        dOff += nal.length;
-      }
-      description[dOff++] = ppsList.length;
-      for (const nal of ppsList) {
-        description[dOff++] = (nal.length >> 8) & 0xff;
-        description[dOff++] = nal.length & 0xff;
-        description.set(nal, dOff);
-        dOff += nal.length;
-      }
-
-      // Rotación declarada en tkhd: los móviles guardan el vídeo "acostado" y el
-      // <video> la aplica solo; los fotogramas decodificados llegan en crudo.
-      const norm = (v: number) => (v > 0x7fffffff ? v - 0x100000000 : v);
-      const m: ArrayLike<number> | undefined = (
-        mp4.getTrackById(vTrack.id) as any
-      )?.tkhd?.matrix;
-      let rot = 0;
-      if (m && m.length >= 5) {
-        const a = norm(Number(m[0]));
-        const b = norm(Number(m[1]));
-        const c = norm(Number(m[3]));
-        const d = norm(Number(m[4]));
-        // ISO 14496: x' = a·x + c·y ; y' = b·x + d·y (píxeles que ve el <video>).
-        // b=−1,c=+1 ⇒ la derecha del origen queda arriba = giro antihorario ⇒
-        // ctx.rotate(270°); b=+1 es el sentido contrario ⇒ ctx.rotate(90°).
-        if (a === 0 && b === -65536 && c === 65536 && d === 0) rot = 270;
-        else if (a === -65536 && b === 0 && c === 0 && d === -65536) rot = 180;
-        else if (a === 0 && b === 65536 && c === -65536 && d === 0) rot = 90;
-      }
+      if (!clip) return "unsupported";
+      const { samples, description, rot, codec } = clip;
 
       // ── 2. Ventana de exportación (mismo criterio que la ruta clásica) ──
-      const ts = Number(vTrack.timescale) || 90000;
-      const srcDur = Number(vTrack.duration) / ts;
+      const ts = clip.ts;
+      const srcDur = clip.srcDur;
       // En MP4 fragmentados (p. ej. los que graba MediaRecorder) el moov
       // inicial sólo declara el primer segmento y la pista "dura" 0,2 s
       // aunque el archivo tenga el clip entero: el <video> sí ve la duración
@@ -2274,7 +2399,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           renderedAudio = null; // sin audio exportable → el MP4 sale mudo
         }
       }
-      const hasAudio = !!renderedAudio && renderedAudio.length > 0;
+      // ── 3b. Cierre opcional (Blacknews.mp4): demux + audio del sello ──
+      // El cierre es un extra: si algo falla aquí se omite y el vídeo sale
+      // igual, sin abortar la exportación.
+      let outroClip: DemuxedAvcClip | null = null;
+      let outroAudio: AudioBuffer | null = null;
+      if (videoOutro) {
+        try {
+          const outroRaw = await (await fetch(outroVideoSrc)).arrayBuffer();
+          if (outroRaw.byteLength > 256) {
+            outroClip = await demuxAvcClip(outroRaw);
+            if (outroClip && outroClip.samples.length < 2) outroClip = null;
+            if (outroClip && !isMuted) {
+              try {
+                const probe = new OfflineAudioContext(1, 1, 44100);
+                const full = await probe.decodeAudioData(outroRaw.slice(0));
+                const oac = new OfflineAudioContext(
+                  2,
+                  Math.max(1, Math.ceil(full.duration * 48000)),
+                  48000,
+                );
+                const node = oac.createBufferSource();
+                node.buffer = full;
+                node.connect(oac.destination);
+                node.start(0);
+                outroAudio = await oac.startRendering();
+              } catch {
+                outroAudio = null; // el cierre sale mudo
+              }
+            }
+          }
+        } catch {
+          outroClip = null;
+          outroAudio = null;
+        }
+        if (!outroClip)
+          console.warn("[export-rapida] cierre omitido: sin muestras AVC");
+        snap("outro-prep");
+      }
+      const outroDurSec = !outroClip
+        ? 0
+        : outroClip.srcDur > 0
+          ? outroClip.srcDur
+          : outroClip.samples.length / 30;
+      const outroFrameCount = outroClip ? outroClip.samples.length : 0;
+      // El audio de la salida cubre todo el cierre: su propio audio o silencio.
+      // En silencio (isMuted) no se genera pista de audio: mudo es mudo.
+      const outroAudioLen =
+        isMuted || !outroClip
+          ? 0
+          : outroAudio
+            ? outroAudio.length
+            : Math.round(outroDurSec * 48000);
+
+      const hasAudio =
+        (!!renderedAudio && renderedAudio.length > 0) ||
+        outroAudioLen > 0;
       snap("audio");
 
       // Primer error capturado (codificadores, muxer, decoder…): se propaga a
@@ -2294,7 +2474,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       };
       const hardStop =
         performance.now() +
-        Math.max(45000, (introPad + outDur) * 1000 + 45000);
+        Math.max(45000, (introPad + outDur + outroDurSec) * 1000 + 45000);
       const waitWhile = async (cond: () => boolean): Promise<void> => {
         while (cond()) {
           if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
@@ -2422,12 +2602,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // ── 6. Bucle decodificar → componer → codificar con cola FIFO sin bloqueos ──
       let encoded = 0;
       let draining = false;
-      const decodedQueue: VideoFrame[] = [];
+      // Cada fotograma lleva su bandera: `outro` se pinta a sangre con
+      // paintOutroFrame (sin chyron/ticker), el resto pasa por renderToCanvas.
+      const decodedQueue: Array<{ frame: VideoFrame; outro: boolean }> = [];
       const targetFps = 30;
       const targetFrameDurationUs = Math.round(1_000_000 / targetFps);
 
       const updateProgress = () => {
-        const totalEstimate = Math.max(1, feed.length);
+        const totalEstimate = Math.max(1, feed.length + outroFrameCount);
         const pct = Math.min(
           99,
           10 + Math.round((encoded / totalEstimate) * 85),
@@ -2443,28 +2625,42 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           while (decodedQueue.length > 0) {
             if (isCancelledRef.current) break;
-            const frame = decodedQueue.shift()!;
+            const item = decodedQueue.shift()!;
+            const frame = item.frame;
             await waitWhile(
               () => (encoder as VideoEncoder).encodeQueueSize > 10,
             );
             // Segundo de salida (contador de fotogramas emitidos): manda las
             // fases de la intro, el marquee y los timestamps del archivo.
             // No se filtra por rango: sólo entra en el decodificador lo que
-            // se va a emitir (pasada de intro + pasada completa).
+            // se va a emitir (pasada de intro + pasada completa + cierre).
             const outPtsUs = Math.round(encoded * targetFrameDurationUs);
-            await renderToCanvas(
-              canvas,
-              undefined,
-              cachedFlags,
-              false,
-              {
-                source: frame,
-                width: frame.displayWidth,
-                height: frame.displayHeight,
-                rotation: rot,
-              },
-              outPtsUs / 1e6,
-            );
+            if (item.outro) {
+              // Cierre: sello a sangre sobre negro, sin overlays ni velos.
+              paintOutroFrame(
+                canvas,
+                POST_W,
+                POST_H,
+                frame,
+                frame.displayWidth,
+                frame.displayHeight,
+                outroClip ? outroClip.rot : 0,
+              );
+            } else {
+              await renderToCanvas(
+                canvas,
+                undefined,
+                cachedFlags,
+                false,
+                {
+                  source: frame,
+                  width: frame.displayWidth,
+                  height: frame.displayHeight,
+                  rotation: rot,
+                },
+                outPtsUs / 1e6,
+              );
+            }
 
             const out = new VideoFrame(canvas, {
               timestamp: outPtsUs,
@@ -2490,13 +2686,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       decoder = new VideoDecoder({
         output: (frame) => {
-          decodedQueue.push(frame);
+          decodedQueue.push({ frame, outro: false });
           void processQueue();
           notify();
         },
         error: failWith,
       });
-      decoder.configure({ codec: String(vTrack.codec), description });
+      decoder.configure({ codec, description });
 
       for (const item of feed) {
         await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
@@ -2522,30 +2718,87 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       );
       snap("encode");
 
-      // ── 7. Audio → AAC (rápido: el búfer ya está renderizado) ──
+      // ── 6b. Cierre opcional: se decodifica DESPUÉS de drenar el clip
+      //      principal, para que sus fotogramas entren en orden al mismo
+      //      codificador. La línea de tiempo la marca el contador de
+      //      fotogramas emitidos, así que el sello sigue la secuencia sin
+      //      más.
+      const oc = outroClip;
+      if (oc && oc.samples.length > 0) {
+        const od = new VideoDecoder({
+          output: (frame) => {
+            decodedQueue.push({ frame, outro: true });
+            void processQueue();
+            notify();
+          },
+          error: failWith,
+        });
+        outroDecoder = od;
+        od.configure({ codec: oc.codec, description: oc.description });
+        for (const s of oc.samples) {
+          await waitWhile(() => od.decodeQueueSize > 32);
+          od.decode(
+            new EncodedVideoChunk({
+              type: s.is_sync ? "key" : "delta",
+              timestamp: Math.round((s.cts / oc.ts) * 1e6),
+              duration: Math.max(
+                1,
+                Math.round((s.duration / oc.ts) * 1e6),
+              ),
+              data: s.data,
+            }),
+          );
+        }
+        await od.flush();
+        snap("outro-feed");
+        await waitWhile(
+          () =>
+            decodedQueue.length > 0 ||
+            draining ||
+            (encoder as VideoEncoder).encodeQueueSize > 0,
+        );
+        snap("outro-encode");
+      }
+
+      // ── 7. Audio → AAC (rápido: los búfers ya están renderizados) ──
       const ra = renderedAudio;
+      const oa = outroAudio;
       const ae = audioEncoder;
-      if (ra && ae) {
-        const ch0 = ra.getChannelData(0);
-        const ch1 = ra.numberOfChannels > 1 ? ra.getChannelData(1) : ch0;
+      if (ae) {
         const frameSize = 1024;
         // Intro TV: la salida arranca con introPad s de silencio y el audio
-        // completo entra cuando el vídeo reinicia (color y con sonido).
+        // completo entra cuando el vídeo reinicia (color y con sonido). Si hay
+        // cierre, su audio (o silencio si el sello va mudo) cierra la pista y
+        // la iguala a la duración del vídeo.
         const introSamples = introPad > 0 ? Math.round(introPad * 48000) : 0;
-        const outLen = introSamples + ra.length;
+        const mainLen = ra
+          ? ra.length
+          : outroAudioLen > 0
+            ? Math.round(outDur * 48000)
+            : 0;
+        const segs: Array<{ buf: AudioBuffer | null; start: number; len: number }> =
+          [
+            { buf: ra, start: introSamples, len: mainLen },
+            { buf: oa, start: introSamples + mainLen, len: outroAudioLen },
+          ];
+        const outLen = introSamples + mainLen + outroAudioLen;
         for (let i = 0; i < outLen; i += frameSize) {
           await waitWhile(() => ae.encodeQueueSize > 8);
           const n = Math.min(frameSize, outLen - i);
+          // Ceros = silencio: rellena la intro y cualquier hueco.
           const data = new Float32Array(n * 2);
-          // Tramo del bloque que cae dentro del audio renderizado; lo demás
-          // queda en silencio (es la pasada de la intro).
-          const from = Math.max(0, introSamples - i);
-          const to = Math.min(n, introSamples + ra.length - i);
-          if (to > from) {
-            const s0 = from + i - introSamples;
+          for (const seg of segs) {
+            if (!seg.buf || seg.len <= 0) continue;
+            const from = Math.max(0, seg.start - i);
+            const to = Math.min(n, seg.start + seg.len - i);
+            if (to <= from) continue;
+            const s0 = from + i - seg.start;
             const len = to - from;
-            data.set(ch0.subarray(s0, s0 + len), from);
-            data.set(ch1.subarray(s0, s0 + len), n + from);
+            const c0 = seg.buf.getChannelData(0);
+            const c1 =
+              seg.buf.numberOfChannels > 1 ? seg.buf.getChannelData(1) : c0;
+            data.set(c0.subarray(s0, s0 + len), from);
+            data.set(c1.subarray(s0, s0 + len), n + from);
           }
           ae.encode(
             new AudioData({
@@ -2599,6 +2852,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (decoder && decoder.state !== "closed") decoder.close();
       } catch {}
       try {
+        if (outroDecoder && outroDecoder.state !== "closed")
+          outroDecoder.close();
+      } catch {}
+      try {
         if (encoder && encoder.state !== "closed") encoder.close();
       } catch {}
       try {
@@ -2626,6 +2883,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
 
     isCancelledRef.current = false;
+
+    // Si la vista previa estaba mostrando el cierre, se corta antes de
+    // grabar: durante la exportación manda el grabador (el sello se repetirá
+    // dentro del archivo, no encima de la tarjeta).
+    if (outroActiveRef.current) {
+      outroActiveRef.current = false;
+      setOutroActive(false);
+      try {
+        outroRef.current?.pause();
+      } catch {}
+    }
 
     // Intenta WebCodecs primero (tanto para MP4 como para WebM si está disponible)
     try {
@@ -2825,9 +3093,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // y al terminar el vídeo vuelve a empezar en color y con sonido. La
       // salida total suma ese desfase (introPad) a la duración del clip.
       const introPad = tvIntro ? tvIntroDur : 0;
+      // Duración del tramo de vídeo (sin la intro) y del cierre de marca.
+      const clipOutDur = (end - start) / Math.max(videoSpeed, 0.01);
+      const outroSec = videoOutro ? outroDuration : 0;
       let introPhase2 = false;
       let introWall0 = 0;
+      // Fase de cierre (Blacknews.mp4): se activa al terminar el clip y la
+      // dirige la misma máquina de estados (enterOutro/stepOutro/finish).
+      let outroPhase = false;
+      let outroEl: HTMLVideoElement | null = null;
+      let outroOnEnded: (() => void) | null = null;
       const outTNow = () => {
+        if (outroPhase) {
+          return introPad + clipOutDur + (outroEl?.currentTime ?? 0);
+        }
         const mediaT = Math.max(
           0,
           (video.currentTime - start) / Math.max(videoSpeed, 0.01),
@@ -2844,7 +3123,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let hardDeadline =
         performance.now() +
         introPad * 1000 +
-        ((end - start) / videoSpeed) * 1000 +
+        clipOutDur * 1000 +
+        outroSec * 1000 +
         8000;
 
       const stopRecording = () => {
@@ -2863,6 +3143,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           video.pause();
           video.loop = true;
         } catch {}
+        try {
+          if (outroEl) outroEl.pause();
+        } catch {}
+        outroPhase = false;
+        outroActiveRef.current = false;
+        setOutroActive(false);
         setIsVideoPlaying(false);
       };
 
@@ -2901,8 +3187,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // fotogramas caducos: el vídeo exportado salía entrecortado y sin audio.
       const frameStats = { n: 0, sum: 0, max: 0, slow: 0, lastMediaT: start };
       const reportProgress = () => {
-        const dur = Math.max(end - start, 0.001) / Math.max(videoSpeed, 0.01);
-        const totalOut = introPad + dur;
+        const dur = clipOutDur;
+        const totalOut = introPad + dur + outroSec;
         const frac = Math.min(1, Math.max(0, outTNow() / totalOut));
         const pct = Math.min(99, Math.max(lastPct, Math.round(14 + frac * 85)));
         if (pct > lastPct) {
@@ -2929,6 +3215,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           active = false;
           video.removeEventListener("ended", onEnded);
           window.clearTimeout(deadlineTimer);
+          try {
+            if (outroEl && outroOnEnded)
+              outroEl.removeEventListener("ended", outroOnEnded);
+          } catch {}
+          try {
+            if (outroEl) outroEl.pause();
+          } catch {}
+          outroPhase = false;
+          outroActiveRef.current = false;
+          setOutroActive(false);
           const summary =
             `${reason} frames=${frameStats.n} ` +
             `avgMs=${frameStats.n ? (frameStats.sum / frameStats.n).toFixed(1) : 0} ` +
@@ -2939,6 +3235,56 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           document.documentElement.setAttribute("data-export-clasica", summary);
           resolve();
         };
+        // Cierre de marca: tras el clip, el sello BlackNews ocupa la tarjeta y
+        // el lienzo SIN chyron ni ticker (mismo dibujo que la vista previa).
+        const enterOutro = (): boolean => {
+          if (outroPhase || !videoOutro) return false;
+          const el = outroRef.current;
+          if (!el) return false;
+          outroPhase = true;
+          outroEl = el;
+          outroActiveRef.current = true;
+          setOutroActive(true);
+          try {
+            video.pause();
+          } catch {}
+          el.muted = isMuted;
+          try {
+            el.currentTime = 0;
+          } catch {}
+          // El sello entra en la misma pista de audio que el clip: el nodo
+          // MediaElementSource de un elemento sólo se crea una vez, por eso
+          // queda cacheado en outroAudioNodeRef.
+          if (!isMuted && audioGraphRef.current) {
+            try {
+              const graph = audioGraphRef.current;
+              if (
+                !outroAudioNodeRef.current ||
+                outroAudioNodeRef.current.el !== el
+              ) {
+                const node = graph.ctx.createMediaElementSource(el);
+                node.connect(graph.dest);
+                node.connect(graph.ctx.destination);
+                outroAudioNodeRef.current = { el, node };
+              }
+              if (graph.ctx.state === "suspended") void graph.ctx.resume();
+            } catch (audioErr) {
+              console.warn("Audio del cierre no disponible:", audioErr);
+            }
+          }
+          outroOnEnded = () => finish("fin-del-cierre");
+          el.addEventListener("ended", outroOnEnded);
+          el.play().catch(() => {});
+          // El plazo calculado para el clip ya no sirve: se amplía con el
+          // cierre para que la red de seguridad no corte el sello.
+          window.clearTimeout(deadlineTimer);
+          deadlineTimer = window.setTimeout(
+            () => finish("plazo-de-seguridad-cierre"),
+            (el.duration > 0 ? el.duration : outroSec) * 1000 + 8000,
+          );
+          console.debug("[export-clasica] entra-el-cierre");
+          return true;
+        };
         const onEnded = () => {
           // En la intro el clip se da vuelta hasta completar tvIntroDur.
           if (tvIntro && !introPhase2) {
@@ -2946,25 +3292,25 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             if (video.paused) video.play().catch(() => {});
             return;
           }
+          if (enterOutro()) return schedule();
           finish("ended-del-video");
         };
-        const doneReason = () =>
-          isCancelledRef.current
-            ? "cancelado"
-            : stopped
-              ? "detenido"
-              : tvIntro && !introPhase2
-                ? // En la intro el clip se repite: el fin llega con la
-                  // segunda pasada (o con el cancelado/detenido).
-                  null
-                : video.ended
-                  ? "fin-del-video"
-                  : video.currentTime >= end - 0.02
-                    ? "llego-al-trim"
-                    : null;
+        const doneReason = () => {
+          if (isCancelledRef.current) return "cancelado";
+          if (stopped) return "detenido";
+          // Ya manda el cierre: se cierra por su propio reloj (stepOutro).
+          if (outroPhase) return null;
+          if (tvIntro && !introPhase2) return null; // la intro se repite
+          if (video.ended) return enterOutro() ? null : "fin-del-video";
+          if (video.currentTime >= end - 0.02)
+            return enterOutro() ? null : "llego-al-trim";
+          return null;
+        };
         const schedule = () => {
           if (!active) return;
-          const anyVideo = video as unknown as {
+          // En la fase de cierre el reloj lo marca el <video> del sello.
+          const el = (outroPhase && outroEl) || video;
+          const anyVideo = el as unknown as {
             requestVideoFrameCallback?: (cb: () => void) => number;
           };
           if (typeof anyVideo.requestVideoFrameCallback === "function") {
@@ -2974,10 +3320,46 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             window.setTimeout(() => void step(), Math.round(1000 / targetFps));
           }
         };
+        // Fotograma del cierre: sello a sangre sobre negro, sin overlays.
+        const stepOutro = async () => {
+          if (!active || !outroPhase || !outroEl) return;
+          if (isCancelledRef.current) return finish("cancelado");
+          if (stopped) return finish("detenido");
+          const el = outroEl;
+          const dur = el.duration > 0 ? el.duration : outroSec;
+          if (el.ended || (dur > 0 && el.currentTime >= dur - 0.03)) {
+            return finish("fin-del-cierre");
+          }
+          if (el.readyState >= 2) {
+            const tRender = performance.now();
+            paintOutroFrame(
+              canvas,
+              POST_W,
+              POST_H,
+              el,
+              el.videoWidth,
+              el.videoHeight,
+            );
+            const ms = performance.now() - tRender;
+            frameStats.n++;
+            frameStats.sum += ms;
+            if (ms > frameStats.max) frameStats.max = ms;
+            if (ms > 33) frameStats.slow++;
+            frameStats.lastMediaT = el.currentTime;
+            if (!active) return;
+            if (vTrack && typeof (vTrack as any).requestFrame === "function") {
+              (vTrack as any).requestFrame();
+            }
+          }
+          reportProgress();
+          schedule();
+        };
         const step = async () => {
           if (!active) return;
           const early = doneReason();
           if (early) return finish(early);
+          // doneReason pudo dar paso al cierre de marca: no se pinta ya el clip.
+          if (outroPhase) return stepOutro();
           // Intro TV: los primeros tvIntroDur s son una pasada propia. Al
           // llegar al final el vídeo vuelve a empezar (color y sonido); si el
           // clip es más corto que la intro, se da vuelta hasta completarla.
@@ -3032,6 +3414,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           reportProgress();
           const late = doneReason();
           if (late) return finish(late);
+          if (outroPhase) return stepOutro();
           schedule();
         };
 
@@ -3040,7 +3423,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // política de reproducción, pestaña oculta…), se cierra igualmente.
         deadlineTimer = window.setTimeout(
           () => finish("plazo-de-seguridad"),
-          (introPad + (end - start) / Math.max(videoSpeed, 0.01)) * 1000 + 6000,
+          (introPad + (end - start) / Math.max(videoSpeed, 0.01) + outroSec) *
+            1000 +
+            6000,
         );
         introWall0 = performance.now();
         video
@@ -3340,7 +3725,59 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // Filtered countries for search (catálogo amplio + personalizados;
   // la búsqueda ignora acentos y también casa por código ISO)
+  // El cierre sólo existe con media de vídeo y con el interruptor encendido:
+  // al apagarlo (o al cambiar a imagen) se corta de inmediato, por si estaba
+  // reproduciéndose en la vista previa.
+  useEffect(() => {
+    if (videoOutro && mediaType === "video") return;
+    const el = outroRef.current;
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch {}
+    }
+    if (outroActiveRef.current) {
+      outroActiveRef.current = false;
+      setOutroActive(false);
+      const main = videoRef.current;
+      if (main && !isRecordingRef.current) main.play().catch(() => {});
+    }
+  }, [videoOutro, mediaType]);
+
   const filteredCountries = searchCountries(countrySearch, countryCatalog);
+
+  // ── Cierre de marca en la vista previa ──
+  // Al llegar al final del recorte, la tarjeta pasa al sello BlackNews y el
+  // clip queda en pausa detrás (nunca a la vez: sería doble audio). Con el
+  // cierre apagado, o si el <video> aún no tiene metadatos, el bucle de
+  // siempre. Nunca actúa mientras exporta: allí manda el grabador.
+  const endPreviewOutro = () => {
+    if (!outroActiveRef.current) return;
+    outroActiveRef.current = false;
+    setOutroActive(false);
+    const main = videoRef.current;
+    if (main) {
+      if (trimEnd > trimStart) main.currentTime = trimStart;
+      main.play().catch(() => {});
+    }
+    setIsVideoPlaying(true);
+  };
+  const startPreviewOutro = (): boolean => {
+    if (outroActiveRef.current) return true;
+    const el = outroRef.current;
+    if (!el || el.readyState < 1) return false;
+    outroActiveRef.current = true;
+    setOutroActive(true);
+    el.muted = isMuted;
+    try {
+      el.currentTime = 0;
+    } catch {}
+    el.play().catch(() => {});
+    videoRef.current?.pause();
+    setIsVideoPlaying(true);
+    return true;
+  };
 
   // Elemento de media de la vista previa: un único <video>/<img> compartido
   // por los formatos 4:5/9:16 y por el 16:9 de TV, para que videoRef siga
@@ -3375,6 +3812,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (isRecordingRef.current) return;
           if (trimEnd > trimStart) {
             if (e.currentTarget.currentTime >= trimEnd) {
+              // Con cierre activo, el final del recorte abre el sello. En la
+              // intro TV16:9 todavía no: la primera pasada es muda y en B/N.
+              const introLooming =
+                postFormat === "16:9" && tvIntro && !tvIntroDoneRef.current;
+              if (videoOutro && !introLooming && startPreviewOutro()) return;
               e.currentTarget.currentTime = trimStart;
             } else if (e.currentTarget.currentTime < trimStart) {
               e.currentTarget.currentTime = trimStart;
@@ -4720,6 +5162,36 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     video.
                   </p>
                 </div>
+
+                {/* Cierre de marca opcional: Blacknews.mp4 al final */}
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-neutral-200 block">
+                      Cierre BlackNews (sello final)
+                    </span>
+                    <span className="text-[11px] text-neutral-400 font-light">
+                      Añade {outroDuration.toFixed(1)} s de sello de marca al
+                      final del vídeo exportado y de la vista previa, con su
+                      audio (salvo que exportes en silencio). Desactivado por
+                      defecto.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={videoOutro}
+                    onClick={() => setVideoOutro((v) => !v)}
+                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                      videoOutro
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/50"
+                        : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
+                    }`}
+                    title="Reproduce Blacknews.mp4 al finalizar el clip"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    {videoOutro ? "Activado" : "Apagado"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -5147,7 +5619,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           style={{
                             display: "flex",
                             width: "max-content",
-                            animation: `bn-ticker-marquee ${tickerMarqueeDur}s linear infinite`,
+                            /* Propiedades largas: el shorthand `animation`
+                               reinicia la cinta desde 0 cada vez que se
+                               reescribe (p. ej. al cambiar la duración medida)
+                               y pisa animation-play-state (React lo avisa). */
+                            animationName: "bn-ticker-marquee",
+                            animationDuration: `${tickerMarqueeDur}s`,
+                            animationTimingFunction: "linear",
+                            animationIterationCount: "infinite",
                             animationPlayState:
                               mediaType === "video" && isVideoPlaying
                                 ? "running"
@@ -5163,14 +5642,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                 display: "flex",
                                 alignItems: "center",
                                 flexShrink: 0,
-                                gap: TV_TICKER_GAP,
+                                /* Sin gap: el aire de la cinta vive en el
+                                   separador "   ·   ", idéntico al del lienzo.
+                                   Un gap aquí dejaba 0 px al unir la copia 0
+                                   con la 1 (punto pegado una vez por vuelta). */
                               }}
                             >
                               {tvTickerItems.map((item, i) => (
                                 <span
                                   key={i}
                                   className="flex shrink-0 items-center"
-                                  style={{ gap: TV_TICKER_GAP }}
                                 >
                                   {typeof item === "string" ? (
                                     <span
@@ -5215,6 +5696,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                               style={{
                                                 fontSize: TV_TICKER_FS,
                                                 letterSpacing: "1.6px",
+                                                /* El lienzo mide " · " con sus
+                                                   espacios: `pre` evita que el
+                                                   flex se los coma. */
+                                                whiteSpace: "pre",
                                                 color:
                                                   i === 0
                                                     ? "#FFFFFF"
@@ -5228,15 +5713,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                       ))}
                                     </span>
                                   )}
+                                  {/* Separador = el mismo string que mide y
+                                      pinta el lienzo exportado ("   ·   "): el
+                                      aire va dentro, así la unión copia 0 →
+                                      copia 1 queda igual que entre items
+                                      (antes: 0 px y el punto salía pegado). */}
                                   <span
                                     className="shrink-0 font-semibold uppercase"
                                     style={{
                                       fontSize: TV_TICKER_FS,
                                       letterSpacing: "1.6px",
                                       color: "#475569",
+                                      whiteSpace: "pre",
                                     }}
                                   >
-                                    ·
+                                    {"   ·   "}
                                   </span>
                                 </span>
                               ))}
@@ -5434,6 +5925,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      // Con el sello en pantalla, el botón gobierna el cierre.
+                      if (outroActiveRef.current) {
+                        const outroEl = outroRef.current;
+                        if (outroEl) {
+                          if (outroEl.paused) {
+                            outroEl.play().catch(() => {});
+                            setIsVideoPlaying(true);
+                          } else {
+                            outroEl.pause();
+                            setIsVideoPlaying(false);
+                          }
+                        }
+                        return;
+                      }
                       if (videoRef.current) {
                         if (videoRef.current.paused) {
                           videoRef.current.play();
@@ -5457,6 +5962,36 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
             </div>
               </>
+            )}
+
+            {/* Cierre de marca opcional (APAGADO por defecto): tapa la
+                tarjeta mientras suena el sello. Es el mismo <video> que usa
+                la fase de cierre de la exportación, así que la vista previa y
+                el archivo salen idénticos. Se oculta con `opacity` (nunca
+                `display:none`): si no, el navegador deja de decodificar
+                fotogramas y rVFC deja de disparar. Encuadre «contain» sobre
+                negro, igual que paintOutroFrame en la exportación. */}
+            {mediaType === "video" && videoOutro && (
+              <video
+                ref={outroRef}
+                src={outroVideoSrc}
+                className="absolute inset-0 w-full h-full object-contain bg-black pointer-events-none select-none"
+                style={{
+                  zIndex: 40,
+                  opacity: outroActive ? 1 : 0,
+                  transition: "opacity 150ms linear",
+                }}
+                playsInline
+                preload="auto"
+                muted={isMuted}
+                onLoadedMetadata={(e) => {
+                  const dur =
+                    Math.round((e.currentTarget.duration || 0) * 10) / 10;
+                  if (dur > 0) setOutroDuration(dur);
+                }}
+                onEnded={endPreviewOutro}
+                onError={endPreviewOutro}
+              />
             )}
           </div>
 
@@ -5571,9 +6106,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <>
                   Se exportarán{" "}
                   <strong className="text-white font-semibold">
-                    {exportClipSeconds} s
+                    {exportTotalSeconds} s
                   </strong>{" "}
                   de video
+                  {videoOutro
+                    ? ` (clip + ${outroDuration.toFixed(1)} s de cierre BlackNews)`
+                    : ""}
                   {maxVideoDuration > 0
                     ? ` (duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»)`
                     : ""}
@@ -5641,8 +6179,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="flex justify-between items-center text-[11px] font-mono text-neutral-400">
                 <span>
                   {POST_W} × {POST_H} px
-                  {exportClipSeconds !== null
-                    ? ` · ${exportClipSeconds} s`
+                  {exportTotalSeconds !== null
+                    ? ` · ${exportTotalSeconds} s`
                     : ""}{" "}
                   · grabación local
                 </span>
