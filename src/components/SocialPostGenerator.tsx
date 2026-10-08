@@ -523,6 +523,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [exportedImageUrl, setExportedImageUrl] = useState<string | null>(null);
+  // La portada es 16:9 (1920×1080) mientras que el post puede ser 4:5: el
+  // modal de éxito usa este flag para mostrar las medidas y la proporción
+  // correctas en lugar de las del formato social activo.
+  const [exportedPortada, setExportedPortada] = useState(false);
   const [exportFileName, setExportFileName] = useState<string>(
     "blacknews-post-4x5.png",
   );
@@ -2181,6 +2185,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         .replace(/[^a-z0-9]/g, "-");
       const filename = `blacknews-post-${slug || "post"}-${formatSlug}-${Date.now()}.png`;
       setExportFileName(filename);
+      setExportedPortada(false);
 
       try {
         canvas.toBlob((blob) => {
@@ -2227,6 +2232,309 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
+  // ── Portada ────────────────────────────────────────────────────────────────
+  // Composición aparte del post: el fotograma actual a sangre, un velo para que
+  // el texto respire y, encima, la sección con banderas y el titular con el
+  // logo. No pasa por renderToCanvas porque la portada no lleva las bandas de
+  // texto sobre fondo negro: la imagen ocupa todo el lienzo.
+  const PORTADA_W = 1920;
+  const PORTADA_H = 1080;
+  const PORTADA_PAD_X = 104;
+  const PORTADA_MESES = [
+    "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+    "JUL", "AGO", "SEP", "OCT", "NOV", "DIC",
+  ];
+
+  // Encaja el titular en varias líneas sin desbordar el bloque: baja de 112 px
+  // hasta 52 px y, si ni así cabe, se queda con las líneas que entren.
+  const fitPortadaHeadline = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxHeight: number,
+  ) => {
+    const sourceLines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    let last: { lines: string[]; size: number; lineH: number } | null = null;
+
+    for (let size = 112; size >= 52; size -= 4) {
+      const lineH = Math.round(size * 1.06);
+      ctx.font = `800 ${size}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "-0.5px";
+      const lines: string[] = [];
+      for (const src of sourceLines) {
+        let current = "";
+        for (const word of src.split(/\s+/)) {
+          const candidate = current ? `${current} ${word}` : word;
+          if (!current || ctx.measureText(candidate).width <= maxWidth) {
+            current = candidate;
+          } else {
+            lines.push(current);
+            current = word;
+          }
+        }
+        if (current) lines.push(current);
+      }
+      last = { lines, size, lineH };
+      if (lines.length * lineH <= maxHeight) return last;
+    }
+
+    const fit = last as { lines: string[]; size: number; lineH: number };
+    return {
+      ...fit,
+      lines: fit.lines.slice(0, Math.max(1, Math.floor(maxHeight / fit.lineH))),
+    };
+  };
+
+  const renderPortadaToCanvas = async (
+    targetCanvas: HTMLCanvasElement,
+    mediaElement?: HTMLImageElement | HTMLVideoElement,
+    flagsData?: Array<{
+      code: string;
+      img: HTMLImageElement | null;
+      text: string;
+    }>,
+  ): Promise<void> => {
+    // Las fuentes antes de tocar el lienzo: si Lexend llegara a mitad de dibujo,
+    // measureText cambiaría y el titular saldría cortado.
+    if (document.fonts) await document.fonts.ready;
+
+    const W = PORTADA_W;
+    const H = PORTADA_H;
+    if (targetCanvas.width !== W) targetCanvas.width = W;
+    if (targetCanvas.height !== H) targetCanvas.height = H;
+    const ctx = targetCanvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.filter = "none";
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+    ctx.letterSpacing = "0px";
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+
+    // Base AMOLED: si no hay medio cargado la portada sigue siendo válida.
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, W, H);
+
+    // 1) Fotograma a sangre (cover) con el mismo tratamiento que el post
+    if (mediaElement) {
+      const sw =
+        mediaElement instanceof HTMLVideoElement
+          ? mediaElement.videoWidth
+          : mediaElement.naturalWidth;
+      const sh =
+        mediaElement instanceof HTMLVideoElement
+          ? mediaElement.videoHeight
+          : mediaElement.naturalHeight;
+      if (sw > 0 && sh > 0) {
+        const scale = Math.max(W / sw, H / sh);
+        const dw = sw * scale;
+        const dh = sh * scale;
+        const canvasFilter = getCanvasFilterString();
+        ctx.save();
+        if (canvasFilter !== "brightness(1.00) contrast(1.00)") {
+          ctx.filter = canvasFilter;
+        }
+        ctx.drawImage(mediaElement, (W - dw) / 2, (H - dh) / 2, dw, dh);
+        ctx.restore();
+      }
+    }
+
+    // 2) Velo en tres franjas: inferior (titular), izquierda (logo) y superior
+    ctx.save();
+    const bottomVeil = ctx.createLinearGradient(0, H * 0.26, 0, H);
+    bottomVeil.addColorStop(0, "rgba(0,0,0,0)");
+    bottomVeil.addColorStop(0.5, "rgba(0,0,0,0.55)");
+    bottomVeil.addColorStop(1, "rgba(0,0,0,0.97)");
+    ctx.fillStyle = bottomVeil;
+    ctx.fillRect(0, 0, W, H);
+
+    const leftVeil = ctx.createLinearGradient(0, 0, W * 0.62, 0);
+    leftVeil.addColorStop(0, "rgba(0,0,0,0.70)");
+    leftVeil.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = leftVeil;
+    ctx.fillRect(0, 0, W * 0.62, H);
+
+    const topVeil = ctx.createLinearGradient(0, 0, 0, 240);
+    topVeil.addColorStop(0, "rgba(0,0,0,0.72)");
+    topVeil.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = topVeil;
+    ctx.fillRect(0, 0, W, 240);
+    ctx.restore();
+
+    // 3) Logo superior izquierdo: ■ BlackNews (mismo dibujo que la marca de agua)
+    const logoBox = 42;
+    const logoBaseline = 132;
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(PORTADA_PAD_X, logoBaseline - logoBox + 4, logoBox, logoBox);
+    ctx.font = "700 46px 'Lexend', sans-serif";
+    ctx.letterSpacing = "0.5px";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("BlackNews", PORTADA_PAD_X + logoBox + 18, logoBaseline);
+    ctx.restore();
+
+    // 4) Fecha superior derecha
+    const now = new Date();
+    const fecha = `${String(now.getDate()).padStart(2, "0")} ${
+      PORTADA_MESES[now.getMonth()]
+    } ${now.getFullYear()}`;
+    ctx.save();
+    ctx.textAlign = "right";
+    ctx.font = "500 26px 'JetBrains Mono', monospace";
+    ctx.letterSpacing = "3px";
+    ctx.fillStyle = "rgba(255,255,255,0.72)";
+    ctx.fillText(fecha, W - PORTADA_PAD_X, logoBaseline - 6);
+    ctx.restore();
+
+    // 5) Titular anclado abajo, con sombra suave sobre la foto
+    const headlineText =
+      title.trim() || description.trim() || category.trim() || "BlackNews";
+    const contentWidth = W - PORTADA_PAD_X - 180;
+    const headlineMaxH = 360;
+    const headlineBottom = H - 160;
+    const ruleY = H - 124;
+    const fit = fitPortadaHeadline(ctx, headlineText, contentWidth, headlineMaxH);
+    const headlineTop = headlineBottom - fit.lines.length * fit.lineH;
+
+    ctx.save();
+    ctx.textBaseline = "top";
+    ctx.font = `800 ${fit.size}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = "-0.5px";
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = 26;
+    fit.lines.forEach((line, i) => {
+      ctx.fillText(line, PORTADA_PAD_X, headlineTop + i * fit.lineH);
+    });
+    ctx.restore();
+
+    // 6) Sección + países, justo encima del titular, con filete esmeralda
+    const badgeParts = [
+      category.trim().toUpperCase(),
+      ...(flagsData || []).map((f) => f.text),
+    ].filter(Boolean);
+    if (badgeParts.length > 0) {
+      const badgeY = Math.max(180, headlineTop - 56);
+      ctx.save();
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#10b981";
+      ctx.fillRect(PORTADA_PAD_X, badgeY - 17, 6, 34);
+
+      let x = PORTADA_PAD_X + 26;
+      const cat = category.trim().toUpperCase();
+      let drawnSomething = false;
+      if (cat) {
+        ctx.font = "700 27px 'Lexend', sans-serif";
+        ctx.letterSpacing = "3.5px";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(cat, x, badgeY);
+        x += ctx.measureText(cat).width + 24;
+        drawnSomething = true;
+      }
+
+      for (const f of flagsData || []) {
+        // Corta antes del margen derecho: con muchos países el badge no
+        // puede pasar del ancho de contenido.
+        if (x > W - PORTADA_PAD_X) break;
+        // Separador «·» entre bloques, con el mismo tracking del resto.
+        if (drawnSomething) {
+          ctx.font = "700 27px 'Lexend', sans-serif";
+          ctx.letterSpacing = "3.5px";
+          ctx.fillStyle = "rgba(255,255,255,0.7)";
+          ctx.fillText("·", x, badgeY);
+          x += ctx.measureText("·").width + 22;
+        }
+        if (f.img && f.img.naturalWidth > 0) {
+          ctx.drawImage(f.img, x, badgeY - 14, 40, 28);
+          x += 40 + 12;
+        }
+        ctx.font = "600 27px 'Lexend', sans-serif";
+        ctx.letterSpacing = "3px";
+        ctx.fillStyle = "rgba(255,255,255,0.88)";
+        ctx.fillText(f.text, x, badgeY);
+        x += ctx.measureText(f.text).width + 24;
+        drawnSomething = true;
+      }
+      ctx.restore();
+    }
+
+    // 7) Filete esmeralda bajo el titular (acento de marca)
+    ctx.save();
+    ctx.fillStyle = "#10b981";
+    ctx.fillRect(PORTADA_PAD_X, ruleY, 168, 5);
+    ctx.restore();
+  };
+
+  const handleExportPortada = async () => {
+    try {
+      setIsExporting(true);
+      const canvas = hiddenCanvasRef.current;
+      if (!canvas) return;
+
+      // El fotograma actual del vídeo (pausado donde esté) o la imagen cargada.
+      let mediaEl: HTMLImageElement | HTMLVideoElement | undefined;
+      if (mediaType === "video" && videoRef.current) {
+        mediaEl = videoRef.current;
+      } else {
+        const img = await loadImageSafely(mediaSrc);
+        if (img && img.complete && img.naturalWidth > 0) mediaEl = img;
+      }
+
+      // En «names» solo viaja el texto; con banderas se cargan además los PNG.
+      const flagsData = await Promise.all(
+        selectedCountries.map(async (c) => ({
+          code: c.code,
+          img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+          text:
+            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        })),
+      );
+
+      await renderPortadaToCanvas(canvas, mediaEl, flagsData);
+
+      const slug = title
+        .slice(0, 20)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-");
+      const filename = `blacknews-portada-${slug || "portada"}-${Date.now()}.png`;
+      setExportFileName(filename);
+      setExportedPortada(true);
+
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          try {
+            const dataUrl = canvas.toDataURL("image/png");
+            triggerDownload(dataUrl, filename);
+            setExportedImageUrl(dataUrl);
+            showToast(`¡Portada descargada! (1920×1080)`);
+          } catch {
+            showToast(
+              "La imagen tiene restricciones de origen. Prueba subiendo la foto directamente.",
+            );
+          }
+          setIsExporting(false);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        triggerDownload(url, filename);
+        setExportedImageUrl(url);
+        showToast(`¡Portada descargada! (1920×1080)`);
+        setIsExporting(false);
+      }, "image/png");
+    } catch (err) {
+      console.error(err);
+      showToast("No se pudo generar la portada.");
+      setIsExporting(false);
+    }
+  };
+
   // Copy PNG image to clipboard
   const handleCopyToClipboard = async () => {
     try {
@@ -2265,6 +2573,51 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }, "image/png");
     } catch {
       showToast("No se pudo copiar directamente al portapapeles.");
+    }
+  };
+
+  // Copia la portada (16:9) al portapapeles: vuelve a componerla por si el
+  // canvas se ha reescrito con el post entre la descarga y este clic.
+  const handleCopyPortada = async () => {
+    try {
+      const canvas = hiddenCanvasRef.current;
+      if (!canvas) return;
+
+      let mediaEl: HTMLImageElement | HTMLVideoElement | undefined = undefined;
+      if (mediaType === "video" && videoRef.current) {
+        mediaEl = videoRef.current;
+      } else {
+        const img = await loadImageSafely(mediaSrc);
+        if (img && img.complete && img.naturalWidth > 0) mediaEl = img;
+      }
+
+      // En «names» solo viaja el texto; con banderas se cargan además los PNG.
+      const flagsData = await Promise.all(
+        selectedCountries.map(async (c) => ({
+          code: c.code,
+          img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+          text:
+            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        })),
+      );
+
+      await renderPortadaToCanvas(canvas, mediaEl, flagsData);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          setCopySuccess(true);
+          showToast("¡Portada copiada al portapapeles!");
+          setTimeout(() => setCopySuccess(false), 3000);
+        } catch {
+          showToast("Usa el botón de descargar portada.");
+        }
+      }, "image/png");
+    } catch {
+      showToast("No se pudo copiar la portada al portapapeles.");
     }
   };
 
@@ -6160,6 +6513,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               )}
             </div>
 
+            {/* Portada: fotograma actual + titular + logo, 16:9 a sangre */}
+            <button
+              type="button"
+              disabled={isExporting || isRecordingVideo}
+              onClick={handleExportPortada}
+              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider rounded-xl border border-emerald-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Descargar Portada · 1920×1080</span>
+            </button>
+
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
               {mediaType === "video" && exportClipSeconds !== null && (
                 <>
@@ -6279,11 +6644,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">
                     {exportedVideoUrl
                       ? `¡Video ${postFormat} Optimizado!`
-                      : `¡Post ${postFormat} Exportado!`}
+                      : exportedPortada
+                        ? "¡Portada 16:9 Exportada!"
+                        : `¡Post ${postFormat} Exportado!`}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-neutral-400 font-mono">
-                      {POST_W} × {POST_H} px
+                      {exportedPortada ? "1920 × 1080" : `${POST_W} × ${POST_H}`}{" "}
+                      px
                     </span>
                     {exportedVideoSize && (
                       <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
@@ -6299,6 +6667,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   setExportedImageUrl(null);
                   setExportedVideoUrl(null);
                   setExportedVideoSize(null);
+                  setExportedPortada(false);
                 }}
                 className="text-neutral-400 hover:text-white p-1.5 rounded-lg transition-colors cursor-pointer bg-white/5 hover:bg-white/10"
               >
@@ -6309,11 +6678,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Generated media preview */}
             <div
               className={`${
-                postFormat === "9:16"
-                  ? "aspect-[9/16]"
-                  : postFormat === "16:9"
-                    ? "aspect-[16/9]"
-                    : "aspect-[4/5]"
+                exportedPortada
+                  ? "aspect-[16/9]"
+                  : postFormat === "9:16"
+                    ? "aspect-[9/16]"
+                    : postFormat === "16:9"
+                      ? "aspect-[16/9]"
+                      : "aspect-[4/5]"
               } max-h-[50vh] mx-auto rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg`}
             >
               {exportedVideoUrl ? (
@@ -6327,7 +6698,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               ) : (
                 <img
                   src={exportedImageUrl!}
-                  alt="Post Exportado"
+                  alt={
+                    exportedPortada ? "Portada Exportada" : "Post Exportado"
+                  }
                   className="w-full h-full object-contain"
                 />
               )}
@@ -6342,14 +6715,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 }
                 onClick={() =>
                   showToast(
-                    `Descargando ${exportedVideoUrl ? "video" : "imagen"}...`,
+                    `Descargando ${exportedVideoUrl ? "video" : exportedPortada ? "portada" : "imagen"}...`,
                   )
                 }
                 className="py-2.5 px-4 bg-white text-black text-xs font-bold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>
-                  {exportedVideoUrl ? "Descargar Video" : "Descargar PNG"}
+                  {exportedVideoUrl
+                    ? "Descargar Video"
+                    : exportedPortada
+                      ? "Descargar Portada"
+                      : "Descargar PNG"}
                 </span>
               </a>
 
@@ -6361,6 +6738,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-neutral-300" />
                   <span>Capturar PNG</span>
+                </button>
+              ) : exportedPortada ? (
+                <button
+                  type="button"
+                  onClick={handleCopyPortada}
+                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {copySuccess ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  <span>{copySuccess ? "Copiado" : "Copiar Portada"}</span>
                 </button>
               ) : (
                 <button
@@ -6383,7 +6773,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               bloquea descargas en ventanas emergentes, pulsa el botón blanco de
               arriba o haz clic derecho sobre el archivo y selecciona{" "}
               <strong>
-                "Guardar {exportedVideoUrl ? "video" : "imagen"} como..."
+                "Guardar{" "}
+                {exportedVideoUrl
+                  ? "video"
+                  : exportedPortada
+                    ? "portada"
+                    : "imagen"}{" "}
+                como..."
               </strong>
               .
             </p>
