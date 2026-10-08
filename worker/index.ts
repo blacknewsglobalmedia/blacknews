@@ -3,6 +3,7 @@
  *
  * - /api/images/*  → API de optimización de imágenes (Cloudinary + transformaciones por CDN)
  * - /api/video/*   → retirada (el material audiovisual se publica en YouTube)
+ * - /api/ai/*      → redacción asistida con OpenRouter (JSON + tweet del post)
  * - cualquier otra ruta → assets estáticos del frontend (dist/)
  */
 
@@ -23,6 +24,10 @@ export interface Env {
   PAYPAL_API_BASE?: string; // SOLO pruebas locales (ver worker/paypal.ts)
   PAYPAL_CLIENT_ID?: string;
   PAYPAL_SECRET?: string;
+  // Redacción asistida con IA (OpenRouter)
+  OPENROUTER_API_KEY?: string; // secreto con `wrangler secret put`
+  OPENROUTER_MODEL?: string; // variable de wrangler.jsonc (vars)
+  OPENROUTER_API_BASE?: string; // SOLO pruebas locales (ver worker/ai.ts)
   // Accesos concedidos (solo el Worker escribe aquí)
   PAYPAL_KV: {
     get(key: string): Promise<string | null>;
@@ -53,6 +58,18 @@ async function handleApi(request: Request, env: Env, pathname: string): Promise<
   if (pathname.startsWith('/api/paypal/')) {
     const { handlePaypalRequest } = await import('./paypal');
     return handlePaypalRequest(request, env, pathname);
+  }
+
+  // Redacción asistida con IA: devuelve el JSON del post y el tweet
+  if (pathname === '/api/ai/generate' && request.method === 'POST') {
+    const { handleAiGenerate } = await import('./ai');
+    try {
+      return await handleAiGenerate(request, env);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al generar con la IA';
+      console.error('[BLACKNEWS WORKER] ai:', message);
+      return json({ success: false, error: message }, 502);
+    }
   }
 
   if (pathname.startsWith('/api/video/')) {

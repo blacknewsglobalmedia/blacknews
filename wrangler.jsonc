@@ -6,6 +6,7 @@
   //   npx wrangler secret put CLOUDINARY_API_SECRET
   //   npx wrangler secret put PAYPAL_CLIENT_ID     (appId de PayPal, sandbox o live)
   //   npx wrangler secret put PAYPAL_SECRET        (secret de PayPal)
+  //   npx wrangler secret put OPENROUTER_API_KEY   (clave de OpenRouter para la IA editorial)
   // En local (wrangler dev) van en .dev.vars (gitignored).
   "name": "blacknews",
   "main": "worker/index.ts",
@@ -24,7 +25,10 @@
     // Este archivo manda sobre la variable del dashboard al desplegar con
     // wrangler: si aquí dice 'sandbox', las credenciales live se mandan al
     // endpoint sandbox → OAuth 401 y planIds vacíos.
-    "PAYPAL_MODE": "live"
+    "PAYPAL_MODE": "live",
+    // Modelo por defecto de la redacción asistida (POST /api/ai/generate).
+    // Se puede cambiar aquí sin tocar código; la clave va en un secreto.
+    "OPENROUTER_MODEL": "openai/gpt-4o-mini"
   },
   // Accesos de suscripción concedidos (solo escribe el Worker tras cobrar en PayPal)
   "kv_namespaces": [

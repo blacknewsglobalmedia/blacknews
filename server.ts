@@ -11,6 +11,9 @@ import { fileURLToPath } from 'url';
 import { processNewsImage, getR2Status } from './server/imageOptimizer.ts';
 // Tabla de precios compartida con el Worker (fuente única de verdad)
 import { PRICES } from './worker/paypal.ts';
+// Misma implementación que el Worker para la IA editorial: en local la clave
+// va en .env y sin ella se avisa, nunca se finge una respuesta.
+import { handleAiGenerate } from './worker/ai.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,6 +191,33 @@ app.use('/api/paypal', (_req, res) => {
     return;
   }
   res.status(503).json({ success: false, error: 'payments_not_configured' });
+});
+
+// API: Redacción asistida con IA (OpenRouter) — mismo handler que el Worker.
+// En local la clave sale de .env (OPENROUTER_API_KEY); con OPENROUTER_API_BASE
+// puede apuntar a un OpenRouter simulado para probar el circuito sin gastar.
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const host = req.get('host') || `localhost:${PORT}`;
+    const request = new Request(`http://${host}/api/ai/generate`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': req.ip || req.socket.remoteAddress || 'local',
+      },
+      body: JSON.stringify(req.body ?? {}),
+    });
+    const response = await handleAiGenerate(request, {
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
+      OPENROUTER_API_BASE: process.env.OPENROUTER_API_BASE,
+    });
+    res.status(response.status).type('application/json').send(await response.text());
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error al generar con la IA';
+    console.error('[BLACKNEWS API] ai:', message);
+    res.status(502).json({ success: false, error: message });
+  }
 });
 
 // API: Direct Server-Side Video Post Composition (High-Speed, 100% Quality, Perfect Audio Sync)

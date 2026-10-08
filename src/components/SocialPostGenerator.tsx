@@ -39,6 +39,7 @@ import { CATEGORIES } from "../data/newsData";
 import fixWebmDuration from "fix-webm-duration";
 import {
   addCustomCountry,
+  countryKey,
   findCountryByName,
   searchCountries,
   useCountryCatalog,
@@ -395,6 +396,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ]),
   );
 
+  // Secciones realmente habilitadas en «Gestión de Categorías». Es la lista
+  // que la IA debe respetar y la que recibe el modelo en cada petición: si
+  // mañana se añade o se quita una sección, ella la contempla sin desplegar
+  // nada nuevo. Si el medio todavía no ha tocado el catálogo, manda la lista
+  // canónica del sitio (allAvailableCategories incluye además secciones que
+  // alguien pudiera haber borrado, así que no sirve como fuente de verdad).
+  const liveCategories = propCategories.filter((c) => c !== "TODAS");
+  const enabledCategories = liveCategories.length > 0 ? liveCategories : EXPANDED_CATEGORIES;
+
   // Post Text Content
   const [category, setCategory] = useState("GEOPOLÍTICA");
   const [title, setTitle] = useState(
@@ -516,6 +526,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [jsonInputText, setJsonInputText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // ─── Redacción asistida (OpenRouter) ───────────────────────────────────
+  // Dos cajas editables: el JSON completo del post (fusiona la configuración
+  // actual con el contenido que escribe la IA) y el tweet de la plantilla.
+  // No se guardan en el borrador: son material de trabajo descartable, y el
+  // JSON exportado no debe arrastrarlas.
+  const [aiJsonText, setAiJsonText] = useState("");
+  const [aiTweet, setAiTweet] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNotice, setAiNotice] = useState<{
+    kind: "ok" | "warn" | "error";
+    text: string;
+  } | null>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
   // Feedback states
@@ -943,6 +966,230 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
     };
     reader.readAsText(file);
+  };
+
+  // ─── IA editorial: JSON del post + tweet ───────────────────────────────
+  // La IA sólo decide el contenido editorial (titular, bajada, sección, pie
+  // de foto y países); la tipografía, los filtros y el medio siguen siendo
+  // del usuario, así que se fusionan con la configuración actual para que el
+  // JSON de la caja sea completo y apliquable con «Aplicar».
+  const AI_TWEET_LIMIT = 250;
+
+  /** Clave de comparación de secciones: la IA puede devolver la misma cadena
+   *  sin acentos o con distinto espaciado ("Geopolítica" vs "geopolitica"). */
+  const sectionKey = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+  /** Devuelve la sección tal y como está habilitada, o null si la IA se la
+   *  inventó (para no dejar el post con una sección fantasma). */
+  const matchEnabledCategory = (value: string): string | null => {
+    if (!value) return null;
+    const exact = enabledCategories.find((c) => c === value);
+    if (exact) return exact;
+    const key = sectionKey(value);
+    return enabledCategories.find((c) => sectionKey(c) === key) || null;
+  };
+
+  /** Sólo entran países que existan en el catálogo (mismo código o mismo
+   *  nombre): así el código ISO que se pinta en la bandera siempre es real. */
+  const resolveAiCountries = (value: unknown): CountryItem[] => {
+    if (!Array.isArray(value)) return selectedCountries;
+    const out: CountryItem[] = [];
+    const used = new Set<string>();
+    for (const item of value) {
+      if (!item || typeof item !== "object") continue;
+      const cand = item as Partial<CountryItem>;
+      const code = typeof cand.code === "string" ? cand.code.trim().toUpperCase() : "";
+      const name = typeof cand.name === "string" ? cand.name.trim() : "";
+      if (!code && !name) continue;
+      const found =
+        countryCatalog.find((c) => code && c.code.toUpperCase() === code) ||
+        (name
+          ? countryCatalog.find((c) => countryKey(c.name) === countryKey(name))
+          : undefined);
+      if (!found || used.has(found.code)) continue;
+      used.add(found.code);
+      out.push(found);
+      if (out.length >= 6) break;
+    }
+    return out;
+  };
+
+  const applyAiResult = (payload: unknown) => {
+    const root =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
+    const raw =
+      root.content && typeof root.content === "object"
+        ? (root.content as Record<string, unknown>)
+        : {};
+    const pick = (key: string, max: number, fallback: string) =>
+      typeof raw[key] === "string"
+        ? (raw[key] as string).trim().slice(0, max) || fallback
+        : fallback;
+
+    const nextTitle = pick("title", 400, title);
+    const nextDescription = pick("description", 420, description);
+    const nextPhotoCaption = pick("photoCaption", 120, photoCaption);
+
+    const rawCategory = typeof raw.category === "string" ? raw.category.trim() : "";
+    const matchedCategory = matchEnabledCategory(rawCategory);
+    const nextCategory = matchedCategory || category;
+
+    const givenCountries = Array.isArray(raw.selectedCountries)
+      ? raw.selectedCountries
+      : null;
+    const resolvedCountries = resolveAiCountries(givenCountries);
+    const nextCountries =
+      resolvedCountries.length > 0 ? resolvedCountries : selectedCountries;
+
+    const base = getPostConfigObject();
+    setAiJsonText(
+      JSON.stringify(
+        {
+          ...base,
+          content: {
+            ...base.content,
+            title: nextTitle,
+            description: nextDescription,
+            category: nextCategory,
+            photoCaption: nextPhotoCaption,
+            selectedCountries: nextCountries,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    setAiTweet(
+      typeof root.tweet === "string" ? root.tweet.replace(/\r\n/g, "\n").trim() : "",
+    );
+
+    const notes: string[] = [];
+    if (rawCategory && !matchedCategory) {
+      notes.push(
+        `la sección «${rawCategory}» no está habilitada, se mantiene «${nextCategory}»`,
+      );
+    }
+    if (
+      givenCountries &&
+      givenCountries.length > 0 &&
+      resolvedCountries.length === 0
+    ) {
+      notes.push("ningún país propuesto existía en el catálogo, se mantienen los actuales");
+    }
+    const tweetLength = typeof root.tweet === "string" ? root.tweet.length : 0;
+    if (tweetLength > AI_TWEET_LIMIT) {
+      notes.push(`el tweet tiene ${tweetLength} caracteres, tope ${AI_TWEET_LIMIT}`);
+    }
+
+    setAiNotice(
+      notes.length
+        ? { kind: "warn", text: `⚠︎ ${notes.join(" · ")}` }
+        : { kind: "ok", text: "✓ JSON y tweet listos: revísalos y aplícalos al post." },
+    );
+  };
+
+  const handleGenerateAi = async () => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setAiNotice(null);
+    try {
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          categories: enabledCategories,
+          countries: countryCatalog.map((c) => ({ code: c.code, name: c.name })),
+          content: {
+            title,
+            description,
+            category,
+            photoCaption,
+            selectedCountries: selectedCountries.map((c) => ({
+              code: c.code,
+              name: c.name,
+            })),
+          },
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        setAiNotice({
+          kind: "error",
+          text: data?.error || `El servidor no respondió (HTTP ${response.status}).`,
+        });
+        return;
+      }
+      applyAiResult(data.data);
+    } catch {
+      setAiNotice({
+        kind: "error",
+        text: "Sin respuesta del servidor: comprueba que el Worker expone /api/ai/generate.",
+      });
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  /** Mete en la caja la configuración actual, por si se quiere partir de
+   *  ella a mano antes de pedirle nada a la IA. */
+  const handleLoadCurrentJson = () => {
+    setAiJsonText(JSON.stringify(getPostConfigObject(), null, 2));
+    setAiNotice(null);
+  };
+
+  const handlePasteAiJson = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setAiJsonText(text);
+        setAiNotice(null);
+        showToast("✓ JSON pegado desde el portapapeles");
+      }
+    } catch {
+      showToast("Usa Ctrl+V para pegar en el cuadro");
+    }
+  };
+
+  const handleApplyAiJson = () => {
+    if (!aiJsonText.trim()) {
+      setAiNotice({ kind: "warn", text: "No hay JSON que aplicar todavía." });
+      return;
+    }
+    try {
+      JSON.parse(aiJsonText);
+    } catch (err) {
+      // handleApplyJson pondría el error en el modal de copia de seguridad,
+      // que está cerrado: aquí se avisa en la propia tarjeta.
+      setAiNotice({
+        kind: "error",
+        text:
+          "El JSON no es válido: " +
+          (err instanceof Error ? err.message : "error de sintaxis"),
+      });
+      return;
+    }
+    setAiNotice(null);
+    handleApplyJson(aiJsonText);
+  };
+
+  const handleCopyAiTweet = async () => {
+    if (!aiTweet) {
+      setAiNotice({ kind: "warn", text: "Todavía no hay tweet que copiar." });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(aiTweet);
+      showToast("✓ Tweet copiado al portapapeles");
+    } catch {
+      showToast("No se pudo copiar directamente al portapapeles.");
+    }
   };
 
   // El borrador sólo se restaura una vez al montar; mientras tanto el
@@ -5022,6 +5269,175 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          {/* Card 2b: IA Editorial — JSON del post + tweet */}
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>IA Editorial · JSON + Tweet</span>
+              </h3>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                {enabledCategories.length} secciones · {countryCatalog.length} países
+              </span>
+            </div>
+
+            {/* Aviso: éxito, salvaguarda del catálogo o fallo de la llamada */}
+            {aiNotice && (
+              <div
+                className={`p-3 rounded-xl text-xs font-medium leading-relaxed border ${
+                  aiNotice.kind === "error"
+                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                    : aiNotice.kind === "warn"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                }`}
+              >
+                {aiNotice.text}
+              </div>
+            )}
+
+            {/* Acción principal + atajo a la configuración actual */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <button
+                type="button"
+                onClick={handleGenerateAi}
+                disabled={aiBusy}
+                title="Reescribe el contenido editorial actual y devuelve el JSON del post y el tweet"
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-100/70 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{aiBusy ? "Generando…" : "Generar con IA"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleLoadCurrentJson}
+                className="px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-white/10 shrink-0"
+                title="Copia la configuración actual del generador a la caja de JSON"
+              >
+                <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Cargar JSON actual</span>
+              </button>
+              <span className="text-[11px] text-neutral-500 font-light leading-relaxed">
+                Parte del contenido que ya tienes, lo reescribe y te devuelve el
+                JSON del post y el tweet (máx. {AI_TWEET_LIMIT} caracteres).
+              </span>
+            </div>
+
+            {/* JSON del post: ver, editar, copiar, pegar y aplicar */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>JSON del Post</span>
+                </label>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!aiJsonText) {
+                        setAiNotice({
+                          kind: "warn",
+                          text: "No hay JSON que copiar todavía.",
+                        });
+                        return;
+                      }
+                      try {
+                        await navigator.clipboard.writeText(aiJsonText);
+                        showToast("✓ JSON copiado al portapapeles");
+                      } catch {
+                        showToast("No se pudo copiar directamente al portapapeles.");
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Copiar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePasteAiJson}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Pegar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleApplyAiJson}
+                    className="px-3 py-1.5 bg-white hover:bg-neutral-200 text-black text-xs font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Aplicar</span>
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                rows={10}
+                value={aiJsonText}
+                onChange={(e) => {
+                  setAiJsonText(e.target.value);
+                  setAiNotice(null);
+                }}
+                spellCheck={false}
+                placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "...",\n    "category": "..."\n  }\n}'
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-emerald-400 resize-y min-h-[13rem]"
+              />
+            </div>
+
+            {/* Tweet: ver, editar, copiar, con contador de 250 */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Tweet (X)</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                      aiTweet.length > AI_TWEET_LIMIT
+                        ? "bg-red-500/10 border-red-500/40 text-red-400"
+                        : "bg-neutral-900 border-white/10 text-neutral-300"
+                    }`}
+                    title={
+                      aiTweet.length > AI_TWEET_LIMIT
+                        ? "El tweet supera el límite: acorta la bajada"
+                        : "Límite de 250 caracteres"
+                    }
+                  >
+                    {aiTweet.length}/{AI_TWEET_LIMIT}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyAiTweet}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Copiar</span>
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                rows={5}
+                value={aiTweet}
+                onChange={(e) => {
+                  setAiTweet(e.target.value);
+                  setAiNotice(null);
+                }}
+                placeholder={
+                  "TÍTULO EN CAJA ALTA\n\nBajada en una sola línea\n\nPaís · País · SECCIÓN"
+                }
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed focus:outline-none focus:border-emerald-400 resize-y"
+              />
             </div>
           </div>
 
