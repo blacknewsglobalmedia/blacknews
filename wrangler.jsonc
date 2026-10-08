@@ -20,8 +20,11 @@
   "vars": {
     // La única credencial "pública" de Cloudinary (es el identificador del entorno)
     "CLOUDINARY_CLOUD_NAME": "jxryjgjq",
-    // Entorno de PayPal: 'sandbox' para pruebas, 'live' para cobrar de verdad
-    "PAYPAL_MODE": "sandbox"
+    // Entorno de PayPal: 'sandbox' para pruebas, 'live' para cobrar de verdad.
+    // Este archivo manda sobre la variable del dashboard al desplegar con
+    // wrangler: si aquí dice 'sandbox', las credenciales live se mandan al
+    // endpoint sandbox → OAuth 401 y planIds vacíos.
+    "PAYPAL_MODE": "live"
   },
   // Accesos de suscripción concedidos (solo escribe el Worker tras cobrar en PayPal)
   "kv_namespaces": [
