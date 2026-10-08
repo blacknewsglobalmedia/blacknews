@@ -5327,6 +5327,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <option value={8}>Intro 8 s</option>
               </select>
             )}
+            {/* Atajo del cierre de marca: el mismo interruptor de la tarjeta 4,
+                aquí junto a la intro para poder probarlo sin salir de la
+                preview. Aplica en todos los formatos, no sólo en TV. */}
+            {mediaType === "video" && (
+              <label
+                className="flex items-center gap-1.5 cursor-pointer select-none"
+                title={`Cierre BlackNews: añade ${outroDuration.toFixed(1)} s de sello de marca al final del vídeo exportado y de la vista previa, con su audio (salvo que exportes en silencio)`}
+              >
+                <input
+                  type="checkbox"
+                  checked={videoOutro}
+                  onChange={(e) => setVideoOutro(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-white cursor-pointer"
+                />
+                <span
+                  className={`text-[11px] uppercase tracking-wider ${
+                    videoOutro ? "text-emerald-400" : "text-neutral-500"
+                  }`}
+                >
+                  Outro{videoOutro ? ` · ${outroDuration.toFixed(1)} s` : ""}
+                </span>
+              </label>
+            )}
             {postFormat === "16:9" && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
