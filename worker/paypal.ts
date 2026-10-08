@@ -203,6 +203,11 @@ async function getCatalog(env: PayPalEnv): Promise<Catalog> {
       const key = planKey(tier, cycle);
       if (catalog.planIds[key]) continue;
 
+      // Payload ajustado al esquema oficial de PayPal (Subscriptions v1,
+      // plan_request_POST). Los nombres correctos son interval_unit /
+      // sequence / pricing_scheme.fixed_price y auto_bill_outstanding es
+      // booleano: con los antiguos ('YES', unit, series, price) la API
+      // devolvía 400 INVALID_PARAMETER_VALUE y no se creaba ningún plan.
       const res = await pp(env, '/v1/billing/plans', {
         method: 'POST',
         json: {
@@ -213,14 +218,25 @@ async function getCatalog(env: PayPalEnv): Promise<Catalog> {
           }.`,
           billing_cycles: [
             {
-              frequency: { unit: 'MONTH', interval_count: cycle === 'monthly' ? 1 : 12 },
+              frequency: {
+                interval_unit: 'MONTH',
+                interval_count: cycle === 'monthly' ? 1 : 12,
+              },
               tenure_type: 'REGULAR',
-              price: { value: cycle === 'monthly' ? spec.monthly : spec.yearly, currency: 'USD' },
-              series: 1,
+              sequence: 1,
+              // 0 = renovación infinita. Sin este campo el default es 1 y el
+              // plan cobraría una sola vez en lugar de suscribirse.
+              total_cycles: 0,
+              pricing_scheme: {
+                fixed_price: {
+                  value: cycle === 'monthly' ? spec.monthly : spec.yearly,
+                  currency_code: 'USD',
+                },
+              },
             },
           ],
           payment_preferences: {
-            auto_bill_outstanding: 'YES',
+            auto_bill_outstanding: true,
             payment_failure_threshold: 1,
           },
         },
@@ -230,13 +246,16 @@ async function getCatalog(env: PayPalEnv): Promise<Catalog> {
       }
 
       const planId = res.data.id as string;
-      const activate = await pp(env, `/v1/billing/plans/${planId}`, {
-        method: 'PATCH',
-        json: [{ op: 'replace', path: '/status', value: 'ACTIVE' }],
-        contentType: 'application/json-patch+json',
-      });
-      if (activate.status >= 300) {
-        throw new Error(`Activación del plan ${key}: HTTP ${activate.status}`);
+      // Si el plan nace CREATED hay que activarlo antes de poder suscribirse.
+      // Se usa el endpoint dedicado; el PATCH de status ya no figura entre los
+      // atributos parcheables documentados.
+      if (res.data?.status !== 'ACTIVE') {
+        const activate = await pp(env, `/v1/billing/plans/${planId}/activate`, {
+          method: 'POST',
+        });
+        if (activate.status >= 300) {
+          throw new Error(`Activación del plan ${key}: HTTP ${activate.status}`);
+        }
       }
 
       catalog.planIds[key] = planId;
