@@ -3380,7 +3380,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         : outroClip.srcDur > 0
           ? outroClip.srcDur
           : outroClip.samples.length / 30;
-      const outroFrameCount = outroClip ? outroClip.samples.length : 0;
       // El audio de la salida cubre todo el cierre: su propio audio o silencio.
       // En silencio (isMuted) no se genera pista de audio: mudo es mudo.
       const outroAudioLen =
@@ -3538,7 +3537,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       snap("warmup");
 
       // ── 6. Bucle decodificar → componer → codificar con cola FIFO sin bloqueos ──
-      let encoded = 0;
       let draining = false;
       // Cada fotograma lleva su bandera: `outro` se pinta a sangre con
       // paintOutroFrame (sin chyron/ticker), el resto pasa por renderToCanvas.
@@ -3546,15 +3544,70 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const targetFps = 30;
       const targetFrameDurationUs = Math.round(1_000_000 / targetFps);
 
+      // ── Rejilla de salida: la línea de tiempo la marcan estas ranuras ──
+      // El audio ya se coloca por muestras exactas (intro en silencio +
+      // outDur + cierre), así que el vídeo debe emitir EXACTAMENTE esos
+      // fotogramas. Emitir «un fotograma por fotograma de la fuente» —lo que
+      // hacía el contador de emisiones— desincroniza el cierre con cualquier
+      // fuente que no sea de 30 fps: un clip de 32 fps alargaba el tramo
+      // principal un 6,7 % y el sello entraba con el audio ya sonando.
+      const introSlots = Math.round(introPad * targetFps);
+      const mainSlots = Math.max(2, Math.round(outDur * targetFps));
+      const outroBaseSlot = introSlots + mainSlots;
+      // El cierre dura lo que dure su audio o su vídeo (el mayor): así el
+      // vídeo nunca termina antes que el sonido.
+      const outroEndSlot = outroClip
+        ? outroBaseSlot +
+          Math.max(
+            1,
+            Math.ceil(Math.max(outroDurSec, outroAudioLen / 48000) * targetFps),
+          )
+        : outroBaseSlot;
+      // Próxima ranura a rellenar (el recuento es también el progreso).
+      let nextSlot = 0;
+      let paintedOnce = false;
+
       const updateProgress = () => {
-        const totalEstimate = Math.max(1, feed.length + outroFrameCount);
+        const totalEstimate = Math.max(1, outroEndSlot);
         const pct = Math.min(
           99,
-          10 + Math.round((encoded / totalEstimate) * 85),
+          10 + Math.round((nextSlot / totalEstimate) * 85),
         );
         if (recPctRef.current) recPctRef.current.textContent = `${pct}%`;
         if (recBarRef.current)
           recBarRef.current.style.width = `${Math.max(5, pct)}%`;
+      };
+
+      // Emite el lienzo actual en la ranura `slot` (fotograma normal o de
+      // relleno). El sello temporal sale de la ranura: es la única fuente de
+      // verdad del reloj de salida, de modo que si el codificador descarta
+      // un fotograma lo que viene después conserva su sitio exacto.
+      const emitSlot = (slot: number) => {
+        const out = new VideoFrame(canvas, {
+          timestamp: Math.round(slot * targetFrameDurationUs),
+          duration: targetFrameDurationUs,
+        });
+        try {
+          (encoder as VideoEncoder).encode(out, { keyFrame: slot % 60 === 0 });
+        } catch (e) {
+          failWith(e);
+        }
+        out.close();
+        nextSlot = slot + 1;
+        updateProgress();
+      };
+
+      // Sostiene el lienzo hasta la ranura `target`: los huecos que la fuente
+      // no cubre (más lenta que 30 fps, arranque tardío…) se rellenan para
+      // no adelantarle el sitio al audio.
+      const padUntil = async (target: number): Promise<void> => {
+        if (!paintedOnce) return;
+        while (nextSlot < target) {
+          await waitWhile(
+            () => (encoder as VideoEncoder).encodeQueueSize > 10,
+          );
+          emitSlot(nextSlot);
+        }
       };
 
       const processQueue = async () => {
@@ -3568,11 +3621,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             await waitWhile(
               () => (encoder as VideoEncoder).encodeQueueSize > 10,
             );
-            // Segundo de salida (contador de fotogramas emitidos): manda las
-            // fases de la intro, el marquee y los timestamps del archivo.
-            // No se filtra por rango: sólo entra en el decodificador lo que
-            // se va a emitir (pasada de intro + pasada completa + cierre).
-            const outPtsUs = Math.round(encoded * targetFrameDurationUs);
+            // Ranura que le toca a este fotograma en la rejilla (en el
+            // cierre, contando desde el final del clip). No se filtra por
+            // rango: sólo entra en el decodificador lo que se va a emitir
+            // (pasada de intro + pasada completa + cierre), y aquí se decide
+            // qué ranuras cubre cada uno. Los del clip se recortan a SU fase:
+            // la ventana de ±50 ms del rango admite fotogramas que caen más
+            // allá del borde (intro→clip o clip→cierre) y no deben colarse
+            // en la fase siguiente ni adelantarle el sitio al audio.
+            const rawSlot = Math.round((frame.timestamp / 1e6) * targetFps);
+            const slot = item.outro
+              ? outroBaseSlot + Math.max(0, rawSlot)
+              : frame.timestamp < introPad * 1e6
+                ? Math.min(rawSlot, Math.max(0, introSlots - 1))
+                : Math.min(rawSlot, outroBaseSlot - 1);
+            if (slot < nextSlot) {
+              // De más: la fuente va más rápida que 30 fps o la ranura ya
+              // quedó cubierta; se descarta sin romper la cadena.
+              frame.close();
+              continue;
+            }
+            // Hueco con el lienzo ya pintado: se rellena ANTES de pintar
+            // este fotograma, para que los huecos muestren el cuadro
+            // anterior y no adelanten el cambio.
+            if (paintedOnce) await padUntil(slot);
             if (item.outro) {
               // Cierre: sello a sangre sobre negro, sin overlays ni velos.
               paintOutroFrame(
@@ -3596,21 +3668,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   height: frame.displayHeight,
                   rotation: rot,
                 },
-                outPtsUs / 1e6,
+                (slot * targetFrameDurationUs) / 1e6,
               );
             }
-
-            const out = new VideoFrame(canvas, {
-              timestamp: outPtsUs,
-              duration: targetFrameDurationUs,
-            });
-
-            const isKey = encoded % 60 === 0;
-            (encoder as VideoEncoder).encode(out, { keyFrame: isKey });
-            out.close();
-
-            encoded += 1;
-            updateProgress();
+            paintedOnce = true;
+            // Primer fotograma: cubre también las ranuras previas para no
+            // arrancar en negro.
+            await padUntil(slot);
+            emitSlot(slot);
             frame.close();
           }
         } catch (e) {
@@ -3655,6 +3720,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           (encoder as VideoEncoder).encodeQueueSize > 0,
       );
       snap("encode");
+      // Borde exacto clip → cierre: si a la fuente le sobraron o le faltaron
+      // fotogramas respecto a la rejilla, el tramo principal se iguala para
+      // que el audio del cierre arranque justo cuando aparece el sello.
+      await padUntil(outroBaseSlot);
 
       // ── 6b. Cierre opcional: se decodifica DESPUÉS de drenar el clip
       //      principal, para que sus fotogramas entren en orden al mismo
@@ -3696,6 +3765,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             (encoder as VideoEncoder).encodeQueueSize > 0,
         );
         snap("outro-encode");
+        // El cierre se estira hasta cubrir su audio (o su vídeo, lo que dure
+        // más): la pista de vídeo nunca termina antes que la de sonido.
+        await padUntil(outroEndSlot);
       }
 
       // ── 7. Audio → AAC (rápido: los búfers ya están renderizados) ──
