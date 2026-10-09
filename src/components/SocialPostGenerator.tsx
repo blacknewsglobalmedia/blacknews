@@ -1011,6 +1011,44 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       .filter((flag) => /^[\u{1F1E6}-\u{1F1FF}]{2}$/u.test(flag))
       .join("");
 
+  // ── Lo que cabe en la tarjeta ────────────────────────────────────────────
+  // En 4:5 la foto arranca fija al 40 % (540 px): cabecera 20 + huecos 30/26/40
+  // + titular 73 px por línea + bajada 43 px por línea. Con 3 líneas de titular
+  // y 3 de bajada se llega a 540 exactos; la cuarta línea ya pisa la foto.
+  const AI_TITLE_LINES = 3;
+  const AI_DESC_LINES = 3;
+  const titleFont = `700 ${fontSizeTitle}px 'Lexend', sans-serif`;
+  const descFont = `400 ${fontSizeDesc}px 'Lexend', sans-serif`;
+
+  /** Corta en la última palabra entera, sin «…». */
+  const cutWords = (text: string, max: number): string => {
+    if (text.length <= max) return text;
+    const head = text.slice(0, max + 1);
+    const space = head.lastIndexOf(" ");
+    return (space > max * 0.6 ? head.slice(0, space) : head.slice(0, max)).trim();
+  };
+
+  /** Recorta por el final hasta que el texto quepa en `maxLines` líneas de la
+   *  columna real del post, medido con la MISMA métrica que el lienzo
+   *  (wrapLikeExport): así se adapta solo si el editor baja el cuerpo de la
+   *  tipografía. Si ha sobrado algo cierra con «…»; si ya cabía, se devuelve
+   *  tal cual, respetando los saltos de línea que haya escrito la IA. */
+  const capToLines = (
+    text: string,
+    font: string,
+    maxLines: number,
+  ): { text: string; trimmed: boolean } => {
+    const col = textColumnWidth;
+    const lines = (value: string) => wrapLikeExport(font, value, col).length;
+    let out = text;
+    if (lines(out) <= maxLines) return { text: out, trimmed: false };
+    // Recorta de 10 en 10 (siempre en palabra entera) dejando hueco a la «…».
+    while (out.length > 40 && lines(`${out}…`) > maxLines) {
+      out = cutWords(out, Math.max(30, out.length - 10));
+    }
+    return { text: `${out}…`, trimmed: true };
+  };
+
   /** Corta el cuerpo en el presupuesto que queda tras el corchete y la firma.
    *  Preferible cortar por el final de frase más cercano que a media palabra:
    *  el tweet se lee entero aunque la IA se haya pasado. */
@@ -1108,8 +1146,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? (raw[key] as string).trim().slice(0, max) || fallback
         : fallback;
 
-    const nextTitle = pick("title", 400, title);
-    const nextDescription = pick("description", 420, description);
+    // Titular y bajada sólo se recortan si vienen de la IA: si el modelo no
+    // los devuelve, se conserva intacto lo que ya estaba en el post.
+    const rawAiTitle =
+      typeof raw.title === "string"
+        ? raw.title
+            .replace(/\r/g, "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .join("\n")
+        : "";
+    const rawAiDesc =
+      typeof raw.description === "string"
+        ? raw.description.replace(/\s+/g, " ").trim()
+        : "";
+    const titleCap = rawAiTitle
+      ? capToLines(rawAiTitle, titleFont, AI_TITLE_LINES)
+      : { text: pick("title", 400, title), trimmed: false };
+    const descCap = rawAiDesc
+      ? capToLines(rawAiDesc, descFont, AI_DESC_LINES)
+      : { text: pick("description", 420, description), trimmed: false };
+    const nextTitle = titleCap.text;
+    const nextDescription = descCap.text;
     const nextPhotoCaption = pick("photoCaption", 120, photoCaption);
 
     const rawCategory = typeof raw.category === "string" ? raw.category.trim() : "";
@@ -1174,6 +1233,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     });
 
     const notes: string[] = [];
+    if (titleCap.trimmed) {
+      notes.push(
+        `el titular se recortó a ${AI_TITLE_LINES} líneas para no pisar la foto; amplíalo a mano si falta`,
+      );
+    }
+    if (descCap.trimmed) {
+      notes.push(
+        `la bajada se recortó a ${AI_DESC_LINES} líneas para que entre con el titular`,
+      );
+    }
     if (rawCategory && !matchedCategory) {
       notes.push(
         `la sección «${rawCategory}» no está habilitada, se mantiene «${nextCategory}»`,
