@@ -1818,18 +1818,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.restore();
     }
 
-    // 2) Velos de legibilidad (barra de canal y chyron)
+    // 2) Velos de legibilidad: el superior respalda el bug de canal, que
+    //    siempre está en pantalla; el inferior existe sólo para el chyron,
+    //    así que cuando la intro termina y queda vídeo limpio tampoco se
+    //    pinta (el ticker lleva su propia barra opaca).
     ctx.save();
     const topScrim = ctx.createLinearGradient(0, 0, 0, 260);
     topScrim.addColorStop(0, "rgba(0,0,0,0.92)");
     topScrim.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = topScrim;
     ctx.fillRect(0, 0, W, 260);
-    const botScrim = ctx.createLinearGradient(0, H - 640, 0, H);
-    botScrim.addColorStop(0, "rgba(0,0,0,0)");
-    botScrim.addColorStop(1, "rgba(0,0,0,0.94)");
-    ctx.fillStyle = botScrim;
-    ctx.fillRect(0, H - 640, W, 640);
+    if (!revealed) {
+      const botScrim = ctx.createLinearGradient(0, H - 640, 0, H);
+      botScrim.addColorStop(0, "rgba(0,0,0,0)");
+      botScrim.addColorStop(1, "rgba(0,0,0,0.94)");
+      ctx.fillStyle = botScrim;
+      ctx.fillRect(0, H - 640, W, 640);
+    }
     if (blendFade) {
       const fade = ctx.createLinearGradient(0, 0, 0, 220);
       fade.addColorStop(0, "#000000");
@@ -2126,12 +2131,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     ctx.restore();
 
-    // 7) Crédito de foto (derecha, sobre el ticker)
+    // 7) Crédito de foto (derecha, sobre el ticker). Con sombra suave: en el
+    //    vídeo limpio ya no hay velo detrás y debe seguir legible, igual que
+    //    el crédito del formato 4:5/9:16.
     if (photoCaption && photoCaption.trim()) {
       ctx.save();
       ctx.font = `500 ${TV_CAP_FS}px 'Lexend', sans-serif`;
       ctx.letterSpacing = "0px";
       ctx.fillStyle = "#E2E8F0";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+      ctx.shadowBlur = 6;
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + tvUi(40));
@@ -6841,11 +6850,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     }}
                     className="relative select-none font-['Lexend',sans-serif]"
                   >
-                    {/* Media a sangre + velos de legibilidad */}
+                    {/* Media a sangre + velos de legibilidad. El inferior
+                        sólo existe con el chyron (intro): al terminar la
+                        intro queda vídeo limpio, igual que en el lienzo. */}
                     <div className="absolute inset-0 overflow-hidden bg-black">
                       {previewMediaEl}
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-[260px] bg-gradient-to-b from-black/95 via-black/60 to-transparent" />
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent" />
+                      {tvShowChyron && (
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent" />
+                      )}
                       {blendFade && (
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black via-black/55 to-transparent" />
                       )}
@@ -7200,7 +7213,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </div>
                     </div>
 
-                    {/* Crédito de foto (derecha, sobre el ticker) */}
+                    {/* Crédito de foto (derecha, sobre el ticker). Sombra
+                        suave: en el vídeo limpio no hay velo detrás. */}
                     {photoCaption && photoCaption.trim() && (
                       <div
                         className="absolute overflow-hidden text-right font-medium"
@@ -7210,6 +7224,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           fontSize: TV_CAP_FS,
                           lineHeight: "28px",
                           color: "#E2E8F0",
+                          textShadow: "0 0 6px rgba(0, 0, 0, 0.85)",
                           maxWidth: TV_W - TV_PAD * 2 - TV_STACK_W - tvUi(40),
                         }}
                       >
