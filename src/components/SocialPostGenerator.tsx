@@ -945,10 +945,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // por defecto reabre el generador en imagen, para no dejarlo en modo
         // vídeo sin medio reproducible.
         const mediaUrl = data.mediaSettings.mediaUrl || "";
+        // Una URL blob sólo existe en la pestaña que la creó: al restaurar el
+        // borrador (otra sesión, otro día) ya no está y la vista previa entra
+        // en un bucle de errores de carga (net::ERR_FILE_NOT_FOUND en
+        // producción). En el JSON nunca se guarda una —se guarda null—, así que
+        // un blob aquí es residuo de una versión anterior y se ignora: es el
+        // mismo camino que ya usa un vídeo local ya inexistente.
+        const staleBlobMedia = /^blob:/.test(mediaUrl);
         const isVideoMedia =
           data.mediaSettings.mediaType === "video" &&
-          (/^blob:/.test(mediaUrl) ||
-            /^data:video\//.test(mediaUrl) ||
+          !staleBlobMedia &&
+          (/^data:video\//.test(mediaUrl) ||
             /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i.test(mediaUrl));
         const videoFallback =
           data.mediaSettings.mediaType === "video" && !isVideoMedia;
@@ -956,7 +963,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setMediaType(isVideoMedia ? "video" : "image");
         if (data.mediaSettings.mediaName)
           setMediaName(
-            videoFallback
+            videoFallback || staleBlobMedia
               ? "Imagen predeterminada"
               : data.mediaSettings.mediaName,
           );
@@ -976,8 +983,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
         if (typeof data.mediaSettings.videoOutro === "boolean")
           setVideoOutro(data.mediaSettings.videoOutro);
-        if (mediaUrl) setMediaSrc(mediaUrl);
-        else if (videoFallback) setMediaSrc(DEFAULT_MEDIA_SRC);
+        if (mediaUrl && !staleBlobMedia) setMediaSrc(mediaUrl);
+        else if (videoFallback || staleBlobMedia)
+          setMediaSrc(DEFAULT_MEDIA_SRC);
       }
       if (!silent) {
         setIsJsonModalOpen(false);
