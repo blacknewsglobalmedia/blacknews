@@ -193,9 +193,10 @@ app.use('/api/paypal', (_req, res) => {
   res.status(503).json({ success: false, error: 'payments_not_configured' });
 });
 
-// API: Redacción asistida con IA (OpenRouter) — mismo handler que el Worker.
-// En local la clave sale de .env (OPENROUTER_API_KEY); con OPENROUTER_API_BASE
-// puede apuntar a un OpenRouter simulado para probar el circuito sin gastar.
+// API: Redacción asistida con IA (OpenRouter + búsqueda web Tavily) — mismo
+// handler que el Worker. En local las claves salen de .env (OPENROUTER_API_KEY
+// y, opcional, TAVILY_API_KEY); con OPENROUTER_API_BASE / TAVILY_API_BASE
+// pueden apuntar a servicios simulados para probar el circuito sin gastar.
 app.post('/api/ai/generate', async (req, res) => {
   try {
     const host = req.get('host') || `localhost:${PORT}`;
@@ -211,6 +212,8 @@ app.post('/api/ai/generate', async (req, res) => {
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
       OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
       OPENROUTER_API_BASE: process.env.OPENROUTER_API_BASE,
+      TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+      TAVILY_API_BASE: process.env.TAVILY_API_BASE,
     });
     res.status(response.status).type('application/json').send(await response.text());
   } catch (err: unknown) {

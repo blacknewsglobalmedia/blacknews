@@ -1,34 +1,45 @@
 /**
- * BLACKNEWS — Redacción asistida con OpenRouter (Cloudflare Workers).
+ * BLACKNEWS — Redacción asistida: OpenRouter + búsqueda web (Cloudflare Workers).
  *
- *   POST /api/ai/generate  { categories, countries, content }
- *   → { success: true, data: { content, tweet } }
+ *   POST /api/ai/generate  { text, categories, countries }
+ *   → { success: true, data: { content, tweetBody, model, searched, sources, note } }
  *
- * El navegador manda el contenido editorial actual y los catálogos VIGENTES
- * del medio (secciones y países), así que si mañana se añade o se quita una
- * sección en «Gestión de Categorías» el modelo la ve sin tocar código. La
- * llamada a OpenRouter sale de aquí con `OPENROUTER_API_KEY` (secreto de
- * Wrangler con `npx wrangler secret put`); la clave nunca llega al bundle,
- * igual que las de PayPal.
+ * El usuario escribe el tema o el texto de partida en el generador. Aquí se
+ * busca información relacionada en la web (Tavily, opcional), se le pasa ese
+ * material al modelo y se devuelven dos cosas:
+ *
+ *   - `content`: titular, bajada, sección, pie y países. El cliente lo fusiona
+ *     con su configuración actual y obtiene el JSON completo listo para APLICAR.
+ *   - `tweetBody`: SOLO el cuerpo del tweet. El corchete con las banderas, el
+ *     «» y la firma «■ #BlackNews» los monta el navegador a partir de los
+ *     países elegidos, para que las banderas siempre coincidan con las del post.
+ *
+ * Claves: `OPENROUTER_API_KEY` (modelo) y `TAVILY_API_KEY` (búsqueda), ambas
+ * secretos de Wrangler con `npx wrangler secret put`; ninguna llega al bundle,
+ * igual que las de PayPal. Sin clave de Tavily la llamada sigue funcionando,
+ * sólo que sin fuentes, y el cliente lo avisa.
  *
  * El cliente es quien valida la respuesta contra sus catálogos (sección que
- * exista, países con código del catálogo) y quien fusiona `content` con su
- * configuración actual para obtener el JSON completo. Aquí sólo se comprueba
- * forma y longitud, para que un modelo enfático no devuelva campos infinitos.
+ * exista, países con código del catálogo). Aquí sólo se comprueba forma y
+ * longitud, para que un modelo enfático no devuelva campos infinitos.
  */
 
 export interface AiEnv {
   /** Obligatoria en producción: `npx wrangler secret put OPENROUTER_API_KEY` */
   OPENROUTER_API_KEY?: string;
-  /** Modelo (wrangler.jsonc → vars.OPENROUTER_MODEL) */
+  /** Modelo (wrangler.jsonc → vars.OPENROUTER_MODEL). Los `:free` no cuestan. */
   OPENROUTER_MODEL?: string;
   /** SOLO pruebas locales: apunta a un OpenRouter simulado */
   OPENROUTER_API_BASE?: string;
+  /** Búsqueda web opcional: `npx wrangler secret put TAVILY_API_KEY` */
+  TAVILY_API_KEY?: string;
+  /** SOLO pruebas locales: apunta a un Tavily simulado */
+  TAVILY_API_BASE?: string;
 }
 
-const DEFAULT_MODEL = 'openai/gpt-4o-mini';
+const DEFAULT_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
 const OPENROUTER_API = 'https://openrouter.ai/api/v1';
-const TWEET_LIMIT = 250;
+const TAVILY_API = 'https://api.tavily.com';
 
 const LIMITS = {
   categories: 80, // nº de secciones habilitadas
@@ -38,10 +49,15 @@ const LIMITS = {
   title: 400,
   description: 420,
   photoCaption: 120,
-  systemChars: 4000,
-  userChars: 12000,
-  maxTokens: 1400,
-  timeoutMs: 45000,
+  topic: 4000, // texto de partida que escribe el usuario
+  sources: 5, // resultados de búsqueda que se mandan al modelo
+  snippet: 900, // recorte de cada resultado
+  systemChars: 6000,
+  userChars: 24000,
+  maxTokens: 4000,
+  // Los modelos gratuitos van despacio: 90 s antes de rendirse.
+  timeoutMs: 90000,
+  searchTimeoutMs: 20000,
 };
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
@@ -83,6 +99,10 @@ function clientIp(request: Request): string {
   return 'anon';
 }
 
+function timedOut(err: unknown): boolean {
+  return err instanceof Error && /timeout|abort/i.test(err.name + err.message);
+}
+
 // ── Normalización de la petición ────────────────────────────────────────
 
 interface AiCountry {
@@ -122,6 +142,11 @@ function countryList(value: unknown): AiCountry[] {
   return out;
 }
 
+function readTopic(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\r\n/g, '\n').trim().slice(0, LIMITS.topic);
+}
+
 interface AiContent {
   title: string;
   description: string;
@@ -144,105 +169,343 @@ function readContent(value: unknown): AiContent {
   };
 }
 
+// ── Búsqueda web (Tavily, opcional) ─────────────────────────────────────
+// Se hace aquí y no con las herramientas de búsqueda del propio OpenRouter
+// porque (a) los modelos gratuitos soportan mal las herramientas de servidor,
+// (b) el resultado se puede enseñar al redactor, y (c) así el coste de la
+// búsqueda es el de la capa gratuita de Tavily (1.000/mes) y no por uso.
+
+interface AiSource {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+interface SearchOutcome {
+  sources: AiSource[];
+  searched: boolean;
+  note?: string;
+}
+
+async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
+  const key = (env.TAVILY_API_KEY || '').trim();
+  if (!key) {
+    return {
+      sources: [],
+      searched: false,
+      note: 'Sin búsqueda web (falta la clave TAVILY_API_KEY): la IA redacta sólo con tu texto.',
+    };
+  }
+
+  const base = (env.TAVILY_API_BASE || TAVILY_API).replace(/\/+$/, '');
+  let res: Response;
+  try {
+    res = await fetch(`${base}/search`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        query: topic.replace(/\s+/g, ' ').trim().slice(0, 300),
+        max_results: LIMITS.sources,
+        include_answer: false,
+        include_raw_content: false,
+      }),
+      signal: AbortSignal.timeout(LIMITS.searchTimeoutMs),
+    });
+  } catch (err) {
+    return {
+      sources: [],
+      searched: false,
+      note: timedOut(err)
+        ? 'La búsqueda web no respondió a tiempo: se redacta sólo con tu texto.'
+        : 'No se pudo conectar con la búsqueda web: se redacta sólo con tu texto.',
+    };
+  }
+
+  const raw = await res.text();
+  if (!res.ok) {
+    console.error('[BLACKNEWS WORKER] tavily:', res.status, raw.slice(0, 200));
+    return {
+      sources: [],
+      searched: false,
+      note: `La búsqueda web falló (Tavily ${res.status}): se redacta sólo con tu texto.`,
+    };
+  }
+
+  let payload: { results?: unknown };
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return {
+      sources: [],
+      searched: false,
+      note: 'La búsqueda web devolvió una respuesta ilegible.',
+    };
+  }
+
+  const list = Array.isArray(payload.results) ? payload.results : [];
+  const sources: AiSource[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const url = typeof rec.url === 'string' ? rec.url.trim().slice(0, 300) : '';
+    if (!url) continue;
+    sources.push({
+      title: typeof rec.title === 'string' ? rec.title.trim().slice(0, 200) : url,
+      url,
+      snippet:
+        typeof rec.content === 'string'
+          ? rec.content.replace(/\s+/g, ' ').trim().slice(0, LIMITS.snippet)
+          : '',
+    });
+    if (sources.length >= LIMITS.sources) break;
+  }
+
+  if (sources.length === 0) {
+    return {
+      sources: [],
+      searched: true,
+      note: 'La búsqueda no encontró resultados relacionados: se redacta sólo con tu texto.',
+    };
+  }
+  return { sources, searched: true };
+}
+
 // ── Prompts ─────────────────────────────────────────────────────────────
 // Las listas se meten en cada llamada: son la fuente de verdad del medio y
 // cambian sin desplegar nada nuevo.
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(hasSources: boolean): string {
   return [
     'Eres el redactor jefe de BLACKNEWS, una agencia de noticias internacional en español.',
-    'Te encargan reescribir el contenido editorial de una publicación para redes y devolver también su tuit.',
+    'Te pasan un tema de partida y, si los hay, resultados de búsqueda en la web; redactas la publicación y el cuerpo de su tweet.',
     'Respondes SIEMPRE en español neutro, sobrio y rotundo, con tono de agencia: sin relleno y sin adjetivos de más.',
     '',
     'Devuelve EXCLUSIVAMENTE un objeto JSON válido. Nada de markdown, ni bloques "```", ni texto antes o después.',
     'La forma es exactamente esta:',
-    '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España"}]},"tweet":"..."}',
+    '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
     '',
     'REGLAS DEL CONTENIDO',
-    '- "title": titular del post escrito con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas, que las mayúsculas sólo se piden en el tweet. De 3 a 6 líneas cortas separadas por \\n, para que el texto encaje en el lienzo. Conserva el ángulo y la longitud del titular actual.',
-    '- "description": bajada de 1 o 2 frases en UNA sola línea, máximo 220 caracteres, con su grafía normal.',
+    '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. De 3 a 6 líneas cortas separadas por \\n, para que el texto encaje en el lienzo del post.',
+    '- "description": bajada de 1 o 2 frases en UNA sola línea, máximo 220 caracteres, con datos concretos y su grafía normal.',
     '- "category": EXACTAMENTE una de las secciones de la lista que te doy, copiada carácter a carácter, con sus acentos y su "&". Nunca inventes una sección ni le cambies el formato.',
     '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con su grafía normal, o "" si no procede.',
-    '- "selectedCountries": de 0 a 4 países tomados EXCLUSIVEMENTE del catálogo que te doy, con el mismo "code" y el mismo "name". Ordénalos por relevancia de la noticia. Si no procede, devuelve [].',
+    '- "selectedCountries": de 0 a 4 países tomados EXCLUSIVAMENTE del catálogo que te doy, con el mismo "code" y el mismo "name", ordenados por relevancia. Si no procede, [].',
     '',
-    `REGLAS DEL TWEET (plantilla fija, 5 líneas, máximo ${TWEET_LIMIT} caracteres en total contando los saltos de línea)`,
-    'L1: el titular en MAYÚSCULAS y en UNA sola línea',
-    'L2: línea vacía',
-    'L3: la bajada en UNA sola línea',
-    'L4: línea vacía',
-    'L5: los países con su grafía normal de país (Israel · Irán, nunca en minúsculas) separados por " · " y, si hay países, seguidos de " · " y de la SECCIÓN EDITORIAL en MAYÚSCULAS. Si no hay países, L5 es sólo la SECCIÓN en MAYÚSCULAS.',
-    `Sólo L1 y la SECCIÓN de L5 van en mayúsculas: el titular, la bajada, el pie de foto y los países conservan su grafía normal.`,
-    `Si te pasas de ${TWEET_LIMIT} caracteres, acorta en este orden: primero L3 (bajada), después L5 (países) y sólo al final L1 (titular). Nunca cambies el orden de las líneas ni añadas nada fuera de la plantilla.`,
-    'Sin emojis, sin hashtags, sin enlaces, sin comillas y sin caracteres decorativos.',
+    'REGLAS DE "tweetBody" (sólo el cuerpo del tweet)',
+    '- NO escribas el corchete con las banderas, ni el símbolo "»", ni la firma "#BlackNews": la web los añade alrededor del cuerpo cuando monta el tweet.',
+    '- UNA sola línea: ni saltos de línea ni puntos y aparte.',
+    '- El tweet montado no puede pasar de 250 caracteres: la firma "■ #BlackNews" con su línea en blanco ocupa 14 y el corchete "[banderas]" ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 205 caracteres, empezando por lo esencial.',
+    '- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más.',
+    '- Sin emojis, sin hashtags, sin comillas, sin enlaces y sin "lee más".',
+    '',
+    'FUENTES Y VERACIDAD',
+    hasSources
+      ? '- Usa el material de las fuentes: hechos, cifras, fechas y nombres propios reales. Si una fuente da un año o una cifra, respétala.'
+      : '- No hay material externo: trabaja sólo con el texto de partida y no inventes cifras, fechas, nombres ni organismos que no estén en él.',
+    '- No cites enlaces ni nombres de medio dentro de los textos.',
+    '- Si las fuentes se contradicen, prevalece la versión más reciente.',
+    '- No prometas ni sentencies: informa.',
   ].join('\n');
 }
 
 function buildUserPrompt(
   categories: string[],
+  topic: string,
   countries: AiCountry[],
-  content: AiContent,
-  selection: AiCountry[],
+  sources: AiSource[],
 ): string {
   const countryListText =
     countries.length > 0
       ? countries.map((c) => `${c.code}=${c.name}`).join(', ')
       : '(vacío)';
-  return [
+  const parts = [
     'SECCIONES HABILITADAS (elige exactamente una para "category"):',
-    categories.map((c) => `- ${c}`).join('\n'),
+    categories.map((c) => '  - ' + c).join('\n'),
     '',
     'CATÁLOGO DE PAÍSES PERMITIDO (sólo puedes usar estos code y name):',
     countryListText,
     '',
-    'CONTENIDO EDITORIAL ACTUAL DEL GENERADOR:',
-    `- titular: ${content.title || '(vacío)'}`,
-    `- bajada: ${content.description || '(vacía)'}`,
-    `- sección: ${content.category || '(sin asignar)'}`,
-    `- pie de foto: ${content.photoCaption || '(sin pie)'}`,
-    `- países seleccionados: ${
-      selection.length ? selection.map((c) => c.name).join(', ') : '(ninguno)'
-    }`,
-    '',
-    'Reescribe el contenido con criterio editorial. Mantén los hechos, las entidades, las cifras y los topónimos tal como están y no añadas datos que no estén en el texto.',
-  ].join('\n');
+    'TEXTO DE PARTIDA (lo que escribe la persona de la redacción):',
+    topic,
+  ];
+  if (sources.length > 0) {
+    parts.push('', 'INFORMACIÓN ENCONTRADA EN LA WEB:');
+    sources.forEach((source, index) => {
+      parts.push(`${index + 1}. ${source.title || source.url}`);
+      parts.push(`   ${source.url}`);
+      if (source.snippet) parts.push(`   ${source.snippet}`);
+    });
+    parts.push('', 'Redacta la publicación y el cuerpo del tweet a partir del texto de partida y de esta información.');
+  } else {
+    parts.push('', 'Redacta la publicación y el cuerpo del tweet a partir sólo del texto de partida.');
+  }
+  return parts.join('\n');
 }
 
 // ── Respuesta del modelo ────────────────────────────────────────────────
 
-function parseModelJson(raw: string): { content: AiContent; tweet: string } {
+/** Si el modelo insiste en montar el tweet entero (corchete, «» o firma),
+ *  se lo quitamos aquí: el cliente vuelve a montarlo a partir de los países
+ *  que haya elegido, así que el formato no depende del humor del modelo. */
+function cleanTweetBody(value: string): string {
+  let body = value.replace(/\r\n?/g, '\n').trim();
+  body = body.replace(/^\[[^\]\n]{0,40}\]\s*(?:[»\-–—:]\s*)?/u, '');
+  body = body.replace(/(?:^|\s)(?:■\s*)?#BlackNews\b/giu, '');
+  return body.replace(/\s+/g, ' ').trim();
+}
+
+/** Los modelos escriben a veces saltos de línea REALES dentro de las cadenas
+ *  JSON (el titular va con \n) o dejan una coma al final: JSON.parse se niega
+ *  y el intento entero se pierde. Recorre el texto escapando lo que toca
+ *  dentro de comillas y quitando comas finales, sin tocar el resto. */
+function repairJson(text: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (inString) {
+      if (escaped) {
+        out += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === '\\') {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        out += ch;
+        continue;
+      }
+      if (ch === '\n') {
+        out += '\\n';
+        continue;
+      }
+      if (ch === '\r') {
+        out += '\\r';
+        continue;
+      }
+      if (ch === '\t') {
+        out += '\\t';
+        continue;
+      }
+      if (ch < ' ') {
+        out += ' ';
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    }
+    out += ch;
+  }
+
+  // Coma final antes de cerrar un objeto o un array: válida en JS, no en JSON.
+  let cleaned = '';
+  inString = false;
+  escaped = false;
+  for (let i = 0; i < out.length; i++) {
+    const ch = out[i];
+    if (inString) {
+      cleaned += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      cleaned += ch;
+      continue;
+    }
+    if (ch === ',') {
+      let j = i + 1;
+      while (j < out.length && /\s/.test(out[j])) j++;
+      if (out[j] === '}' || out[j] === ']') {
+        i = j - 1;
+        continue;
+      }
+    }
+    cleaned += ch;
+  }
+  return cleaned;
+}
+
+function parseModelJson(raw: string): { content: AiContent; tweetBody: string } {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const text = fenced ? fenced[1] : raw;
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) {
+  if (start < 0) {
     throw new Error('La IA no devolvió JSON.');
   }
+  if (end <= start) {
+    throw new Error('La IA devolvió una respuesta truncada: vuelve a intentarlo.');
+  }
+  const slice = text.slice(start, end + 1);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text.slice(start, end + 1));
+    parsed = JSON.parse(slice);
   } catch {
-    throw new Error('La IA devolvió un JSON que no se puede leer.');
+    try {
+      parsed = JSON.parse(repairJson(slice));
+    } catch {
+      throw new Error('La IA devolvió un JSON que no se puede leer.');
+    }
   }
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('La IA devolvió una respuesta inesperada.');
   }
   const rec = parsed as Record<string, unknown>;
-  if (!rec.content || typeof rec.content !== 'object') {
+  // Acepta también el formato plano, por si el modelo se salta el "content".
+  const contentValue =
+    rec.content && typeof rec.content === 'object'
+      ? rec.content
+      : typeof rec.title === 'string' || typeof rec.description === 'string'
+        ? rec
+        : null;
+  if (!contentValue) {
     throw new Error('La IA no devolvió el bloque "content".');
   }
-  return {
-    content: readContent(rec.content),
-    tweet: typeof rec.tweet === 'string' ? rec.tweet : '',
-  };
+  const inside = (contentValue ?? {}) as Record<string, unknown>;
+  // A veces el modelo mete el tweet DENTRO de "content": se busca en ambos
+  // sitios antes de rendirse.
+  const body = [rec.tweetBody, inside.tweetBody, rec.tweet, inside.tweet].find(
+    (value): value is string => typeof value === 'string',
+  );
+  if (body === undefined) {
+    throw new Error('La IA no devolvió el cuerpo del tweet.');
+  }
+  const tweetBody = cleanTweetBody(body);
+  if (!tweetBody) {
+    throw new Error('La IA no devolvió el cuerpo del tweet.');
+  }
+  return { content: readContent(contentValue), tweetBody };
 }
 
-function openrouterError(status: number, body: string): string {
+function openrouterError(status: number, body: string, model: string): string {
+  const free = model.includes(':free');
   if (status === 401) return 'Clave de OpenRouter inválida (OPENROUTER_API_KEY).';
-  if (status === 402) return 'Sin crédito en OpenRouter: revisa el saldo de tu cuenta.';
+  if (status === 402) {
+    return free
+      ? 'Ese modelo gratuito no está disponible para esta cuenta: revisa OPENROUTER_MODEL.'
+      : 'Sin crédito en OpenRouter: revisa el saldo de tu cuenta.';
+  }
   if (status === 404) return 'Modelo no encontrado en OpenRouter. Revisa OPENROUTER_MODEL.';
   if (status === 413) return 'El contenido enviado es demasiado largo para el modelo.';
   if (status === 429) {
-    return 'Límite de peticiones de OpenRouter alcanzado: espera unos segundos y reintenta.';
+    const hint = body.match(/"message"\s*:\s*"([^"]{1,180})"/);
+    const base = free
+      ? 'Límite de los modelos gratuitos alcanzado (unas decenas al día y unos 20/min). Espera unos minutos o cambia OPENROUTER_MODEL a un modelo de pago.'
+      : 'Límite de peticiones de OpenRouter alcanzado: espera unos segundos y reintenta.';
+    return hint ? `${base} [${hint[1]}]` : base;
   }
   if (status >= 500) return 'OpenRouter está caído o devolvió un error interno.';
   const match = body.match(/"message"\s*:\s*"([^"]{1,180})"/);
@@ -278,6 +541,23 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
     return json({ success: false, error: 'El cuerpo de la petición no es JSON válido.' }, 400);
   }
 
+  const topic = readTopic(body.text);
+  if (!topic) {
+    return json(
+      { success: false, error: 'Escribe primero el tema o el texto de partida.' },
+      400,
+    );
+  }
+  if (topic.length >= LIMITS.topic) {
+    return json(
+      {
+        success: false,
+        error: `El texto de partida es demasiado largo (máximo ${LIMITS.topic} caracteres).`,
+      },
+      400,
+    );
+  }
+
   const categories = stringList(body.categories, LIMITS.categories, LIMITS.categoryLen);
   if (categories.length === 0) {
     return json(
@@ -287,84 +567,152 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   }
 
   const countries = countryList(body.countries);
-  const content = readContent(body.content);
+
+  // 1) Búsqueda web: si no hay clave o falla, se sigue adelante sin fuentes.
+  const { sources, searched, note } = await webSearch(topic, env);
 
   const base = (env.OPENROUTER_API_BASE || OPENROUTER_API).replace(/\/+$/, '');
   const origin = new URL(request.url).origin;
   const model = (env.OPENROUTER_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        'http-referer': origin,
-        'x-title': 'BLACKNEWS',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.7,
-        max_tokens: LIMITS.maxTokens,
-        messages: [
-          { role: 'system', content: buildSystemPrompt().slice(0, LIMITS.systemChars) },
+  // 2) Modelo. Un solo punto de salida para los fallos de red, de cuota o de
+  // forma: si OpenRouter no puede, se devuelve su error; si responde pero con
+  // el JSON roto o vacío, el bucle de abajo reintenta una vez.
+  const systemContent = buildSystemPrompt(sources.length > 0).slice(0, LIMITS.systemChars);
+  const userContent = buildUserPrompt(categories, topic, countries, sources).slice(
+    0,
+    LIMITS.userChars,
+  );
+
+  // Metadatos del último intento: si la forma falla, el registro dice si el
+  // modelo se quedó corto (finish_reason) o si el JSON venía ya roto.
+  let lastMeta = '';
+
+  const callModel = async (): Promise<{ text: string; response?: Response }> => {
+    lastMeta = '';
+    let upstream: Response;
+    try {
+      upstream = await fetch(`${base}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+          'http-referer': origin,
+          'x-title': 'BLACKNEWS',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.7,
+          max_tokens: LIMITS.maxTokens,
+          // Sin razonamiento oculto: varios `:free` se gastan los tokens de
+          // salida pensando y devuelven content=null con finish_reason "length".
+          reasoning: { effort: 'none' },
+          // El proveedor se encarga de que el contenido sea JSON bien formado:
+          // es la mejor garantía contra las respuestas rotas de los `:free`.
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemContent },
+            { role: 'user', content: userContent },
+          ],
+        }),
+        signal: AbortSignal.timeout(LIMITS.timeoutMs),
+      });
+    } catch (err) {
+      return {
+        text: '',
+        response: json(
           {
-            role: 'user',
-            content: buildUserPrompt(categories, countries, content, content.selectedCountries).slice(
-              0,
-              LIMITS.userChars,
-            ),
+            success: false,
+            error: timedOut(err)
+              ? 'El modelo tardó demasiado en responder. Reintenta en unos segundos.'
+              : 'No se pudo conectar con OpenRouter.',
           },
-        ],
-      }),
-      signal: AbortSignal.timeout(LIMITS.timeoutMs),
-    });
-  } catch (err) {
-    const timedOut = err instanceof Error && /timeout|abort/i.test(err.name + err.message);
-    return json(
-      {
-        success: false,
-        error: timedOut
-          ? 'OpenRouter no respondió a tiempo. Reintenta en unos segundos.'
-          : 'No se pudo conectar con OpenRouter.',
-      },
-      504,
-    );
+          504,
+        ),
+      };
+    }
+
+    const rawBody = await upstream.text();
+    if (!upstream.ok) {
+      console.error('[BLACKNEWS WORKER] ai:', upstream.status, rawBody.slice(0, 300));
+      return {
+        text: '',
+        response: json(
+          { success: false, error: openrouterError(upstream.status, rawBody, model) },
+          502,
+        ),
+      };
+    }
+
+    let payload: {
+      choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
+      usage?: { completion_tokens?: number };
+    };
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return {
+        text: '',
+        response: json(
+          { success: false, error: 'OpenRouter devolvió una respuesta ilegible.' },
+          502,
+        ),
+      };
+    }
+    lastMeta =
+      `finish=${payload.choices?.[0]?.finish_reason ?? '?'} ` +
+      `out=${payload.usage?.completion_tokens ?? '?'} len=${rawBody.length}`;
+
+    const content = payload.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      // Caso real: modelos con razonamiento oculto que se comen los tokens de
+      // salida sin llegar a escribir. El registro deja ver el finish_reason.
+      console.error(
+        '[BLACKNEWS WORKER] ai: contenido vacío',
+        'len=' + rawBody.length,
+        JSON.stringify(payload).slice(0, 700),
+      );
+      return { text: '' };
+    }
+    return { text: content };
+  };
+
+  // Los modelos gratuitos fallan de vez en cuando en lo de la FORMA (JSON roto
+  // o vacío): se reintenta una sola vez, que suele bastar. Los fallos de red o
+  // de cuota no se repiten, porque el segundo intento daría exactamente igual.
+  let result: { content: AiContent; tweetBody: string } | null = null;
+  let lastError = 'La IA no devolvió JSON.';
+  for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+    const call = await callModel();
+    if (call.response) return call.response;
+    try {
+      result = parseModelJson(call.text);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Respuesta de la IA ilegible.';
+      console.error(
+        '[BLACKNEWS WORKER] ai: respuesta no aprovechable (intento ' + attempt + ')',
+        lastMeta,
+        'cabeza=' + call.text.slice(0, 400),
+        'cola=' + call.text.slice(-250),
+      );
+    }
   }
 
-  const rawBody = await upstream.text();
-  if (!upstream.ok) {
-    console.error('[BLACKNEWS WORKER] ai:', upstream.status, rawBody.slice(0, 300));
-    return json({ success: false, error: openrouterError(upstream.status, rawBody) }, 502);
+  if (!result) {
+    return json({ success: false, error: lastError }, 502);
   }
 
-  let payload: { choices?: Array<{ message?: { content?: unknown } }> };
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return json({ success: false, error: 'OpenRouter devolvió una respuesta ilegible.' }, 502);
-  }
-
-  const message = payload.choices?.[0]?.message?.content;
-  if (typeof message !== 'string' || !message.trim()) {
-    return json({ success: false, error: 'El modelo no devolvió contenido.' }, 502);
-  }
-
-  try {
-    const { content: aiContent, tweet } = parseModelJson(message);
-    return json({
-      success: true,
-      data: {
-        content: aiContent,
-        // Sin cortar: el largo real lo muestra (y avisa) el cliente, que es
-        // quien aplica el tope de 250 caracteres del usuario.
-        tweet,
-        model,
-      },
-    });
-  } catch (err) {
-    const message2 = err instanceof Error ? err.message : 'Respuesta de la IA ilegible.';
-    return json({ success: false, error: message2 }, 502);
-  }
+  return json({
+    success: true,
+    data: {
+      content: result.content,
+      // Sin cortar: el cuerpo se queda como viene y el corchete y la firma
+      // los monta el cliente, que es quien aplica el tope de 250 caracteres.
+      tweetBody: result.tweetBody,
+      model,
+      searched,
+      sources: sources.map((source) => ({ title: source.title, url: source.url })),
+      ...(note ? { note } : {}),
+    },
+  });
 }

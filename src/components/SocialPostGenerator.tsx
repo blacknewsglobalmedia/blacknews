@@ -527,19 +527,43 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [jsonInputText, setJsonInputText] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // ─── Redacción asistida (OpenRouter) ───────────────────────────────────
-  // Dos cajas editables: el JSON completo del post (fusiona la configuración
-  // actual con el contenido que escribe la IA) y el tweet de la plantilla.
-  // No se guardan en el borrador: son material de trabajo descartable, y el
-  // JSON exportado no debe arrastrarlas.
+  // ─── Redacción asistida (OpenRouter + búsqueda web) ─────────────────────
+  // Flujo: la persona escribe el tema, la IA busca información relacionada en
+  // la web, redacta el JSON del post (que se importa con «Aplicar») y el
+  // cuerpo del tweet, que aquí se monta con las banderas de los países
+  // elegidos. Después ya de siempre: subir la foto o el vídeo, descargar los
+  // assets y copiar el tweet.
+  // El JSON y el tweet NO se guardan en el borrador: son material de trabajo
+  // descartable y el JSON exportado no debe arrastrarlos. El tema sí se
+  // conserva aparte, porque es lo que ha escrito la persona.
   const [aiJsonText, setAiJsonText] = useState("");
   const [aiTweet, setAiTweet] = useState("");
+  const [aiTopic, setAiTopic] = useState<string>(() => {
+    try {
+      return localStorage.getItem("blacknews_ai_topic") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [aiSources, setAiSources] = useState<{ title: string; url: string }[]>([]);
+  const [aiSearch, setAiSearch] = useState<{
+    searched: boolean;
+    note?: string;
+  } | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiNotice, setAiNotice] = useState<{
     kind: "ok" | "warn" | "error";
     text: string;
   } | null>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
+
+  // El tema sobrevive a un refresco. Va fuera del borrador para que el JSON
+  // que la redacción comparte no arrastre el texto de partida.
+  useEffect(() => {
+    try {
+      localStorage.setItem("blacknews_ai_topic", aiTopic);
+    } catch {}
+  }, [aiTopic]);
 
   // Feedback states
   const [isExporting, setIsExporting] = useState(false);
@@ -969,11 +993,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // ─── IA editorial: JSON del post + tweet ───────────────────────────────
-  // La IA sólo decide el contenido editorial (titular, bajada, sección, pie
+  // La IA decide sólo el contenido editorial (titular, bajada, sección, pie
   // de foto y países); la tipografía, los filtros y el medio siguen siendo
   // del usuario, así que se fusionan con la configuración actual para que el
   // JSON de la caja sea completo y apliquable con «Aplicar».
   const AI_TWEET_LIMIT = 250;
+  // Plantilla:  [🇨🇳🇮🇷] » cuerpo      ← banderas + guillemet, a cargo de la web
+  //             (línea en blanco)
+  //             ■ #BlackNews
+  const AI_TWEET_FOOTER = "\n\n■ #BlackNews";
+
+  /** Banderas de los países del post. Sólo entran los códigos ISO reales: un
+   *  país a medida (📍) o "Internacional" (🌐) no lleva bandera. */
+  const aiTweetFlags = (countries: CountryItem[]) =>
+    countries
+      .map((c) => c.flag)
+      .filter((flag) => /^[\u{1F1E6}-\u{1F1FF}]{2}$/u.test(flag))
+      .join("");
+
+  /** Corta el cuerpo en el presupuesto que queda tras el corchete y la firma.
+   *  Preferible cortar por el final de frase más cercano que a media palabra:
+   *  el tweet se lee entero aunque la IA se haya pasado. */
+  const shortenAiBody = (text: string, max: number): string => {
+    if (text.length <= max) return text;
+    const head = text.slice(0, max);
+    const floor = Math.floor(max * 0.6);
+    let cut = -1;
+    for (const stop of [". ", "; ", ", ", ": "]) {
+      const at = head.lastIndexOf(stop);
+      if (at > floor) cut = Math.max(cut, at + 1);
+    }
+    if (cut <= 0) {
+      const space = head.lastIndexOf(" ");
+      cut = space > 20 ? space : max;
+    }
+    return text.slice(0, cut).trim();
+  };
+
+  /** Monta el tweet final a partir del cuerpo que devuelve la IA y de los
+   *  países que acaban de elegirse, para que el corchete coincida SIEMPRE con
+   *  los países que lleva el post. Sin banderas, el corchete no aparece.
+   *  Si el cuerpo no cabe en el tope, se recorta y se devuelve la marca para
+   *  que la tarjeta lo avise. */
+  const buildAiTweet = (
+    body: string,
+    countries: CountryItem[],
+  ): { tweet: string; trimmed: boolean } => {
+    const flags = aiTweetFlags(countries);
+    const oneLine = body.replace(/\s+/g, " ").trim();
+    const prefix = flags ? `[${flags}] » ` : "";
+    const budget = Math.max(40, AI_TWEET_LIMIT - prefix.length - AI_TWEET_FOOTER.length);
+    const short = shortenAiBody(oneLine, budget);
+    return {
+      tweet: `${prefix}${short}${AI_TWEET_FOOTER}`,
+      trimmed: short.length < oneLine.length,
+    };
+  };
 
   /** Clave de comparación de secciones: la IA puede devolver la misma cadena
    *  sin acentos o con distinto espaciado ("Geopolítica" vs "geopolitica"). */
@@ -1066,9 +1141,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         2,
       ),
     );
-    setAiTweet(
-      typeof root.tweet === "string" ? root.tweet.replace(/\r\n/g, "\n").trim() : "",
+    // El corchete con las banderas y la firma los monta la web: así el
+    // corchete coincide siempre con los países que acaban de elegirse.
+    const rawBody =
+      typeof root.tweetBody === "string"
+        ? root.tweetBody
+        : typeof root.tweet === "string"
+          ? root.tweet
+          : "";
+    const nextTweet = buildAiTweet(rawBody, nextCountries);
+    setAiTweet(nextTweet.tweet);
+
+    setAiSources(
+      Array.isArray(root.sources)
+        ? root.sources
+            .map((item) =>
+              item && typeof item === "object"
+                ? (item as Record<string, unknown>)
+                : null,
+            )
+            .filter((item) => !!item && typeof item.url === "string")
+            .map((item) => ({
+              title: typeof item.title === "string" ? item.title : String(item.url),
+              url: String(item.url),
+            }))
+            .slice(0, 6)
+        : [],
     );
+    setAiSearch({
+      searched: root.searched === true,
+      note: typeof root.note === "string" ? root.note : undefined,
+    });
 
     const notes: string[] = [];
     if (rawCategory && !matchedCategory) {
@@ -1083,39 +1186,50 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ) {
       notes.push("ningún país propuesto existía en el catálogo, se mantienen los actuales");
     }
-    const tweetLength = typeof root.tweet === "string" ? root.tweet.length : 0;
-    if (tweetLength > AI_TWEET_LIMIT) {
+    const tweetLength = nextTweet.tweet.length;
+    if (nextTweet.trimmed) {
+      notes.push(
+        `el cuerpo del tweet se recortó para no pasar de ${AI_TWEET_LIMIT} caracteres; amplíalo a mano en la caja si falta algo`,
+      );
+    } else if (tweetLength > AI_TWEET_LIMIT) {
       notes.push(`el tweet tiene ${tweetLength} caracteres, tope ${AI_TWEET_LIMIT}`);
     }
 
     setAiNotice(
       notes.length
         ? { kind: "warn", text: `⚠︎ ${notes.join(" · ")}` }
-        : { kind: "ok", text: "✓ JSON y tweet listos: revísalos y aplícalos al post." },
+        : {
+            kind: "ok",
+            text: "✓ JSON y tweet listos: revísalos, aplica el JSON al post y sube la foto o el vídeo.",
+          },
     );
   };
 
   const handleGenerateAi = async () => {
     if (aiBusy) return;
+    const topic = aiTopic.trim();
+    if (!topic) {
+      setAiNotice({
+        kind: "warn",
+        text: "Escribe primero el tema o el texto de partida en el cuadro de arriba.",
+      });
+      return;
+    }
     setAiBusy(true);
     setAiNotice(null);
+    setAiSources([]);
+    setAiSearch(null);
     try {
+      // Sólo el texto de partida: la IA parte de lo que escribe la persona y
+      // de lo que encuentre en la web, sin pisar nada de lo que ya haya en el
+      // generador hasta que se pulse «Aplicar».
       const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          text: topic,
           categories: enabledCategories,
           countries: countryCatalog.map((c) => ({ code: c.code, name: c.name })),
-          content: {
-            title,
-            description,
-            category,
-            photoCaption,
-            selectedCountries: selectedCountries.map((c) => ({
-              code: c.code,
-              name: c.name,
-            })),
-          },
         }),
       });
       const data = await response.json().catch(() => null);
@@ -5299,17 +5413,45 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
             )}
 
+            {/* Tema o texto de partida: el único input que necesita la IA */}
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-topic"
+                className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5"
+              >
+                <Type className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Tema o texto de partida</span>
+              </label>
+
+              <textarea
+                id="ai-topic"
+                rows={4}
+                value={aiTopic}
+                onChange={(e) => {
+                  setAiTopic(e.target.value);
+                  setAiNotice(null);
+                }}
+                placeholder="Escribe o pega el tema, la noticia o el contexto del que partir. La IA busca información relacionada en la web y redacta de ahí el JSON del post y el cuerpo del tweet."
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed placeholder-neutral-600 focus:outline-none focus:border-emerald-400 resize-y min-h-[5.5rem]"
+              />
+
+              <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
+                Se guarda en este navegador. Lo que ya tengas en el generador no
+                se toca hasta que pulses «Aplicar».
+              </p>
+            </div>
+
             {/* Acción principal + atajo a la configuración actual */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 type="button"
                 onClick={handleGenerateAi}
                 disabled={aiBusy}
-                title="Reescribe el contenido editorial actual y devuelve el JSON del post y el tweet"
+                title="Busca información relacionada en la web y devuelve el JSON del post y el cuerpo del tweet"
                 className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-100/70 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait shrink-0"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{aiBusy ? "Generando…" : "Generar con IA"}</span>
+                <span>{aiBusy ? "Buscando y redactando…" : "Generar con IA"}</span>
               </button>
               <button
                 type="button"
@@ -5321,10 +5463,48 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span>Cargar JSON actual</span>
               </button>
               <span className="text-[11px] text-neutral-500 font-light leading-relaxed">
-                Parte del contenido que ya tienes, lo reescribe y te devuelve el
-                JSON del post y el tweet (máx. {AI_TWEET_LIMIT} caracteres).
+                Investiga, redacta el JSON del post y el cuerpo del tweet (máx.{" "}
+                {AI_TWEET_LIMIT} caracteres). Después subes la foto o el vídeo.
               </span>
             </div>
+
+            {/* Qué ha buscado la IA: aviso si no hubo búsqueda y lista de fuentes */}
+            {(aiSearch?.note || aiSources.length > 0) && (
+              <div className="space-y-2">
+                {aiSearch?.note && (
+                  <p className="text-[11px] leading-relaxed text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                    {aiSearch.note}
+                  </p>
+                )}
+
+                {aiSources.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+                      Fuentes consultadas
+                    </span>
+                    <ul className="space-y-1">
+                      {aiSources.map((source) => (
+                        <li
+                          key={source.url}
+                          className="text-[11px] text-neutral-400 flex items-start gap-1.5"
+                        >
+                          <Globe className="w-3 h-3 mt-0.5 shrink-0 text-neutral-600" />
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={source.url}
+                            className="hover:text-white transition-colors underline decoration-white/20 truncate"
+                          >
+                            {source.title || source.url}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* JSON del post: ver, editar, copiar, pegar y aplicar */}
             <div className="space-y-2">
@@ -5408,7 +5588,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     }`}
                     title={
                       aiTweet.length > AI_TWEET_LIMIT
-                        ? "El tweet supera el límite: acorta la bajada"
+                        ? "El tweet supera el límite: acorta el cuerpo"
                         : "Límite de 250 caracteres"
                     }
                   >
@@ -5434,7 +5614,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   setAiNotice(null);
                 }}
                 placeholder={
-                  "TÍTULO EN CAJA ALTA\n\nBajada en una sola línea\n\nPaís · País · SECCIÓN"
+                  "[🇨🇳🇮🇷] » Cuerpo del tweet en una sola línea.\n\n■ #BlackNews"
                 }
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed focus:outline-none focus:border-emerald-400 resize-y"
               />

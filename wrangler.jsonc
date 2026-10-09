@@ -7,6 +7,7 @@
   //   npx wrangler secret put PAYPAL_CLIENT_ID     (appId de PayPal, sandbox o live)
   //   npx wrangler secret put PAYPAL_SECRET        (secret de PayPal)
   //   npx wrangler secret put OPENROUTER_API_KEY   (clave de OpenRouter para la IA editorial)
+  //   npx wrangler secret put TAVILY_API_KEY       (búsqueda web de la redacción; opcional)
   // En local (wrangler dev) van en .dev.vars (gitignored).
   "name": "blacknews",
   "main": "worker/index.ts",
@@ -28,7 +29,12 @@
     "PAYPAL_MODE": "live",
     // Modelo por defecto de la redacción asistida (POST /api/ai/generate).
     // Se puede cambiar aquí sin tocar código; la clave va en un secreto.
-    "OPENROUTER_MODEL": "openai/gpt-4o-mini"
+    // Los `:free` no cuestan pero tienen techo diario y a veces el proveedor
+    // los limita: si la redacción lo nota, pon aquí un modelo de pago.
+    // Probados (oct-2026): Nemotron Super 120B funciona y escribe bien en
+    // español; Gemma 4 sale "temporarily rate-limited upstream" y Inkling
+    // sólo se usa desde las apps de sus autores.
+    "OPENROUTER_MODEL": "nvidia/nemotron-3-super-120b-a12b:free"
   },
   // Accesos de suscripción concedidos (solo escribe el Worker tras cobrar en PayPal)
   "kv_namespaces": [

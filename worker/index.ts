@@ -3,7 +3,7 @@
  *
  * - /api/images/*  → API de optimización de imágenes (Cloudinary + transformaciones por CDN)
  * - /api/video/*   → retirada (el material audiovisual se publica en YouTube)
- * - /api/ai/*      → redacción asistida con OpenRouter (JSON + tweet del post)
+ * - /api/ai/*      → redacción asistida: OpenRouter + búsqueda web Tavily
  * - cualquier otra ruta → assets estáticos del frontend (dist/)
  */
 
@@ -28,6 +28,9 @@ export interface Env {
   OPENROUTER_API_KEY?: string; // secreto con `wrangler secret put`
   OPENROUTER_MODEL?: string; // variable de wrangler.jsonc (vars)
   OPENROUTER_API_BASE?: string; // SOLO pruebas locales (ver worker/ai.ts)
+  // Búsqueda web de la redacción (Tavily). Sin clave la llamada va sin fuentes.
+  TAVILY_API_KEY?: string; // secreto con `wrangler secret put`
+  TAVILY_API_BASE?: string; // SOLO pruebas locales (ver worker/ai.ts)
   // Accesos concedidos (solo el Worker escribe aquí)
   PAYPAL_KV: {
     get(key: string): Promise<string | null>;
