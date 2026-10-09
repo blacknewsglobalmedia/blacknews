@@ -16,6 +16,10 @@ import {
   FileText,
   Play,
   Pause,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Maximize2,
   Trash2,
   Palette,
@@ -521,6 +525,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [trimStart, setTrimStart] = useState<number>(0);
   const [trimEnd, setTrimEnd] = useState<number>(0);
+
+  // ── Desplazamiento manual en la vista previa ──
+  // La barra de posición y el contador se escriben en el DOM desde un rAF
+  // (sin estado ⇒ sin re-render por fotograma). `scrubbingRef` marca que la
+  // barra está arrastrada —mientras tanto nadie toca el valor del <input>—
+  // y `scrubResumeRef` recuerda si había reproducción en marcha al empezar.
+  const previewPosRef = useRef<HTMLInputElement>(null);
+  const previewTimeRef = useRef<HTMLSpanElement>(null);
+  const previewPosLastRef = useRef(-1);
+  const scrubbingRef = useRef(false);
+  const scrubResumeRef = useRef(false);
 
   // JSON import/export modal states
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
@@ -4789,6 +4804,171 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return true;
   };
 
+  // ── Desplazamiento manual en la vista previa ──
+  // Barra de posición y botones ±: la búsqueda cierra el sello si estaba en
+  // pantalla y respeta el estado de reproducción. Fuera del rango de recorte
+  // el clip queda en pausa sobre ese fotograma (así se inspecciona y se
+  // fija el inicio/fin); al volver a dar a play se entra al rango exportado.
+  const fmtClock = (t: number) => {
+    const d = Math.max(0, Math.floor(t * 10));
+    const m = Math.floor(d / 600);
+    // toFixed antes de rellenar: sin él, 6 s daría "6" y el relleno
+    // escribiría «0006» en vez de «06.0».
+    return `${String(m).padStart(2, "0")}:${((d % 600) / 10).toFixed(1).padStart(4, "0")}`;
+  };
+
+  /** Escribe contador (y barra, salvo mientras se arrastra) en el DOM. */
+  const writePreviewPos = (raw: number, setInput: boolean) => {
+    const label = previewTimeRef.current;
+    const input = previewPosRef.current;
+    const v = videoRef.current;
+    const dur = videoDuration || (v ? v.duration : 0) || 0;
+    const t = Math.min(Math.max(raw, 0), dur);
+    if (input) {
+      const max = String(Math.max(0.1, dur));
+      if (input.max !== max) input.max = max;
+      if (setInput) input.value = String(t);
+    }
+    if (label) label.textContent = `${fmtClock(t)} / ${fmtClock(dur)}`;
+    previewPosLastRef.current = t;
+  };
+
+  // Sincronización con la reproducción: la llama el rAF (suave) y también
+  // timeupdate (~4 Hz), porque el navegador baja el rAF a 1 Hz con la
+  // ventana oculta y así barra y contador siguen al vídeo igualmente.
+  const syncPreviewPos = () => {
+    if (scrubbingRef.current || isRecordingRef.current) return;
+    const v = videoRef.current;
+    if (!v) return;
+    if (Math.abs(v.currentTime - previewPosLastRef.current) < 0.02) return;
+    writePreviewPos(v.currentTime, true);
+  };
+
+  const seekPreview = (target: number) => {
+    const v = videoRef.current;
+    if (!v || isRecordingRef.current) return;
+    const dur = videoDuration || v.duration || 0;
+    if (!(dur > 0)) return;
+    const t = Math.min(Math.max(target, 0), Math.max(0, dur - 0.05));
+    const lo = trimEnd > trimStart ? trimStart : 0;
+    const hi = trimEnd > trimStart ? trimEnd : dur;
+    const inRange = t >= lo && t < hi;
+    const wasOutro = outroActiveRef.current;
+    if (wasOutro) {
+      outroActiveRef.current = false;
+      setOutroActive(false);
+      const o = outroRef.current;
+      if (o) {
+        try {
+          o.pause();
+          o.currentTime = 0;
+        } catch {}
+      }
+    }
+    v.currentTime = t;
+    // Con la barra arrastrada el valor del <input> ya lo pinta el navegador:
+    // ahí sólo se mueve el contador.
+    writePreviewPos(t, !scrubbingRef.current);
+    // Con la barra arrastrada quién decide al soltar es endScrub.
+    if (scrubbingRef.current) return;
+    // Fuera del recorte se inspecciona el fotograma (aunque viniera del
+    // cierre); dentro, el sello cierra y el clip vuelve a la vida.
+    if (!inRange) {
+      v.pause();
+      setIsVideoPlaying(false);
+    } else if (wasOutro) {
+      v.play().catch(() => {});
+      setIsVideoPlaying(true);
+    }
+  };
+
+  const nudgePreview = (delta: number) => {
+    const v = videoRef.current;
+    if (v) seekPreview(v.currentTime + delta);
+  };
+
+  // Arranque y suelte de la barra: se pausa mientras se arrastra (la
+  // posición no se escapa de las manos) y, al soltar, sólo se retoma si el
+  // destino cae dentro del recorte.
+  const startScrub = () => {
+    const v = videoRef.current;
+    if (!v || isRecordingRef.current) return;
+    scrubbingRef.current = true;
+    scrubResumeRef.current = outroActiveRef.current || !v.paused;
+    if (!v.paused) {
+      v.pause();
+      setIsVideoPlaying(false);
+    }
+  };
+  const endScrub = () => {
+    if (!scrubbingRef.current) return;
+    scrubbingRef.current = false;
+    // Sin movimiento (la barra no emitió input): el sello sigue mandando.
+    if (outroActiveRef.current) return;
+    const v = videoRef.current;
+    if (!v || isRecordingRef.current) return;
+    const dur = videoDuration || v.duration || 0;
+    const lo = trimEnd > trimStart ? trimStart : 0;
+    const hi = trimEnd > trimStart ? trimEnd : dur;
+    if (scrubResumeRef.current && v.currentTime >= lo && v.currentTime < hi) {
+      v.play().catch(() => {});
+      setIsVideoPlaying(true);
+    } else {
+      setIsVideoPlaying(false);
+    }
+    // Barra y contador vuelven a seguimiento normal tras el arrastre.
+    previewPosLastRef.current = -1;
+    syncPreviewPos();
+  };
+
+  // Play/pause único de la vista previa (fila bajo la tarjeta, vale para
+  // los tres formatos): con el sello en pantalla gobierna el cierre.
+  const togglePreviewPlay = () => {
+    if (isRecordingRef.current) return;
+    if (outroActiveRef.current) {
+      const o = outroRef.current;
+      if (!o) return;
+      if (o.paused) {
+        o.play().catch(() => {});
+        setIsVideoPlaying(true);
+      } else {
+        o.pause();
+        setIsVideoPlaying(false);
+      }
+      return;
+    }
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+      setIsVideoPlaying(true);
+    } else {
+      v.pause();
+      setIsVideoPlaying(false);
+    }
+  };
+
+  // Seguimiento de posición: barra y contador se actualizan en el DOM a
+  // velocidad de fotograma. Nunca con la barra arrastrada ni durante la
+  // exportación (allí el grabador es el que mueve el currentTime); timeupdate
+  // cubre el caso de rAF reducido a 1 Hz con la ventana oculta.
+  useEffect(() => {
+    if (mediaType !== "video") return;
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      syncPreviewPos();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaType, videoDuration]);
+
+  // Estilo compartido de los botones de salto de la fila de transporte:
+  // minimalista, sin bordes duros, sólo contraste al pasar el cursor.
+  const seekBtnCls =
+    "p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white transition-colors cursor-pointer shrink-0 disabled:opacity-40 disabled:pointer-events-none";
+
   // Elemento de media de la vista previa: un único <video>/<img> compartido
   // por los formatos 4:5/9:16 y por el 16:9 de TV, para que videoRef siga
   // apuntando siempre al preview (la exportación PNG lee el mismo elemento).
@@ -4820,21 +5000,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         onTimeUpdate={(e) => {
           // Durante la exportación no se recorta: el límite lo marca el grabador
           if (isRecordingRef.current) return;
-          if (trimEnd > trimStart) {
-            if (e.currentTarget.currentTime >= trimEnd) {
+          const v = e.currentTarget;
+          // Pausado = fotograma en inspección: ni el lazo ni el sello tocan la
+          // posición. Así una búsqueda manual fuera del recorte se queda donde
+          // está en lugar de ser arrastrada de vuelta al rango (y al reproducir
+          // vuelve a entrar en él, que es lo que exporta).
+          if (!v.paused && trimEnd > trimStart) {
+            if (v.currentTime >= trimEnd) {
               // Con cierre activo, el final del recorte abre el sello. En la
               // intro TV16:9 todavía no: la primera pasada es muda y en B/N.
               const introLooming =
                 postFormat === "16:9" && tvIntro && !tvIntroDoneRef.current;
               if (videoOutro && !introLooming && startPreviewOutro()) return;
-              e.currentTarget.currentTime = trimStart;
-            } else if (e.currentTarget.currentTime < trimStart) {
-              e.currentTarget.currentTime = trimStart;
+              v.currentTime = trimStart;
+            } else if (v.currentTime < trimStart) {
+              v.currentTime = trimStart;
             }
           }
           // Respaldo del seguimiento de la intro TV: el rAF puede caer a 1 Hz
           // en segundo plano y timeupdate llega ~4 veces por segundo.
-          updateIntroClock(e.currentTarget);
+          updateIntroClock(v);
+          // Barra y contador: el mismo respaldo para la posición.
+          syncPreviewPos();
         }}
       />
     ) : (
@@ -7187,46 +7374,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {photoCaption.trim()}
                   </span>
                 ) : null}
-
-                {/* Video control overlay button in preview */}
-                {mediaType === "video" && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Con el sello en pantalla, el botón gobierna el cierre.
-                      if (outroActiveRef.current) {
-                        const outroEl = outroRef.current;
-                        if (outroEl) {
-                          if (outroEl.paused) {
-                            outroEl.play().catch(() => {});
-                            setIsVideoPlaying(true);
-                          } else {
-                            outroEl.pause();
-                            setIsVideoPlaying(false);
-                          }
-                        }
-                        return;
-                      }
-                      if (videoRef.current) {
-                        if (videoRef.current.paused) {
-                          videoRef.current.play();
-                          setIsVideoPlaying(true);
-                        } else {
-                          videoRef.current.pause();
-                          setIsVideoPlaying(false);
-                        }
-                      }
-                    }}
-                    className="p-1.5 bg-black/60 hover:bg-black/90 text-white rounded-full backdrop-blur-sm transition-colors cursor-pointer border border-white/20 shrink-0"
-                    title="Pausar / Reproducir video"
-                  >
-                    {isVideoPlaying ? (
-                      <Pause className="w-3.5 h-3.5" />
-                    ) : (
-                      <Play className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                )}
               </div>
             </div>
               </>
@@ -7262,6 +7409,96 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               />
             )}
           </div>
+
+          {/* Transporte de la vista previa: mover el clip hacia adelante y
+              hacia atrás. La barra recorre todo el archivo —si el destino
+              queda fuera del rango de recorte el vídeo se queda en pausa
+              sobre ese fotograma para inspeccionarlo, y play vuelve al rango
+              exportado— y los botones saltan 1 s o 10 s. Sólo en vídeo y
+              desactivado mientras exporta (allí manda el grabador). */}
+          {mediaType === "video" && (
+            <div className="flex items-center gap-1.5 sm:gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={togglePreviewPlay}
+                disabled={isRecordingVideo}
+                title="Reproducir / pausar la vista previa"
+                aria-label="Reproducir o pausar la vista previa"
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer shrink-0 disabled:opacity-40 disabled:pointer-events-none"
+              >
+                {isVideoPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => nudgePreview(-10)}
+                disabled={isRecordingVideo || videoDuration <= 0}
+                title="Retroceder 10 segundos"
+                aria-label="Retroceder 10 segundos"
+                className={seekBtnCls}
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => nudgePreview(-1)}
+                disabled={isRecordingVideo || videoDuration <= 0}
+                title="Retroceder 1 segundo"
+                aria-label="Retroceder 1 segundo"
+                className={seekBtnCls}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <input
+                ref={previewPosRef}
+                type="range"
+                min={0}
+                step={0.1}
+                disabled={isRecordingVideo || videoDuration <= 0}
+                aria-label="Posición del video en la vista previa"
+                className="flex-1 min-w-0 accent-emerald-500 h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
+                onPointerDown={startScrub}
+                onPointerUp={endScrub}
+                onPointerCancel={endScrub}
+                onInput={(e) => seekPreview(Number(e.currentTarget.value))}
+              />
+
+              <button
+                type="button"
+                onClick={() => nudgePreview(1)}
+                disabled={isRecordingVideo || videoDuration <= 0}
+                title="Avanzar 1 segundo"
+                aria-label="Avanzar 1 segundo"
+                className={seekBtnCls}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => nudgePreview(10)}
+                disabled={isRecordingVideo || videoDuration <= 0}
+                title="Avanzar 10 segundos"
+                aria-label="Avanzar 10 segundos"
+                className={seekBtnCls}
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+
+              <span
+                ref={previewTimeRef}
+                className="font-mono text-[10px] text-neutral-400 tabular-nums shrink-0 w-[94px] text-right"
+              >
+                00:00.0 / 00:00.0
+              </span>
+            </div>
+          )}
 
           {/* Miniatura de portada: la misma composición que se descarga,
               pintada en vivo. El botón queda debajo, a un clic de la vista
