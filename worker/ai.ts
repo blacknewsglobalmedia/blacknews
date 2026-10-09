@@ -57,6 +57,11 @@ const DEFAULT_FREE_MODELS = [
 ];
 
 const DEFAULT_MODEL = DEFAULT_FREE_MODELS[0];
+// Cuántos modelos de la cadena se prueban en una misma llamada. Cada uno se
+// salta al siguiente si el anterior está saturado (429), caído (5xx), se queda
+// sin contenido o devuelve el JSON roto. El tope evita encadenar fallos
+// lentos (timeouts de 90 s) durante demasiado tiempo.
+const MAX_MODEL_TRIES = 4;
 const OPENROUTER_API = "https://openrouter.ai/api/v1";
 const TAVILY_API = "https://api.tavily.com";
 
@@ -849,6 +854,47 @@ async function callGeminiAi(
   return null;
 }
 
+// Lee la respuesta de un modelo sin lanzar: si el JSON no sirve, el error se
+// devuelve junto al texto para que quien llama pueda pasar al siguiente modelo.
+function tryParsePost(raw: string): {
+  parsed?: Draft;
+  text: string;
+  error?: string;
+} {
+  try {
+    return { parsed: parseModelJson(raw), text: raw };
+  } catch (err) {
+    const error =
+      err instanceof Error ? err.message : "Respuesta de la IA ilegible.";
+    console.warn("[BLACKNEWS WORKER] ai: JSON no aprovechable:", error);
+    return { text: raw, error };
+  }
+}
+
+// Los tres proveedores 100% gratuitos, en orden de prioridad: el primero que
+// responde manda. Si no hay ninguno configurado (o todos fallan) devuelve
+// null; cada proveedor ya salta por su cuenta a su siguiente modelo.
+async function callFreeModel(
+  env: AiEnv,
+  systemContent: string,
+  userContent: string,
+  followUp?: { assistant: string; user: string },
+): Promise<{ text: string; name: string } | null> {
+  if (env.AI) {
+    const text = await callWorkersAi(env, systemContent, userContent, followUp);
+    if (text) return { text, name: "Cloudflare Workers AI (Llama 3.3 Free)" };
+  }
+  if (env.GROQ_API_KEY) {
+    const text = await callGroqAi(env, systemContent, userContent, followUp);
+    if (text) return { text, name: "Groq Cloud (Llama 3.3 Free)" };
+  }
+  if (env.GEMINI_API_KEY) {
+    const text = await callGeminiAi(env, systemContent, userContent, followUp);
+    if (text) return { text, name: "Google Gemini 2.5 Flash (Free)" };
+  }
+  return null;
+}
+
 // ── Handler ─────────────────────────────────────────────────────────────
 
 export async function handleAiGenerate(
@@ -953,183 +999,222 @@ export async function handleAiGenerate(
   // modelo se quedó corto (finish_reason) o si el JSON venía ya roto.
   let lastMeta = "";
 
+  // Recorre la cadena de modelos: si uno está saturado (429), caído (5xx), se
+  // queda sin contenido o viene con el JSON roto, se pasa AL SIGUIENTE. Sólo se
+  // devuelve un error al cliente cuando se agota la cadena, o cuando el fallo
+  // es de la cuenta o de la petición (400/401/403), que daría igual probar
+  // otro modelo.
   const callModel = async (
     modelList: string[],
     followUp?: { assistant: string; user: string },
-  ): Promise<{ text: string; response?: Response }> => {
+  ): Promise<{
+    parsed?: Draft;
+    text: string;
+    error?: string;
+    response?: Response;
+  }> => {
     lastMeta = "";
-    let upstream: Response;
-    const targetModels = modelList.length > 0 ? modelList : modelChain;
-    try {
-      upstream = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-          "http-referer": origin,
-          "x-title": "BLACKNEWS",
-        },
-        body: JSON.stringify({
-          models: targetModels,
-          model: targetModels[0],
-          // En la pasada de ajuste baja la temperatura: se pide precisión
-          // (quitar una frase, alargar un campo), no creatividad.
-          temperature: followUp ? 0.2 : 0.7,
-          max_tokens: LIMITS.maxTokens,
-          // Sin razonamiento oculto: varios `:free` se gastan los tokens de
-          // salida pensando y devuelven content=null con finish_reason "length".
-          reasoning: { effort: "none" },
-          // El proveedor se encarga de que el contenido sea JSON bien formado:
-          // es la mejor garantía contra las respuestas rotas de los `:free`.
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemContent },
-            { role: "user", content: userContent },
-            // Segunda pasada: la conversación conserva la respuesta anterior
-            // para que el modelo corrija sólo lo que se le señala.
-            ...(followUp
-              ? [
-                  { role: "assistant", content: followUp.assistant },
-                  { role: "user", content: followUp.user },
-                ]
-              : []),
-          ],
-        }),
-        signal: AbortSignal.timeout(LIMITS.timeoutMs),
-      });
-    } catch (err) {
-      return {
-        text: "",
-        response: json(
-          {
-            success: false,
-            error: timedOut(err)
-              ? "El modelo tardó demasiado en responder. Reintenta en unos segundos."
-              : "No se pudo conectar con OpenRouter.",
-          },
-          504,
-        ),
-      };
-    }
+    const targetModels = (modelList.length > 0 ? modelList : modelChain).slice(
+      0,
+      MAX_MODEL_TRIES,
+    );
+    // Los fallos de red y de timeout son los lentos: sólo se tolera UNO antes
+    // de rendirse, para no encadenar esperas de 90 s.
+    let networkFails = 0;
+    let lastText = "";
 
-    const rawBody = await upstream.text();
-    if (!upstream.ok) {
-      console.error(
-        "[BLACKNEWS WORKER] ai:",
-        upstream.status,
-        rawBody.slice(0, 300),
+    for (let i = 0; i < targetModels.length; i++) {
+      const model = targetModels[i];
+      const isLast = i === targetModels.length - 1;
+      let upstream: Response;
+      try {
+        upstream = await fetch(`${base}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+            "http-referer": origin,
+            "x-title": "BLACKNEWS",
+          },
+          body: JSON.stringify({
+            model,
+            // En la pasada de ajuste baja la temperatura: se pide precisión
+            // (quitar una frase, alargar un campo), no creatividad.
+            temperature: followUp ? 0.2 : 0.7,
+            max_tokens: LIMITS.maxTokens,
+            // Sin razonamiento oculto: varios `:free` se gastan los tokens de
+            // salida pensando y devuelven content=null con finish_reason "length".
+            reasoning: { effort: "none" },
+            // El proveedor se encarga de que el contenido sea JSON bien formado:
+            // es la mejor garantía contra las respuestas rotas de los `:free`.
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemContent },
+              { role: "user", content: userContent },
+              // Segunda pasada: la conversación conserva la respuesta anterior
+              // para que el modelo corrija sólo lo que se le señala.
+              ...(followUp
+                ? [
+                    { role: "assistant", content: followUp.assistant },
+                    { role: "user", content: followUp.user },
+                  ]
+                : []),
+            ],
+          }),
+          signal: AbortSignal.timeout(LIMITS.timeoutMs),
+        });
+      } catch (err) {
+        networkFails += 1;
+        console.warn(
+          `[BLACKNEWS WORKER] ai: sin respuesta de ${model}` +
+            (networkFails > 1 || isLast ? "" : ", siguiente modelo"),
+          err instanceof Error ? err.message : err,
+        );
+        if (networkFails > 1 || isLast) {
+          return {
+            text: lastText,
+            response: json(
+              {
+                success: false,
+                error: timedOut(err)
+                  ? "El modelo tardó demasiado en responder. Reintenta en unos segundos."
+                  : "No se pudo conectar con OpenRouter.",
+              },
+              504,
+            ),
+          };
+        }
+        continue;
+      }
+
+      const rawBody = await upstream.text();
+      if (!upstream.ok) {
+        console.error(
+          "[BLACKNEWS WORKER] ai:",
+          model,
+          upstream.status,
+          rawBody.slice(0, 300),
+        );
+        const fatal =
+          upstream.status === 400 ||
+          upstream.status === 401 ||
+          upstream.status === 403;
+        if (fatal || isLast) {
+          return {
+            text: lastText,
+            response: json(
+              {
+                success: false,
+                error: openrouterError(upstream.status, rawBody, model),
+              },
+              502,
+            ),
+          };
+        }
+        console.warn(
+          `[BLACKNEWS WORKER] ai: ${model} respondió ${upstream.status}, siguiente modelo`,
+        );
+        continue;
+      }
+
+      let payload: {
+        model?: string;
+        choices?: Array<{
+          message?: { content?: unknown };
+          finish_reason?: string;
+        }>;
+        usage?: { completion_tokens?: number };
+      };
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        if (isLast) {
+          return {
+            text: lastText,
+            response: json(
+              {
+                success: false,
+                error: "OpenRouter devolvió una respuesta ilegible.",
+              },
+              502,
+            ),
+          };
+        }
+        console.warn(
+          `[BLACKNEWS WORKER] ai: ${model} devolvió una respuesta ilegible, siguiente modelo`,
+        );
+        continue;
+      }
+
+      usedModelName = payload.model || model;
+      lastMeta =
+        `model=${usedModelName} finish=${payload.choices?.[0]?.finish_reason ?? "?"} ` +
+        `out=${payload.usage?.completion_tokens ?? "?"} len=${rawBody.length}`;
+
+      const content = payload.choices?.[0]?.message?.content;
+      if (typeof content !== "string") {
+        // Caso real: modelos con razonamiento oculto que se comen los tokens de
+        // salida sin llegar a escribir. El registro deja ver el finish_reason.
+        console.error(
+          "[BLACKNEWS WORKER] ai: contenido vacío",
+          model,
+          "len=" + rawBody.length,
+          JSON.stringify(payload).slice(0, 700),
+        );
+        if (isLast) return { text: lastText };
+        console.warn(
+          `[BLACKNEWS WORKER] ai: ${model} sin contenido, siguiente modelo`,
+        );
+        continue;
+      }
+
+      const { parsed, text, error } = tryParsePost(content);
+      if (parsed) return { parsed, text };
+      // JSON roto o forma inesperada: se apunta y se prueba con el siguiente.
+      lastText = text;
+      if (isLast) return { text: lastText, error };
+      console.warn(
+        `[BLACKNEWS WORKER] ai: ${model} respondió con el JSON roto, siguiente modelo`,
       );
-      return {
-        text: "",
-        response: json(
-          {
-            success: false,
-            error: openrouterError(upstream.status, rawBody, targetModels[0]),
-          },
-          502,
-        ),
-      };
     }
 
-    let payload: {
-      model?: string;
-      choices?: Array<{
-        message?: { content?: unknown };
-        finish_reason?: string;
-      }>;
-      usage?: { completion_tokens?: number };
-    };
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return {
-        text: "",
-        response: json(
-          {
-            success: false,
-            error: "OpenRouter devolvió una respuesta ilegible.",
-          },
-          502,
-        ),
-      };
-    }
-
-    if (payload.model) {
-      usedModelName = payload.model;
-    } else {
-      usedModelName = targetModels[0];
-    }
-
-    lastMeta =
-      `model=${usedModelName} finish=${payload.choices?.[0]?.finish_reason ?? "?"} ` +
-      `out=${payload.usage?.completion_tokens ?? "?"} len=${rawBody.length}`;
-
-    const content = payload.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      // Caso real: modelos con razonamiento oculto que se comen los tokens de
-      // salida sin llegar a escribir. El registro deja ver el finish_reason.
-      console.error(
-        "[BLACKNEWS WORKER] ai: contenido vacío",
-        "len=" + rawBody.length,
-        JSON.stringify(payload).slice(0, 700),
-      );
-      return { text: "" };
-    }
-    return { text: content };
+    return { text: lastText };
   };
 
-  // Los modelos gratuitos fallan de vez en cuando en lo de la FORMA (JSON roto
-  // o vacío): se reintenta una sola vez, que suele bastar. Los fallos de red o
-  // de cuota no se repiten, porque el segundo intento daría exactamente igual.
-  let result: { content: AiContent; tweetBody: string } | null = null;
+  // Los proveedores gratuitos y la cadena de modelos se encargan solos de
+  // saltar de modelo cuando el anterior falla; aquí sólo se decide qué
+  // respuesta se le devuelve al usuario.
+  let result: Draft | null = null;
   let lastRaw = "";
   let lastError = "La IA no devolvió JSON.";
 
-  // Intentar primero con proveedores 100% gratuitos (Workers AI, Groq, Gemini)
-  if (!result) {
-    let freeText: string | null = null;
-    let freeModelName = "";
-
-    if (env.AI) {
-      freeText = await callWorkersAi(env, systemContent, userContent);
-      if (freeText) freeModelName = "Cloudflare Workers AI (Llama 3.3 Free)";
-    }
-    if (!freeText && env.GROQ_API_KEY) {
-      freeText = await callGroqAi(env, systemContent, userContent);
-      if (freeText) freeModelName = "Groq Cloud (Llama 3.3 Free)";
-    }
-    if (!freeText && env.GEMINI_API_KEY) {
-      freeText = await callGeminiAi(env, systemContent, userContent);
-      if (freeText) freeModelName = "Google Gemini 2.5 Flash (Free)";
-    }
-
-    if (freeText) {
-      try {
-        result = parseModelJson(freeText);
-        lastRaw = freeText;
-        usedModelName = freeModelName;
-      } catch (err) {
-        console.warn("[BLACKNEWS WORKER] Error al parsear JSON de proveedor gratuito:", err);
-      }
+  // 1) Proveedores 100% gratuitos (Workers AI, Groq, Gemini): van primero.
+  const free = await callFreeModel(env, systemContent, userContent);
+  if (free) {
+    lastRaw = free.text;
+    usedModelName = free.name;
+    const { parsed, error } = tryParsePost(free.text);
+    if (parsed) {
+      result = parsed;
+    } else if (error) {
+      lastError = error;
     }
   }
 
-  // Si no se obtuvo resultado de los proveedores directos, intentar con OpenRouter
+  // 2) OpenRouter: recorre la cadena de OPENROUTER_MODEL y sólo devuelve un
+  //    error si la cadena entera se queda sin una respuesta aprovechable.
   if (!result && env.OPENROUTER_API_KEY) {
-    for (let attempt = 1; attempt <= 2 && !result; attempt++) {
-      const currentList = attempt === 1 ? modelChain : modelChain.slice(1);
-      const call = await callModel(currentList);
-      if (call.response && attempt === 1) return call.response;
-      if (call.text) lastRaw = call.text;
-      try {
-        result = parseModelJson(call.text);
-      } catch (err) {
-        lastError =
-          err instanceof Error ? err.message : "Respuesta de la IA ilegible.";
+    const call = await callModel(modelChain);
+    if (call.response) return call.response;
+    if (call.parsed) {
+      result = call.parsed;
+      lastRaw = call.text;
+    } else {
+      if (call.error) lastError = call.error;
+      if (call.text) {
+        lastRaw = call.text;
         console.error(
-          "[BLACKNEWS WORKER] ai: respuesta no aprovechable (intento " +
-            attempt +
-            ")",
+          "[BLACKNEWS WORKER] ai: respuesta no aprovechable",
           lastMeta,
           "cabeza=" + call.text.slice(0, 400),
           "cola=" + call.text.slice(-250),
@@ -1149,25 +1234,37 @@ export async function handleAiGenerate(
   // intentar mejorar.
   let warnings = templateIssues(result);
   if (warnings.length > 0 && lastRaw) {
-    const revision = await callModel(modelChain, {
+    const followUp = {
       assistant: lastRaw.slice(0, 8000),
       user: buildRevisionPrompt(warnings),
-    });
-    if (revision.text) {
-      try {
-        const candidate = parseModelJson(revision.text);
-        const candidateIssues = templateIssues(candidate);
-        if (candidateIssues.length <= warnings.length) {
-          result = candidate;
-          warnings = candidateIssues;
-        }
-      } catch {
-        console.error(
-          "[BLACKNEWS WORKER] ai: revisión descartada",
-          lastMeta,
-          revision.text.slice(0, 300),
-        );
+    };
+    // Con clave de OpenRouter la revisión pasa por la cadena de modelos; sin
+    // ella, por los proveedores gratuitos. Nunca hacia un endpoint sin clave.
+    let revision: { parsed?: Draft; text: string } = { text: "" };
+    if (env.OPENROUTER_API_KEY) {
+      revision = await callModel(modelChain, followUp);
+    } else {
+      const freeRevision = await callFreeModel(
+        env,
+        systemContent,
+        userContent,
+        followUp,
+      );
+      revision = freeRevision ? tryParsePost(freeRevision.text) : { text: "" };
+    }
+    if (revision.parsed) {
+      const candidateIssues = templateIssues(revision.parsed);
+      if (candidateIssues.length <= warnings.length) {
+        result = revision.parsed;
+        warnings = candidateIssues;
       }
+    } else if (revision.text) {
+      // JSON roto o forma inesperada: se conserva la primera respuesta.
+      console.error(
+        "[BLACKNEWS WORKER] ai: revisión descartada",
+        lastMeta,
+        revision.text.slice(0, 300),
+      );
     } else {
       // Error de red o de cuota en la revisión: no invalida la primera respuesta.
       console.error("[BLACKNEWS WORKER] ai: revisión sin contenido", lastMeta);

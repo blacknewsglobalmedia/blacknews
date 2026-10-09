@@ -193,10 +193,13 @@ app.use('/api/paypal', (_req, res) => {
   res.status(503).json({ success: false, error: 'payments_not_configured' });
 });
 
-// API: Redacción asistida con IA (OpenRouter + búsqueda web Tavily) — mismo
-// handler que el Worker. En local las claves salen de .env (OPENROUTER_API_KEY
-// y, opcional, TAVILY_API_KEY); con OPENROUTER_API_BASE / TAVILY_API_BASE
-// pueden apuntar a servicios simulados para probar el circuito sin gastar.
+// API: Redacción asistida con IA (Workers AI / Groq / Gemini / OpenRouter +
+// búsqueda web Tavily) — mismo handler que el Worker. En local las claves
+// salen de .env (OPENROUTER_API_KEY, GROQ_API_KEY, GEMINI_API_KEY y, opcional,
+// TAVILY_API_KEY); el binding AI de Workers AI sólo existe en Cloudflare, así
+// que en local esa vía queda desactivada. Con OPENROUTER_API_BASE /
+// TAVILY_API_BASE pueden apuntar a servicios simulados para probar el
+// circuito sin gastar.
 app.post('/api/ai/generate', async (req, res) => {
   try {
     const host = req.get('host') || `localhost:${PORT}`;
@@ -212,6 +215,8 @@ app.post('/api/ai/generate', async (req, res) => {
       OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
       OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
       OPENROUTER_API_BASE: process.env.OPENROUTER_API_BASE,
+      GROQ_API_KEY: process.env.GROQ_API_KEY,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
       TAVILY_API_KEY: process.env.TAVILY_API_KEY,
       TAVILY_API_BASE: process.env.TAVILY_API_BASE,
     });
@@ -221,6 +226,21 @@ app.post('/api/ai/generate', async (req, res) => {
     console.error('[BLACKNEWS API] ai:', message);
     res.status(502).json({ success: false, error: message });
   }
+});
+
+// API: Estado de los proveedores de IA (mismo contrato que el Worker). En local
+// sólo se pueden leer las claves de .env: el binding AI de Workers AI existe
+// únicamente en Cloudflare, por eso aquí siempre sale `false`.
+app.get('/api/ai/provider-status', (_req, res) => {
+  res.json({
+    success: true,
+    providers: {
+      workers_ai: false,
+      groq: Boolean((process.env.GROQ_API_KEY || '').trim()),
+      gemini: Boolean((process.env.GEMINI_API_KEY || '').trim()),
+      openrouter: Boolean((process.env.OPENROUTER_API_KEY || '').trim()),
+    },
+  });
 });
 
 // API: Direct Server-Side Video Post Composition (High-Speed, 100% Quality, Perfect Audio Sync)
