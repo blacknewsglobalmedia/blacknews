@@ -1146,6 +1146,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? (raw[key] as string).trim().slice(0, max) || fallback
         : fallback;
 
+    // Lo que el Worker no pudo ajustar en su segunda pasada: repeticiones
+    // entre campos o textos que no encajan en la plantilla.
+    const serverWarnings = Array.isArray(root.warnings)
+      ? root.warnings.filter((item): item is string => typeof item === "string")
+      : [];
+
     // Titular y bajada sólo se recortan si vienen de la IA: si el modelo no
     // los devuelve, se conserva intacto lo que ya estaba en el post.
     const rawAiTitle =
@@ -1262,6 +1268,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       );
     } else if (tweetLength > AI_TWEET_LIMIT) {
       notes.push(`el tweet tiene ${tweetLength} caracteres, tope ${AI_TWEET_LIMIT}`);
+    }
+
+    // Los tres textos se publican juntos: si la IA repite frases entre ellos
+    // se está quedando sin sitio para información nueva. El Worker ya ha
+    // intentado corregirlo en su segunda pasada y devuelve lo que sigue
+    // sobrando (repeticiones o textos que no caben en la plantilla).
+    for (const warning of serverWarnings) {
+      notes.push(warning);
     }
 
     setAiNotice(

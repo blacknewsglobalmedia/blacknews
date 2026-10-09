@@ -288,8 +288,12 @@ function buildSystemPrompt(hasSources: boolean): string {
     '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
     '',
     'REGLAS DEL CONTENIDO',
-    '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. DE 2 A 3 líneas cortas separadas por \\n, cada una con 1 a 4 palabras y como mucho 25 caracteres (unos 75 en total). El titular va en una columna estrecha de 4:5: lo que se pase no cabe y se sale encima de la foto.',
-    '- "description": bajada de 1 o 2 frases EN UNA sola línea, sin \\n, máximo 170 caracteres: vienen a ser 3 líneas pintadas. Datos concretos y grafía normal.',
+    '- Los tres textos ("title", "description" y "tweetBody") van juntos en la misma publicación y la persona los lee los tres: son COMPLEMENTARIOS, no tres versiones de la misma noticia.',
+    '- Reparto obligatorio: "title" = QUÉ pasa (el hecho nuclear). "description" = DATOS Y CONTEXTO (fecha, cifras, quién, por qué, consecuencia inmediata). "tweetBody" = ÁNGULO COMPLEMENTARIO (reacción, implicación, lo que viene ahora o un dato que no aparece en los otros dos).',
+    '- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas puede aparecer en dos campos distintos, ni el mismo dato contado con sinónimos. Si el titular ya lo dijo, la bajada y el tweet no lo vuelven a decir: aportan otro dato. Si algo no cabe, córtalo antes que repetirlo.',
+    '- Los tres textos tratan el MISMO hecho: si el titular es del cierre de Ormuz, la bajada y el tweet son también de ese cierre, no de otra noticia del mismo tema.',
+    '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. EXACTAMENTE 3 líneas separadas por \\n (nunca 1, nunca 4), cada una de 4 o 5 palabras y unos 25 caracteres, entre 55 y 75 en total. Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Mal ejemplo: una sola línea o dos de 32 caracteres: la columna es estrecha y el texto se parte y se sale encima de la foto. El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
+    '- "description": bajada de 1 o 2 frases EN UNA sola línea, sin \\n, entre 120 y 170 caracteres: vienen a ser 3 líneas pintadas. Datos concretos que NO estén ya en el titular (cifras, fecha, consecuencia) y grafía normal. No la acortes: una sola línea de 60 caracteres desperdicia el sitio.',
     '- "category": EXACTAMENTE una de las secciones de la lista que te doy, copiada carácter a carácter, con sus acentos y su "&". Nunca inventes una sección ni le cambies el formato.',
     '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con su grafía normal, o "" si no procede.',
     '- "selectedCountries": de 0 a 4 países tomados EXCLUSIVAMENTE del catálogo que te doy, con el mismo "code" y el mismo "name", ordenados por relevancia. Si no procede, [].',
@@ -298,6 +302,7 @@ function buildSystemPrompt(hasSources: boolean): string {
     '- NO escribas el corchete con las banderas, ni el símbolo "»", ni la firma "#BlackNews": la web los añade alrededor del cuerpo cuando monta el tweet.',
     '- UNA sola línea: ni saltos de línea ni puntos y aparte.',
     '- El tweet montado no puede pasar de 250 caracteres: la firma "■ #BlackNews" con su línea en blanco ocupa 14 y el corchete "[banderas]" ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 205 caracteres, empezando por lo esencial.',
+    '- Es sobre el MISMO hecho que el titular, no sobre otra noticia del mismo tema. Aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada (reacción, implicación, qué viene ahora): quien lo lee acaba de ver los otros dos, repetirlos desperdicia el tweet.',
     '- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más.',
     '- Sin emojis, sin hashtags, sin comillas, sin enlaces y sin "lee más".',
     '',
@@ -490,6 +495,122 @@ function parseModelJson(raw: string): { content: AiContent; tweetBody: string } 
   return { content: readContent(contentValue), tweetBody };
 }
 
+// ── Plantilla: complementariedad y huecos ─────────────────────────────────
+// Los tres textos se publican juntos y deben sumar información en lugar de
+// repetirla. Aquí sólo se pide una segunda pasada por lo que SÓLO el modelo
+// puede arreglar: repetirse entre campos o quedarse corto. Lo que sobra de
+// largo lo recorta el cliente con su aviso (es determinista y no merece otra
+// llamada al modelo, que además no cuenta bien los caracteres).
+const LAYOUT = {
+  titleLinesMin: 2,
+  titleMin: 50,
+  titleMax: 75,
+  descMin: 110,
+  descMax: 170,
+  /** Palabras seguidas que hacen que dos campos estén diciendo lo mismo. */
+  sharedWords: 5,
+};
+
+interface Draft {
+  content: AiContent;
+  tweetBody: string;
+}
+
+/** Palabras de un texto: tal y como se escriben y normalizadas (minúsculas,
+ *  sin acentos ni puntuación) para poder compararlas sin ruido. Se descartan
+ *  los signos sueltos para que ambas listas mantengan la misma posición. */
+function wordsOf(text: string): { words: string[]; norm: string[] } {
+  const words: string[] = [];
+  const norm: string[] = [];
+  for (const word of text.replace(/\n/g, ' ').split(/\s+/)) {
+    const bare = word
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}]/gu, '');
+    if (!bare) continue;
+    words.push(word.replace(/[^\p{L}\p{N}]+$/gu, ''));
+    norm.push(bare);
+  }
+  return { words, norm };
+}
+
+/** Primera frase de `n` palabras seguidas que comparten los dos textos, o
+ *  cadena vacía si no comparten ninguna. Se devuelve tal como escribe el
+ *  primer texto, para poder citarla en el aviso. */
+function sharedPhrase(a: string, b: string, n = LAYOUT.sharedWords): string {
+  const first = wordsOf(a);
+  const second = wordsOf(b);
+  if (first.norm.length < n || second.norm.length < n) return '';
+  const seen = new Map<string, string>();
+  for (let i = 0; i + n <= first.norm.length; i++) {
+    seen.set(first.norm.slice(i, i + n).join(' '), first.words.slice(i, i + n).join(' '));
+  }
+  for (let j = 0; j + n <= second.norm.length; j++) {
+    const hit = seen.get(second.norm.slice(j, j + n).join(' '));
+    if (hit) return hit;
+  }
+  return '';
+}
+
+/** Todo lo que el modelo tiene que corregir en una segunda pasada: huecos
+ *  (texto demasiado corto para el sitio que ocupa en la plantilla) y
+ *  repeticiones entre campos. Lista vacía = respuesta válida, se devuelve tal
+ *  cual. Los excesos de largo los recorta el cliente con su aviso. */
+function templateIssues(draft: Draft): string[] {
+  const issues: string[] = [];
+  const lines = draft.content.title
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const total = lines.join('').length;
+  if (lines.length < LAYOUT.titleLinesMin) {
+    issues.push(
+      `el titular ocupa ${lines.length} línea(s): tiene que ocupar 3 líneas separadas por \\n, entre ${LAYOUT.titleMin} y ${LAYOUT.titleMax} caracteres en total`,
+    );
+  } else if (total < LAYOUT.titleMin) {
+    issues.push(
+      `el titular suma ${total} caracteres: amplíalo a ${LAYOUT.titleMin}-${LAYOUT.titleMax} en 3 líneas con el dato que falta (quién, qué, dónde)`,
+    );
+  }
+  const desc = draft.content.description.replace(/\s+/g, ' ').trim();
+  if (desc.length < LAYOUT.descMin) {
+    issues.push(
+      `la bajada tiene ${desc.length} caracteres: debe ocupar ${LAYOUT.descMin}-${LAYOUT.descMax}, con la cifra, la fecha o la consecuencia`,
+    );
+  }
+  const tweet = draft.tweetBody;
+  // La frase se quita SIEMPRE de la bajada o del tweet, nunca del titular:
+  // es el campo más ajustado (3 líneas cortas) y conviene dejarlo quieto.
+  const overlaps: Array<[string, string, string, string]> = [
+    [
+      'el titular',
+      'la bajada',
+      sharedPhrase(draft.content.title, draft.content.description),
+      'de la bajada',
+    ],
+    ['la bajada', 'el tweet', sharedPhrase(draft.content.description, tweet), 'del tweet'],
+    ['el titular', 'el tweet', sharedPhrase(draft.content.title, tweet), 'del tweet'],
+  ];
+  for (const [a, b, phrase, quitar] of overlaps) {
+    if (!phrase) continue;
+    issues.push(
+      `la frase «${phrase}» aparece igual en ${a} y en ${b}: quítala ${quitar} y escribe en su lugar otro dato del mismo hecho`,
+    );
+  }
+  return issues;
+}
+
+function buildRevisionPrompt(issues: string[]): string {
+  return [
+    'Tu anterior respuesta tiene los problemas de abajo. Devuelve EXCLUSIVAMENTE el mismo objeto JSON, corregido, sin nada alrededor y sin cambiar lo que ya está bien.',
+    'Problemas concretos que tienes que resolver:',
+    ...issues.map((issue) => `  - ${issue}`),
+    'Los tres textos siguen tratando el mismo hecho y siendo complementarios: titular = QUÉ pasa (3 líneas de 4 o 5 palabras), bajada = DATOS Y CONTEXTO, cuerpo del tweet = ÁNGULO COMPLEMENTARIO.',
+    'Para corregir sólo tienes dos maneras: AÑADIR información que falte o MOVER un dato de un campo a otro. NUNCA cortes ni resumas: si algo no cabe, quita una idea entera de otro campo en su lugar.',
+  ].join('\n');
+}
+
 function openrouterError(status: number, body: string, model: string): string {
   const free = model.includes(':free');
   if (status === 401) return 'Clave de OpenRouter inválida (OPENROUTER_API_KEY).';
@@ -588,7 +709,9 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   // modelo se quedó corto (finish_reason) o si el JSON venía ya roto.
   let lastMeta = '';
 
-  const callModel = async (): Promise<{ text: string; response?: Response }> => {
+  const callModel = async (
+    followUp?: { assistant: string; user: string },
+  ): Promise<{ text: string; response?: Response }> => {
     lastMeta = '';
     let upstream: Response;
     try {
@@ -602,7 +725,9 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
         },
         body: JSON.stringify({
           model,
-          temperature: 0.7,
+          // En la pasada de ajuste baja la temperatura: se pide precisión
+          // (quitar una frase, alargar un campo), no creatividad.
+          temperature: followUp ? 0.2 : 0.7,
           max_tokens: LIMITS.maxTokens,
           // Sin razonamiento oculto: varios `:free` se gastan los tokens de
           // salida pensando y devuelven content=null con finish_reason "length".
@@ -613,6 +738,14 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
           messages: [
             { role: 'system', content: systemContent },
             { role: 'user', content: userContent },
+            // Segunda pasada: la conversación conserva la respuesta anterior
+            // para que el modelo corrija sólo lo que se le señala.
+            ...(followUp
+              ? [
+                  { role: 'assistant', content: followUp.assistant },
+                  { role: 'user', content: followUp.user },
+                ]
+              : []),
           ],
         }),
         signal: AbortSignal.timeout(LIMITS.timeoutMs),
@@ -681,10 +814,12 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   // o vacío): se reintenta una sola vez, que suele bastar. Los fallos de red o
   // de cuota no se repiten, porque el segundo intento daría exactamente igual.
   let result: { content: AiContent; tweetBody: string } | null = null;
+  let lastRaw = '';
   let lastError = 'La IA no devolvió JSON.';
   for (let attempt = 1; attempt <= 2 && !result; attempt++) {
     const call = await callModel();
     if (call.response) return call.response;
+    if (call.text) lastRaw = call.text;
     try {
       result = parseModelJson(call.text);
     } catch (err) {
@@ -702,6 +837,39 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
     return json({ success: false, error: lastError }, 502);
   }
 
+  // Pasada de ajuste: si el titular o la bajada no encajan en la plantilla, o
+  // si dos campos están diciendo lo mismo, se pide UNA revisión concreta con la
+  // respuesta anterior delante y la lista de lo que sobra. Si la revisión no
+  // llega o sale peor, se conserva la primera: nunca se pierde contenido por
+  // intentar mejorar.
+  let warnings = templateIssues(result);
+  if (warnings.length > 0 && lastRaw) {
+    const revision = await callModel({
+      assistant: lastRaw.slice(0, 8000),
+      user: buildRevisionPrompt(warnings),
+    });
+    if (revision.text) {
+      try {
+        const candidate = parseModelJson(revision.text);
+        const candidateIssues = templateIssues(candidate);
+        if (candidateIssues.length <= warnings.length) {
+          result = candidate;
+          warnings = candidateIssues;
+        }
+      } catch {
+        console.error(
+          '[BLACKNEWS WORKER] ai: revisión descartada',
+          lastMeta,
+          revision.text.slice(0, 300),
+        );
+      }
+    } else {
+      // Error de red o de cuota en la revisión: no invalida la primera respuesta.
+      console.error('[BLACKNEWS WORKER] ai: revisión sin contenido', lastMeta);
+    }
+    console.log('[BLACKNEWS WORKER] ai: ajuste', JSON.stringify({ issues: warnings }));
+  }
+
   return json({
     success: true,
     data: {
@@ -712,6 +880,8 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
       model,
       searched,
       sources: sources.map((source) => ({ title: source.title, url: source.url })),
+      // Lo que sigue sin encajar (señalado para la redacción, en la tarjeta).
+      ...(warnings.length > 0 ? { warnings } : {}),
       ...(note ? { note } : {}),
     },
   });
