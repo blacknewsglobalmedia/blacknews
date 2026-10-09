@@ -27,14 +27,11 @@
     // wrangler: si aquí dice 'sandbox', las credenciales live se mandan al
     // endpoint sandbox → OAuth 401 y planIds vacíos.
     "PAYPAL_MODE": "live",
-    // Modelo por defecto de la redacción asistida (POST /api/ai/generate).
-    // Se puede cambiar aquí sin tocar código; la clave va en un secreto.
-    // Los `:free` no cuestan pero tienen techo diario y a veces el proveedor
-    // los limita: si la redacción lo nota, pon aquí un modelo de pago.
-    // Probados (oct-2026): Nemotron Super 120B funciona y escribe bien en
-    // español; Gemma 4 sale "temporarily rate-limited upstream" y Inkling
-    // sólo se usa desde las apps de sus autores.
-    "OPENROUTER_MODEL": "nvidia/nemotron-3-super-120b-a12b:free"
+    // Cadena de modelos de la redacción asistida (POST /api/ai/generate).
+    // Se admiten varios modelos separados por comas para concatenar fallbacks:
+    // si el primero está saturado (429) o en mantenimiento, pasa automáticamente
+    // al siguiente sin interrumpir la generación del usuario.
+    "OPENROUTER_MODEL": "nvidia/nemotron-3-super-120b-a12b:free, meta-llama/llama-3.3-70b-instruct:free, deepseek/deepseek-r1:free, qwen/qwen-2.5-72b-instruct:free, google/gemma-2-9b-it:free"
   },
   // Accesos de suscripción concedidos (solo escribe el Worker tras cobrar en PayPal)
   "kv_namespaces": [
@@ -43,6 +40,9 @@
       "id": "75573049d6b3424d96c70c1f9cd077a5"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "observability": {
     "enabled": true
   }

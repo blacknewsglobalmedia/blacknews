@@ -25,9 +25,15 @@
  */
 
 export interface AiEnv {
-  /** Obligatoria en producción: `npx wrangler secret put OPENROUTER_API_KEY` */
+  /** Binding nativo 100% GRATUITO de Cloudflare Workers AI (10.000 neuronas/día sin clave ni tarjeta) */
+  AI?: any;
+  /** Clave opcional de Google AI Studio (100% gratis, 1.500 peticiones/día sin tarjeta): `npx wrangler secret put GEMINI_API_KEY` */
+  GEMINI_API_KEY?: string;
+  /** Clave opcional de Groq Cloud (100% gratis, 14.400 peticiones/día sin tarjeta): `npx wrangler secret put GROQ_API_KEY` */
+  GROQ_API_KEY?: string;
+  /** Clave de OpenRouter: `npx wrangler secret put OPENROUTER_API_KEY` */
   OPENROUTER_API_KEY?: string;
-  /** Modelo (wrangler.jsonc → vars.OPENROUTER_MODEL). Los `:free` no cuestan. */
+  /** Modelo (wrangler.jsonc → vars.OPENROUTER_MODEL). */
   OPENROUTER_MODEL?: string;
   /** SOLO pruebas locales: apunta a un OpenRouter simulado */
   OPENROUTER_API_BASE?: string;
@@ -37,9 +43,40 @@ export interface AiEnv {
   TAVILY_API_BASE?: string;
 }
 
-const DEFAULT_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
-const OPENROUTER_API = 'https://openrouter.ai/api/v1';
-const TAVILY_API = 'https://api.tavily.com';
+const DEFAULT_FREE_MODELS = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "deepseek/deepseek-r1:free",
+  "qwen/qwen-2.5-72b-instruct:free",
+  "google/gemma-2-9b-it:free",
+  "mistralai/mistral-7b-instruct:free",
+  "meta-llama/llama-3.1-8b-instruct:free",
+  "deepseek/deepseek-chat",
+  "google/gemini-2.5-flash",
+  "openai/gpt-4o-mini",
+];
+
+const DEFAULT_MODEL = DEFAULT_FREE_MODELS[0];
+const OPENROUTER_API = "https://openrouter.ai/api/v1";
+const TAVILY_API = "https://api.tavily.com";
+
+function parseModelChain(envModel?: string): string[] {
+  if (!envModel || !envModel.trim()) {
+    return DEFAULT_FREE_MODELS;
+  }
+  const custom = envModel
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (custom.length === 0) return DEFAULT_FREE_MODELS;
+  const chain = [...custom];
+  for (const fallback of DEFAULT_FREE_MODELS) {
+    if (!chain.includes(fallback)) {
+      chain.push(fallback);
+    }
+  }
+  return chain;
+}
 
 const LIMITS = {
   categories: 80, // nº de secciones habilitadas
@@ -60,7 +97,7 @@ const LIMITS = {
   searchTimeoutMs: 20000,
 };
 
-const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
+const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -92,11 +129,11 @@ function isRateLimited(ip: string): boolean {
 }
 
 function clientIp(request: Request): string {
-  const cf = request.headers.get('cf-connecting-ip');
+  const cf = request.headers.get("cf-connecting-ip");
   if (cf) return cf;
-  const fwd = request.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0].trim();
-  return 'anon';
+  const fwd = request.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return "anon";
 }
 
 function timedOut(err: unknown): boolean {
@@ -110,11 +147,15 @@ interface AiCountry {
   name: string;
 }
 
-function stringList(value: unknown, maxItems: number, maxLen: number): string[] {
+function stringList(
+  value: unknown,
+  maxItems: number,
+  maxLen: number,
+): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
   for (const item of value) {
-    if (typeof item !== 'string') continue;
+    if (typeof item !== "string") continue;
     const text = item.trim().slice(0, maxLen);
     if (!text || out.includes(text)) continue;
     out.push(text);
@@ -128,12 +169,16 @@ function countryList(value: unknown): AiCountry[] {
   const seen = new Set<string>();
   const out: AiCountry[] = [];
   for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== "object") continue;
     const rec = item as Record<string, unknown>;
     const code =
-      typeof rec.code === 'string' ? rec.code.trim().toUpperCase().slice(0, 8) : '';
+      typeof rec.code === "string"
+        ? rec.code.trim().toUpperCase().slice(0, 8)
+        : "";
     const name =
-      typeof rec.name === 'string' ? rec.name.trim().slice(0, LIMITS.countryLen) : '';
+      typeof rec.name === "string"
+        ? rec.name.trim().slice(0, LIMITS.countryLen)
+        : "";
     if (!code || !name || seen.has(code)) continue;
     seen.add(code);
     out.push({ code, name });
@@ -143,8 +188,8 @@ function countryList(value: unknown): AiCountry[] {
 }
 
 function readTopic(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  return value.replace(/\r\n/g, '\n').trim().slice(0, LIMITS.topic);
+  if (typeof value !== "string") return "";
+  return value.replace(/\r\n/g, "\n").trim().slice(0, LIMITS.topic);
 }
 
 interface AiContent {
@@ -157,14 +202,18 @@ interface AiContent {
 
 function readContent(value: unknown): AiContent {
   const rec =
-    value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    value && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
   const text = (key: string, max: number): string =>
-    typeof rec[key] === 'string' ? (rec[key] as string).trim().slice(0, max) : '';
+    typeof rec[key] === "string"
+      ? (rec[key] as string).trim().slice(0, max)
+      : "";
   return {
-    title: text('title', LIMITS.title),
-    description: text('description', LIMITS.description),
-    category: text('category', LIMITS.categoryLen),
-    photoCaption: text('photoCaption', LIMITS.photoCaption),
+    title: text("title", LIMITS.title),
+    description: text("description", LIMITS.description),
+    category: text("category", LIMITS.categoryLen),
+    photoCaption: text("photoCaption", LIMITS.photoCaption),
     selectedCountries: countryList(rec.selectedCountries),
   };
 }
@@ -188,26 +237,26 @@ interface SearchOutcome {
 }
 
 async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
-  const key = (env.TAVILY_API_KEY || '').trim();
+  const key = (env.TAVILY_API_KEY || "").trim();
   if (!key) {
     return {
       sources: [],
       searched: false,
-      note: 'Sin búsqueda web (falta la clave TAVILY_API_KEY): la IA redacta sólo con tu texto.',
+      note: "Sin búsqueda web (falta la clave TAVILY_API_KEY): la IA redacta sólo con tu texto.",
     };
   }
 
-  const base = (env.TAVILY_API_BASE || TAVILY_API).replace(/\/+$/, '');
+  const base = (env.TAVILY_API_BASE || TAVILY_API).replace(/\/+$/, "");
   let res: Response;
   try {
     res = await fetch(`${base}/search`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'content-type': 'application/json',
+        "content-type": "application/json",
         authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        query: topic.replace(/\s+/g, ' ').trim().slice(0, 300),
+        query: topic.replace(/\s+/g, " ").trim().slice(0, 300),
         max_results: LIMITS.sources,
         include_answer: false,
         include_raw_content: false,
@@ -219,14 +268,14 @@ async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
       sources: [],
       searched: false,
       note: timedOut(err)
-        ? 'La búsqueda web no respondió a tiempo: se redacta sólo con tu texto.'
-        : 'No se pudo conectar con la búsqueda web: se redacta sólo con tu texto.',
+        ? "La búsqueda web no respondió a tiempo: se redacta sólo con tu texto."
+        : "No se pudo conectar con la búsqueda web: se redacta sólo con tu texto.",
     };
   }
 
   const raw = await res.text();
   if (!res.ok) {
-    console.error('[BLACKNEWS WORKER] tavily:', res.status, raw.slice(0, 200));
+    console.error("[BLACKNEWS WORKER] tavily:", res.status, raw.slice(0, 200));
     return {
       sources: [],
       searched: false,
@@ -241,24 +290,25 @@ async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
     return {
       sources: [],
       searched: false,
-      note: 'La búsqueda web devolvió una respuesta ilegible.',
+      note: "La búsqueda web devolvió una respuesta ilegible.",
     };
   }
 
   const list = Array.isArray(payload.results) ? payload.results : [];
   const sources: AiSource[] = [];
   for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== "object") continue;
     const rec = item as Record<string, unknown>;
-    const url = typeof rec.url === 'string' ? rec.url.trim().slice(0, 300) : '';
+    const url = typeof rec.url === "string" ? rec.url.trim().slice(0, 300) : "";
     if (!url) continue;
     sources.push({
-      title: typeof rec.title === 'string' ? rec.title.trim().slice(0, 200) : url,
+      title:
+        typeof rec.title === "string" ? rec.title.trim().slice(0, 200) : url,
       url,
       snippet:
-        typeof rec.content === 'string'
-          ? rec.content.replace(/\s+/g, ' ').trim().slice(0, LIMITS.snippet)
-          : '',
+        typeof rec.content === "string"
+          ? rec.content.replace(/\s+/g, " ").trim().slice(0, LIMITS.snippet)
+          : "",
     });
     if (sources.length >= LIMITS.sources) break;
   }
@@ -267,7 +317,7 @@ async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
     return {
       sources: [],
       searched: true,
-      note: 'La búsqueda no encontró resultados relacionados: se redacta sólo con tu texto.',
+      note: "La búsqueda no encontró resultados relacionados: se redacta sólo con tu texto.",
     };
   }
   return { sources, searched: true };
@@ -279,41 +329,41 @@ async function webSearch(topic: string, env: AiEnv): Promise<SearchOutcome> {
 
 function buildSystemPrompt(hasSources: boolean): string {
   return [
-    'Eres el redactor jefe de BLACKNEWS, una agencia de noticias internacional en español.',
-    'Te pasan un tema de partida y, si los hay, resultados de búsqueda en la web; redactas la publicación y el cuerpo de su tweet.',
-    'Respondes SIEMPRE en español neutro, sobrio y rotundo, con tono de agencia: sin relleno y sin adjetivos de más.',
-    '',
+    "Eres el redactor jefe de BLACKNEWS, una agencia de noticias internacional en español.",
+    "Te pasan un tema de partida y, si los hay, resultados de búsqueda en la web; redactas la publicación y el cuerpo de su tweet.",
+    "Respondes SIEMPRE en español neutro, sobrio y rotundo, con tono de agencia: sin relleno y sin adjetivos de más.",
+    "",
     'Devuelve EXCLUSIVAMENTE un objeto JSON válido. Nada de markdown, ni bloques "```", ni texto antes o después.',
-    'La forma es exactamente esta:',
+    "La forma es exactamente esta:",
     '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
-    '',
-    'REGLAS DEL CONTENIDO',
+    "",
+    "REGLAS DEL CONTENIDO",
     '- Los tres textos ("title", "description" y "tweetBody") van juntos en la misma publicación y la persona los lee los tres: son COMPLEMENTARIOS, no tres versiones de la misma noticia.',
     '- Reparto obligatorio: "title" = QUÉ pasa (el hecho nuclear). "description" = DATOS Y CONTEXTO (fecha, cifras, quién, por qué, consecuencia inmediata). "tweetBody" = ÁNGULO COMPLEMENTARIO (reacción, implicación, lo que viene ahora o un dato que no aparece en los otros dos).',
-    '- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas puede aparecer en dos campos distintos, ni el mismo dato contado con sinónimos. Si el titular ya lo dijo, la bajada y el tweet no lo vuelven a decir: aportan otro dato. Si algo no cabe, córtalo antes que repetirlo.',
-    '- Los tres textos tratan el MISMO hecho: si el titular es del cierre de Ormuz, la bajada y el tweet son también de ese cierre, no de otra noticia del mismo tema.',
+    "- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas puede aparecer en dos campos distintos, ni el mismo dato contado con sinónimos. Si el titular ya lo dijo, la bajada y el tweet no lo vuelven a decir: aportan otro dato. Si algo no cabe, córtalo antes que repetirlo.",
+    "- Los tres textos tratan el MISMO hecho: si el titular es del cierre de Ormuz, la bajada y el tweet son también de ese cierre, no de otra noticia del mismo tema.",
     '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. EXACTAMENTE 3 líneas separadas por \\n (nunca 1, nunca 4), cada una de 4 o 5 palabras y unos 25 caracteres, entre 55 y 75 en total. Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Mal ejemplo: una sola línea o dos de 32 caracteres: la columna es estrecha y el texto se parte y se sale encima de la foto. El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
     '- "description": bajada de 1 o 2 frases EN UNA sola línea, sin \\n, entre 120 y 170 caracteres: vienen a ser 3 líneas pintadas. Datos concretos que NO estén ya en el titular (cifras, fecha, consecuencia) y grafía normal. No la acortes: una sola línea de 60 caracteres desperdicia el sitio.',
     '- "category": EXACTAMENTE una de las secciones de la lista que te doy, copiada carácter a carácter, con sus acentos y su "&". Nunca inventes una sección ni le cambies el formato.',
     '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con su grafía normal, o "" si no procede.',
     '- "selectedCountries": de 0 a 4 países tomados EXCLUSIVAMENTE del catálogo que te doy, con el mismo "code" y el mismo "name", ordenados por relevancia. Si no procede, [].',
-    '',
+    "",
     'REGLAS DE "tweetBody" (sólo el cuerpo del tweet)',
     '- NO escribas el corchete con las banderas, ni el símbolo "»", ni la firma "#BlackNews": la web los añade alrededor del cuerpo cuando monta el tweet.',
-    '- UNA sola línea: ni saltos de línea ni puntos y aparte.',
+    "- UNA sola línea: ni saltos de línea ni puntos y aparte.",
     '- El tweet montado no puede pasar de 250 caracteres: la firma "■ #BlackNews" con su línea en blanco ocupa 14 y el corchete "[banderas]" ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 205 caracteres, empezando por lo esencial.',
-    '- Es sobre el MISMO hecho que el titular, no sobre otra noticia del mismo tema. Aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada (reacción, implicación, qué viene ahora): quien lo lee acaba de ver los otros dos, repetirlos desperdicia el tweet.',
-    '- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más.',
+    "- Es sobre el MISMO hecho que el titular, no sobre otra noticia del mismo tema. Aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada (reacción, implicación, qué viene ahora): quien lo lee acaba de ver los otros dos, repetirlos desperdicia el tweet.",
+    "- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más.",
     '- Sin emojis, sin hashtags, sin comillas, sin enlaces y sin "lee más".',
-    '',
-    'FUENTES Y VERACIDAD',
+    "",
+    "FUENTES Y VERACIDAD",
     hasSources
-      ? '- Usa el material de las fuentes: hechos, cifras, fechas y nombres propios reales. Si una fuente da un año o una cifra, respétala.'
-      : '- No hay material externo: trabaja sólo con el texto de partida y no inventes cifras, fechas, nombres ni organismos que no estén en él.',
-    '- No cites enlaces ni nombres de medio dentro de los textos.',
-    '- Si las fuentes se contradicen, prevalece la versión más reciente.',
-    '- No prometas ni sentencies: informa.',
-  ].join('\n');
+      ? "- Usa el material de las fuentes: hechos, cifras, fechas y nombres propios reales. Si una fuente da un año o una cifra, respétala."
+      : "- No hay material externo: trabaja sólo con el texto de partida y no inventes cifras, fechas, nombres ni organismos que no estén en él.",
+    "- No cites enlaces ni nombres de medio dentro de los textos.",
+    "- Si las fuentes se contradicen, prevalece la versión más reciente.",
+    "- No prometas ni sentencies: informa.",
+  ].join("\n");
 }
 
 function buildUserPrompt(
@@ -324,30 +374,36 @@ function buildUserPrompt(
 ): string {
   const countryListText =
     countries.length > 0
-      ? countries.map((c) => `${c.code}=${c.name}`).join(', ')
-      : '(vacío)';
+      ? countries.map((c) => `${c.code}=${c.name}`).join(", ")
+      : "(vacío)";
   const parts = [
     'SECCIONES HABILITADAS (elige exactamente una para "category"):',
-    categories.map((c) => '  - ' + c).join('\n'),
-    '',
-    'CATÁLOGO DE PAÍSES PERMITIDO (sólo puedes usar estos code y name):',
+    categories.map((c) => "  - " + c).join("\n"),
+    "",
+    "CATÁLOGO DE PAÍSES PERMITIDO (sólo puedes usar estos code y name):",
     countryListText,
-    '',
-    'TEXTO DE PARTIDA (lo que escribe la persona de la redacción):',
+    "",
+    "TEXTO DE PARTIDA (lo que escribe la persona de la redacción):",
     topic,
   ];
   if (sources.length > 0) {
-    parts.push('', 'INFORMACIÓN ENCONTRADA EN LA WEB:');
+    parts.push("", "INFORMACIÓN ENCONTRADA EN LA WEB:");
     sources.forEach((source, index) => {
       parts.push(`${index + 1}. ${source.title || source.url}`);
       parts.push(`   ${source.url}`);
       if (source.snippet) parts.push(`   ${source.snippet}`);
     });
-    parts.push('', 'Redacta la publicación y el cuerpo del tweet a partir del texto de partida y de esta información.');
+    parts.push(
+      "",
+      "Redacta la publicación y el cuerpo del tweet a partir del texto de partida y de esta información.",
+    );
   } else {
-    parts.push('', 'Redacta la publicación y el cuerpo del tweet a partir sólo del texto de partida.');
+    parts.push(
+      "",
+      "Redacta la publicación y el cuerpo del tweet a partir sólo del texto de partida.",
+    );
   }
-  return parts.join('\n');
+  return parts.join("\n");
 }
 
 // ── Respuesta del modelo ────────────────────────────────────────────────
@@ -356,10 +412,10 @@ function buildUserPrompt(
  *  se lo quitamos aquí: el cliente vuelve a montarlo a partir de los países
  *  que haya elegido, así que el formato no depende del humor del modelo. */
 function cleanTweetBody(value: string): string {
-  let body = value.replace(/\r\n?/g, '\n').trim();
-  body = body.replace(/^\[[^\]\n]{0,40}\]\s*(?:[»\-–—:]\s*)?/u, '');
-  body = body.replace(/(?:^|\s)(?:■\s*)?#BlackNews\b/giu, '');
-  return body.replace(/\s+/g, ' ').trim();
+  let body = value.replace(/\r\n?/g, "\n").trim();
+  body = body.replace(/^\[[^\]\n]{0,40}\]\s*(?:[»\-–—:]\s*)?/u, "");
+  body = body.replace(/(?:^|\s)(?:■\s*)?#BlackNews\b/giu, "");
+  return body.replace(/\s+/g, " ").trim();
 }
 
 /** Los modelos escriben a veces saltos de línea REALES dentro de las cadenas
@@ -367,7 +423,7 @@ function cleanTweetBody(value: string): string {
  *  y el intento entero se pierde. Recorre el texto escapando lo que toca
  *  dentro de comillas y quitando comas finales, sin tocar el resto. */
 function repairJson(text: string): string {
-  let out = '';
+  let out = "";
   let inString = false;
   let escaped = false;
   for (const ch of text) {
@@ -377,7 +433,7 @@ function repairJson(text: string): string {
         escaped = false;
         continue;
       }
-      if (ch === '\\') {
+      if (ch === "\\") {
         out += ch;
         escaped = true;
         continue;
@@ -387,20 +443,20 @@ function repairJson(text: string): string {
         out += ch;
         continue;
       }
-      if (ch === '\n') {
-        out += '\\n';
+      if (ch === "\n") {
+        out += "\\n";
         continue;
       }
-      if (ch === '\r') {
-        out += '\\r';
+      if (ch === "\r") {
+        out += "\\r";
         continue;
       }
-      if (ch === '\t') {
-        out += '\\t';
+      if (ch === "\t") {
+        out += "\\t";
         continue;
       }
-      if (ch < ' ') {
-        out += ' ';
+      if (ch < " ") {
+        out += " ";
         continue;
       }
       out += ch;
@@ -413,7 +469,7 @@ function repairJson(text: string): string {
   }
 
   // Coma final antes de cerrar un objeto o un array: válida en JS, no en JSON.
-  let cleaned = '';
+  let cleaned = "";
   inString = false;
   escaped = false;
   for (let i = 0; i < out.length; i++) {
@@ -421,7 +477,7 @@ function repairJson(text: string): string {
     if (inString) {
       cleaned += ch;
       if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
+      else if (ch === "\\") escaped = true;
       else if (ch === '"') inString = false;
       continue;
     }
@@ -430,10 +486,10 @@ function repairJson(text: string): string {
       cleaned += ch;
       continue;
     }
-    if (ch === ',') {
+    if (ch === ",") {
       let j = i + 1;
       while (j < out.length && /\s/.test(out[j])) j++;
-      if (out[j] === '}' || out[j] === ']') {
+      if (out[j] === "}" || out[j] === "]") {
         i = j - 1;
         continue;
       }
@@ -443,16 +499,21 @@ function repairJson(text: string): string {
   return cleaned;
 }
 
-function parseModelJson(raw: string): { content: AiContent; tweetBody: string } {
+function parseModelJson(raw: string): {
+  content: AiContent;
+  tweetBody: string;
+} {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const text = fenced ? fenced[1] : raw;
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
   if (start < 0) {
-    throw new Error('La IA no devolvió JSON.');
+    throw new Error("La IA no devolvió JSON.");
   }
   if (end <= start) {
-    throw new Error('La IA devolvió una respuesta truncada: vuelve a intentarlo.');
+    throw new Error(
+      "La IA devolvió una respuesta truncada: vuelve a intentarlo.",
+    );
   }
   const slice = text.slice(start, end + 1);
   let parsed: unknown;
@@ -462,18 +523,18 @@ function parseModelJson(raw: string): { content: AiContent; tweetBody: string } 
     try {
       parsed = JSON.parse(repairJson(slice));
     } catch {
-      throw new Error('La IA devolvió un JSON que no se puede leer.');
+      throw new Error("La IA devolvió un JSON que no se puede leer.");
     }
   }
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('La IA devolvió una respuesta inesperada.');
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("La IA devolvió una respuesta inesperada.");
   }
   const rec = parsed as Record<string, unknown>;
   // Acepta también el formato plano, por si el modelo se salta el "content".
   const contentValue =
-    rec.content && typeof rec.content === 'object'
+    rec.content && typeof rec.content === "object"
       ? rec.content
-      : typeof rec.title === 'string' || typeof rec.description === 'string'
+      : typeof rec.title === "string" || typeof rec.description === "string"
         ? rec
         : null;
   if (!contentValue) {
@@ -483,14 +544,14 @@ function parseModelJson(raw: string): { content: AiContent; tweetBody: string } 
   // A veces el modelo mete el tweet DENTRO de "content": se busca en ambos
   // sitios antes de rendirse.
   const body = [rec.tweetBody, inside.tweetBody, rec.tweet, inside.tweet].find(
-    (value): value is string => typeof value === 'string',
+    (value): value is string => typeof value === "string",
   );
   if (body === undefined) {
-    throw new Error('La IA no devolvió el cuerpo del tweet.');
+    throw new Error("La IA no devolvió el cuerpo del tweet.");
   }
   const tweetBody = cleanTweetBody(body);
   if (!tweetBody) {
-    throw new Error('La IA no devolvió el cuerpo del tweet.');
+    throw new Error("La IA no devolvió el cuerpo del tweet.");
   }
   return { content: readContent(contentValue), tweetBody };
 }
@@ -522,14 +583,14 @@ interface Draft {
 function wordsOf(text: string): { words: string[]; norm: string[] } {
   const words: string[] = [];
   const norm: string[] = [];
-  for (const word of text.replace(/\n/g, ' ').split(/\s+/)) {
+  for (const word of text.replace(/\n/g, " ").split(/\s+/)) {
     const bare = word
       .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\p{L}\p{N}]/gu, '');
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{L}\p{N}]/gu, "");
     if (!bare) continue;
-    words.push(word.replace(/[^\p{L}\p{N}]+$/gu, ''));
+    words.push(word.replace(/[^\p{L}\p{N}]+$/gu, ""));
     norm.push(bare);
   }
   return { words, norm };
@@ -541,16 +602,19 @@ function wordsOf(text: string): { words: string[]; norm: string[] } {
 function sharedPhrase(a: string, b: string, n = LAYOUT.sharedWords): string {
   const first = wordsOf(a);
   const second = wordsOf(b);
-  if (first.norm.length < n || second.norm.length < n) return '';
+  if (first.norm.length < n || second.norm.length < n) return "";
   const seen = new Map<string, string>();
   for (let i = 0; i + n <= first.norm.length; i++) {
-    seen.set(first.norm.slice(i, i + n).join(' '), first.words.slice(i, i + n).join(' '));
+    seen.set(
+      first.norm.slice(i, i + n).join(" "),
+      first.words.slice(i, i + n).join(" "),
+    );
   }
   for (let j = 0; j + n <= second.norm.length; j++) {
-    const hit = seen.get(second.norm.slice(j, j + n).join(' '));
+    const hit = seen.get(second.norm.slice(j, j + n).join(" "));
     if (hit) return hit;
   }
-  return '';
+  return "";
 }
 
 /** Todo lo que el modelo tiene que corregir en una segunda pasada: huecos
@@ -560,10 +624,10 @@ function sharedPhrase(a: string, b: string, n = LAYOUT.sharedWords): string {
 function templateIssues(draft: Draft): string[] {
   const issues: string[] = [];
   const lines = draft.content.title
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const total = lines.join('').length;
+  const total = lines.join("").length;
   if (lines.length < LAYOUT.titleLinesMin) {
     issues.push(
       `el titular ocupa ${lines.length} línea(s): tiene que ocupar 3 líneas separadas por \\n, entre ${LAYOUT.titleMin} y ${LAYOUT.titleMax} caracteres en total`,
@@ -573,7 +637,7 @@ function templateIssues(draft: Draft): string[] {
       `el titular suma ${total} caracteres: amplíalo a ${LAYOUT.titleMin}-${LAYOUT.titleMax} en 3 líneas con el dato que falta (quién, qué, dónde)`,
     );
   }
-  const desc = draft.content.description.replace(/\s+/g, ' ').trim();
+  const desc = draft.content.description.replace(/\s+/g, " ").trim();
   if (desc.length < LAYOUT.descMin) {
     issues.push(
       `la bajada tiene ${desc.length} caracteres: debe ocupar ${LAYOUT.descMin}-${LAYOUT.descMax}, con la cifra, la fecha o la consecuencia`,
@@ -584,13 +648,23 @@ function templateIssues(draft: Draft): string[] {
   // es el campo más ajustado (3 líneas cortas) y conviene dejarlo quieto.
   const overlaps: Array<[string, string, string, string]> = [
     [
-      'el titular',
-      'la bajada',
+      "el titular",
+      "la bajada",
       sharedPhrase(draft.content.title, draft.content.description),
-      'de la bajada',
+      "de la bajada",
     ],
-    ['la bajada', 'el tweet', sharedPhrase(draft.content.description, tweet), 'del tweet'],
-    ['el titular', 'el tweet', sharedPhrase(draft.content.title, tweet), 'del tweet'],
+    [
+      "la bajada",
+      "el tweet",
+      sharedPhrase(draft.content.description, tweet),
+      "del tweet",
+    ],
+    [
+      "el titular",
+      "el tweet",
+      sharedPhrase(draft.content.title, tweet),
+      "del tweet",
+    ],
   ];
   for (const [a, b, phrase, quitar] of overlaps) {
     if (!phrase) continue;
@@ -603,45 +677,193 @@ function templateIssues(draft: Draft): string[] {
 
 function buildRevisionPrompt(issues: string[]): string {
   return [
-    'Tu anterior respuesta tiene los problemas de abajo. Devuelve EXCLUSIVAMENTE el mismo objeto JSON, corregido, sin nada alrededor y sin cambiar lo que ya está bien.',
-    'Problemas concretos que tienes que resolver:',
+    "Tu anterior respuesta tiene los problemas de abajo. Devuelve EXCLUSIVAMENTE el mismo objeto JSON, corregido, sin nada alrededor y sin cambiar lo que ya está bien.",
+    "Problemas concretos que tienes que resolver:",
     ...issues.map((issue) => `  - ${issue}`),
-    'Los tres textos siguen tratando el mismo hecho y siendo complementarios: titular = QUÉ pasa (3 líneas de 4 o 5 palabras), bajada = DATOS Y CONTEXTO, cuerpo del tweet = ÁNGULO COMPLEMENTARIO.',
-    'Para corregir sólo tienes dos maneras: AÑADIR información que falte o MOVER un dato de un campo a otro. NUNCA cortes ni resumas: si algo no cabe, quita una idea entera de otro campo en su lugar.',
-  ].join('\n');
+    "Los tres textos siguen tratando el mismo hecho y siendo complementarios: titular = QUÉ pasa (3 líneas de 4 o 5 palabras), bajada = DATOS Y CONTEXTO, cuerpo del tweet = ÁNGULO COMPLEMENTARIO.",
+    "Para corregir sólo tienes dos maneras: AÑADIR información que falte o MOVER un dato de un campo a otro. NUNCA cortes ni resumas: si algo no cabe, quita una idea entera de otro campo en su lugar.",
+  ].join("\n");
 }
 
 function openrouterError(status: number, body: string, model: string): string {
-  const free = model.includes(':free');
-  if (status === 401) return 'Clave de OpenRouter inválida (OPENROUTER_API_KEY).';
+  const free = model.includes(":free");
+  if (status === 401)
+    return "Clave de OpenRouter inválida (OPENROUTER_API_KEY).";
   if (status === 402) {
     return free
-      ? 'Ese modelo gratuito no está disponible para esta cuenta: revisa OPENROUTER_MODEL.'
-      : 'Sin crédito en OpenRouter: revisa el saldo de tu cuenta.';
+      ? "Ese modelo gratuito no está disponible para esta cuenta: revisa OPENROUTER_MODEL."
+      : "Sin crédito en OpenRouter: revisa el saldo de tu cuenta.";
   }
-  if (status === 404) return 'Modelo no encontrado en OpenRouter. Revisa OPENROUTER_MODEL.';
-  if (status === 413) return 'El contenido enviado es demasiado largo para el modelo.';
+  if (status === 404)
+    return "Modelo no encontrado en OpenRouter. Revisa OPENROUTER_MODEL.";
+  if (status === 413)
+    return "El contenido enviado es demasiado largo para el modelo.";
   if (status === 429) {
     const hint = body.match(/"message"\s*:\s*"([^"]{1,180})"/);
-    const base = free
-      ? 'Límite de los modelos gratuitos alcanzado (unas decenas al día y unos 20/min). Espera unos minutos o cambia OPENROUTER_MODEL a un modelo de pago.'
-      : 'Límite de peticiones de OpenRouter alcanzado: espera unos segundos y reintenta.';
+    const isFreePerDay = body.includes("free-models-per-day");
+    const base = isFreePerDay
+      ? "Límite diario de cuenta sin saldo en OpenRouter alcanzado. Añade $5 o $10 de saldo a tu cuenta en openrouter.ai para desbloquear 1.000 peticiones GRATUITAS al día con modelos :free."
+      : free
+        ? "Límite de peticiones de modelos gratuitos alcanzado temporalmente. Espera un par de minutos o añade saldo a tu cuenta de OpenRouter."
+        : "Límite de peticiones alcanzado: espera unos segundos y reintenta.";
     return hint ? `${base} [${hint[1]}]` : base;
   }
-  if (status >= 500) return 'OpenRouter está caído o devolvió un error interno.';
+  if (status >= 500)
+    return "OpenRouter está caído o devolvió un error interno.";
   const match = body.match(/"message"\s*:\s*"([^"]{1,180})"/);
   return match ? `OpenRouter: ${match[1]}` : `OpenRouter respondió ${status}.`;
 }
 
+// ── Proveedores 100% Gratuitos (Cloudflare Workers AI, Groq, Gemini) ────
+
+async function callWorkersAi(
+  env: AiEnv,
+  systemContent: string,
+  userContent: string,
+  followUp?: { assistant: string; user: string },
+): Promise<string | null> {
+  if (!env.AI) return null;
+  const models = [
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/meta/llama-3.1-8b-instruct",
+    "@cf/mistral/mistral-7b-instruct-v0.2",
+  ];
+  for (const model of models) {
+    try {
+      const res = await env.AI.run(model, {
+        messages: [
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent },
+          ...(followUp
+            ? [
+                { role: "assistant", content: followUp.assistant },
+                { role: "user", content: followUp.user },
+              ]
+            : []),
+        ],
+        max_tokens: 2048,
+      });
+      const text =
+        typeof res?.response === "string"
+          ? res.response
+          : typeof res === "string"
+            ? res
+            : null;
+      if (text && text.trim()) return text;
+    } catch (err) {
+      console.warn("[BLACKNEWS WORKER] Workers AI warn:", err);
+    }
+  }
+  return null;
+}
+
+async function callGroqAi(
+  env: AiEnv,
+  systemContent: string,
+  userContent: string,
+  followUp?: { assistant: string; user: string },
+): Promise<string | null> {
+  const key = (env.GROQ_API_KEY || "").trim();
+  if (!key) return null;
+  const models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+  for (const model of models) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model,
+          temperature: followUp ? 0.2 : 0.7,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemContent },
+            { role: "user", content: userContent },
+            ...(followUp
+              ? [
+                  { role: "assistant", content: followUp.assistant },
+                  { role: "user", content: followUp.user },
+                ]
+              : []),
+          ],
+        }),
+        signal: AbortSignal.timeout(LIMITS.timeoutMs),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json().catch(() => null)) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      } | null;
+      const text = data?.choices?.[0]?.message?.content;
+      if (typeof text === "string" && text.trim()) return text;
+    } catch (err) {
+      console.warn("[BLACKNEWS WORKER] Groq AI warn:", err);
+    }
+  }
+  return null;
+}
+
+async function callGeminiAi(
+  env: AiEnv,
+  systemContent: string,
+  userContent: string,
+  followUp?: { assistant: string; user: string },
+): Promise<string | null> {
+  const key = (env.GEMINI_API_KEY || "").trim();
+  if (!key) return null;
+  const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+  for (const model of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
+        { role: "user", parts: [{ text: userContent }] },
+      ];
+      if (followUp) {
+        contents.push({ role: "model", parts: [{ text: followUp.assistant }] });
+        contents.push({ role: "user", parts: [{ text: followUp.user }] });
+      }
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemContent }] },
+          contents,
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: followUp ? 0.2 : 0.7,
+          },
+        }),
+        signal: AbortSignal.timeout(LIMITS.timeoutMs),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json().catch(() => null)) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      } | null;
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof text === "string" && text.trim()) return text;
+    } catch (err) {
+      console.warn("[BLACKNEWS WORKER] Gemini AI warn:", err);
+    }
+  }
+  return null;
+}
+
 // ── Handler ─────────────────────────────────────────────────────────────
 
-export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Response> {
-  if (!env.OPENROUTER_API_KEY) {
+export async function handleAiGenerate(
+  request: Request,
+  env: AiEnv,
+): Promise<Response> {
+  const hasAnyProvider = Boolean(
+    env.AI || env.GROQ_API_KEY || env.GEMINI_API_KEY || env.OPENROUTER_API_KEY,
+  );
+  if (!hasAnyProvider) {
     return json(
       {
         success: false,
         error:
-          'Falta la clave de OpenRouter. Ejecuta `npx wrangler secret put OPENROUTER_API_KEY` en el proyecto (en local, OPENROUTER_API_KEY en .env o .dev.vars).',
+          "Falta un proveedor de IA. Cloudflare Workers AI es 100% gratuito (enlazado en wrangler.jsonc). También puedes añadir GEMINI_API_KEY (Google AI Studio) o GROQ_API_KEY (Groq) sin tarjeta de crédito.",
       },
       503,
     );
@@ -650,7 +872,10 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   const ip = clientIp(request);
   if (isRateLimited(ip)) {
     return json(
-      { success: false, error: 'Demasiadas peticiones: espera un minuto y reintenta.' },
+      {
+        success: false,
+        error: "Demasiadas peticiones: espera un minuto y reintenta.",
+      },
       429,
     );
   }
@@ -659,13 +884,19 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   try {
     body = await request.json();
   } catch {
-    return json({ success: false, error: 'El cuerpo de la petición no es JSON válido.' }, 400);
+    return json(
+      { success: false, error: "El cuerpo de la petición no es JSON válido." },
+      400,
+    );
   }
 
   const topic = readTopic(body.text);
   if (!topic) {
     return json(
-      { success: false, error: 'Escribe primero el tema o el texto de partida.' },
+      {
+        success: false,
+        error: "Escribe primero el tema o el texto de partida.",
+      },
       400,
     );
   }
@@ -679,10 +910,17 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
     );
   }
 
-  const categories = stringList(body.categories, LIMITS.categories, LIMITS.categoryLen);
+  const categories = stringList(
+    body.categories,
+    LIMITS.categories,
+    LIMITS.categoryLen,
+  );
   if (categories.length === 0) {
     return json(
-      { success: false, error: 'No hay secciones habilitadas en el generador.' },
+      {
+        success: false,
+        error: "No hay secciones habilitadas en el generador.",
+      },
       400,
     );
   }
@@ -692,58 +930,67 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   // 1) Búsqueda web: si no hay clave o falla, se sigue adelante sin fuentes.
   const { sources, searched, note } = await webSearch(topic, env);
 
-  const base = (env.OPENROUTER_API_BASE || OPENROUTER_API).replace(/\/+$/, '');
+  const base = (env.OPENROUTER_API_BASE || OPENROUTER_API).replace(/\/+$/, "");
   const origin = new URL(request.url).origin;
-  const model = (env.OPENROUTER_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const modelChain = parseModelChain(env.OPENROUTER_MODEL);
+  let usedModelName = modelChain[0] || DEFAULT_MODEL;
 
   // 2) Modelo. Un solo punto de salida para los fallos de red, de cuota o de
   // forma: si OpenRouter no puede, se devuelve su error; si responde pero con
   // el JSON roto o vacío, el bucle de abajo reintenta una vez.
-  const systemContent = buildSystemPrompt(sources.length > 0).slice(0, LIMITS.systemChars);
-  const userContent = buildUserPrompt(categories, topic, countries, sources).slice(
+  const systemContent = buildSystemPrompt(sources.length > 0).slice(
     0,
-    LIMITS.userChars,
+    LIMITS.systemChars,
   );
+  const userContent = buildUserPrompt(
+    categories,
+    topic,
+    countries,
+    sources,
+  ).slice(0, LIMITS.userChars);
 
   // Metadatos del último intento: si la forma falla, el registro dice si el
   // modelo se quedó corto (finish_reason) o si el JSON venía ya roto.
-  let lastMeta = '';
+  let lastMeta = "";
 
   const callModel = async (
+    modelList: string[],
     followUp?: { assistant: string; user: string },
   ): Promise<{ text: string; response?: Response }> => {
-    lastMeta = '';
+    lastMeta = "";
     let upstream: Response;
+    const targetModels = modelList.length > 0 ? modelList : modelChain;
     try {
       upstream = await fetch(`${base}/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
+          "content-type": "application/json",
           authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-          'http-referer': origin,
-          'x-title': 'BLACKNEWS',
+          "http-referer": origin,
+          "x-title": "BLACKNEWS",
         },
         body: JSON.stringify({
-          model,
+          models: targetModels,
+          model: targetModels[0],
           // En la pasada de ajuste baja la temperatura: se pide precisión
           // (quitar una frase, alargar un campo), no creatividad.
           temperature: followUp ? 0.2 : 0.7,
           max_tokens: LIMITS.maxTokens,
           // Sin razonamiento oculto: varios `:free` se gastan los tokens de
           // salida pensando y devuelven content=null con finish_reason "length".
-          reasoning: { effort: 'none' },
+          reasoning: { effort: "none" },
           // El proveedor se encarga de que el contenido sea JSON bien formado:
           // es la mejor garantía contra las respuestas rotas de los `:free`.
-          response_format: { type: 'json_object' },
+          response_format: { type: "json_object" },
           messages: [
-            { role: 'system', content: systemContent },
-            { role: 'user', content: userContent },
+            { role: "system", content: systemContent },
+            { role: "user", content: userContent },
             // Segunda pasada: la conversación conserva la respuesta anterior
             // para que el modelo corrija sólo lo que se le señala.
             ...(followUp
               ? [
-                  { role: 'assistant', content: followUp.assistant },
-                  { role: 'user', content: followUp.user },
+                  { role: "assistant", content: followUp.assistant },
+                  { role: "user", content: followUp.user },
                 ]
               : []),
           ],
@@ -752,13 +999,13 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
       });
     } catch (err) {
       return {
-        text: '',
+        text: "",
         response: json(
           {
             success: false,
             error: timedOut(err)
-              ? 'El modelo tardó demasiado en responder. Reintenta en unos segundos.'
-              : 'No se pudo conectar con OpenRouter.',
+              ? "El modelo tardó demasiado en responder. Reintenta en unos segundos."
+              : "No se pudo conectar con OpenRouter.",
           },
           504,
         ),
@@ -767,45 +1014,66 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
 
     const rawBody = await upstream.text();
     if (!upstream.ok) {
-      console.error('[BLACKNEWS WORKER] ai:', upstream.status, rawBody.slice(0, 300));
+      console.error(
+        "[BLACKNEWS WORKER] ai:",
+        upstream.status,
+        rawBody.slice(0, 300),
+      );
       return {
-        text: '',
+        text: "",
         response: json(
-          { success: false, error: openrouterError(upstream.status, rawBody, model) },
+          {
+            success: false,
+            error: openrouterError(upstream.status, rawBody, targetModels[0]),
+          },
           502,
         ),
       };
     }
 
     let payload: {
-      choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
+      model?: string;
+      choices?: Array<{
+        message?: { content?: unknown };
+        finish_reason?: string;
+      }>;
       usage?: { completion_tokens?: number };
     };
     try {
       payload = JSON.parse(rawBody);
     } catch {
       return {
-        text: '',
+        text: "",
         response: json(
-          { success: false, error: 'OpenRouter devolvió una respuesta ilegible.' },
+          {
+            success: false,
+            error: "OpenRouter devolvió una respuesta ilegible.",
+          },
           502,
         ),
       };
     }
+
+    if (payload.model) {
+      usedModelName = payload.model;
+    } else {
+      usedModelName = targetModels[0];
+    }
+
     lastMeta =
-      `finish=${payload.choices?.[0]?.finish_reason ?? '?'} ` +
-      `out=${payload.usage?.completion_tokens ?? '?'} len=${rawBody.length}`;
+      `model=${usedModelName} finish=${payload.choices?.[0]?.finish_reason ?? "?"} ` +
+      `out=${payload.usage?.completion_tokens ?? "?"} len=${rawBody.length}`;
 
     const content = payload.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') {
+    if (typeof content !== "string") {
       // Caso real: modelos con razonamiento oculto que se comen los tokens de
       // salida sin llegar a escribir. El registro deja ver el finish_reason.
       console.error(
-        '[BLACKNEWS WORKER] ai: contenido vacío',
-        'len=' + rawBody.length,
+        "[BLACKNEWS WORKER] ai: contenido vacío",
+        "len=" + rawBody.length,
         JSON.stringify(payload).slice(0, 700),
       );
-      return { text: '' };
+      return { text: "" };
     }
     return { text: content };
   };
@@ -814,22 +1082,59 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   // o vacío): se reintenta una sola vez, que suele bastar. Los fallos de red o
   // de cuota no se repiten, porque el segundo intento daría exactamente igual.
   let result: { content: AiContent; tweetBody: string } | null = null;
-  let lastRaw = '';
-  let lastError = 'La IA no devolvió JSON.';
-  for (let attempt = 1; attempt <= 2 && !result; attempt++) {
-    const call = await callModel();
-    if (call.response) return call.response;
-    if (call.text) lastRaw = call.text;
-    try {
-      result = parseModelJson(call.text);
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Respuesta de la IA ilegible.';
-      console.error(
-        '[BLACKNEWS WORKER] ai: respuesta no aprovechable (intento ' + attempt + ')',
-        lastMeta,
-        'cabeza=' + call.text.slice(0, 400),
-        'cola=' + call.text.slice(-250),
-      );
+  let lastRaw = "";
+  let lastError = "La IA no devolvió JSON.";
+
+  // Intentar primero con proveedores 100% gratuitos (Workers AI, Groq, Gemini)
+  if (!result) {
+    let freeText: string | null = null;
+    let freeModelName = "";
+
+    if (env.AI) {
+      freeText = await callWorkersAi(env, systemContent, userContent);
+      if (freeText) freeModelName = "Cloudflare Workers AI (Llama 3.3 Free)";
+    }
+    if (!freeText && env.GROQ_API_KEY) {
+      freeText = await callGroqAi(env, systemContent, userContent);
+      if (freeText) freeModelName = "Groq Cloud (Llama 3.3 Free)";
+    }
+    if (!freeText && env.GEMINI_API_KEY) {
+      freeText = await callGeminiAi(env, systemContent, userContent);
+      if (freeText) freeModelName = "Google Gemini 2.5 Flash (Free)";
+    }
+
+    if (freeText) {
+      try {
+        result = parseModelJson(freeText);
+        lastRaw = freeText;
+        usedModelName = freeModelName;
+      } catch (err) {
+        console.warn("[BLACKNEWS WORKER] Error al parsear JSON de proveedor gratuito:", err);
+      }
+    }
+  }
+
+  // Si no se obtuvo resultado de los proveedores directos, intentar con OpenRouter
+  if (!result && env.OPENROUTER_API_KEY) {
+    for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+      const currentList = attempt === 1 ? modelChain : modelChain.slice(1);
+      const call = await callModel(currentList);
+      if (call.response && attempt === 1) return call.response;
+      if (call.text) lastRaw = call.text;
+      try {
+        result = parseModelJson(call.text);
+      } catch (err) {
+        lastError =
+          err instanceof Error ? err.message : "Respuesta de la IA ilegible.";
+        console.error(
+          "[BLACKNEWS WORKER] ai: respuesta no aprovechable (intento " +
+            attempt +
+            ")",
+          lastMeta,
+          "cabeza=" + call.text.slice(0, 400),
+          "cola=" + call.text.slice(-250),
+        );
+      }
     }
   }
 
@@ -844,7 +1149,7 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
   // intentar mejorar.
   let warnings = templateIssues(result);
   if (warnings.length > 0 && lastRaw) {
-    const revision = await callModel({
+    const revision = await callModel(modelChain, {
       assistant: lastRaw.slice(0, 8000),
       user: buildRevisionPrompt(warnings),
     });
@@ -858,16 +1163,19 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
         }
       } catch {
         console.error(
-          '[BLACKNEWS WORKER] ai: revisión descartada',
+          "[BLACKNEWS WORKER] ai: revisión descartada",
           lastMeta,
           revision.text.slice(0, 300),
         );
       }
     } else {
       // Error de red o de cuota en la revisión: no invalida la primera respuesta.
-      console.error('[BLACKNEWS WORKER] ai: revisión sin contenido', lastMeta);
+      console.error("[BLACKNEWS WORKER] ai: revisión sin contenido", lastMeta);
     }
-    console.log('[BLACKNEWS WORKER] ai: ajuste', JSON.stringify({ issues: warnings }));
+    console.log(
+      "[BLACKNEWS WORKER] ai: ajuste",
+      JSON.stringify({ issues: warnings }),
+    );
   }
 
   return json({
@@ -877,9 +1185,12 @@ export async function handleAiGenerate(request: Request, env: AiEnv): Promise<Re
       // Sin cortar: el cuerpo se queda como viene y el corchete y la firma
       // los monta el cliente, que es quien aplica el tope de 250 caracteres.
       tweetBody: result.tweetBody,
-      model,
+      model: usedModelName,
       searched,
-      sources: sources.map((source) => ({ title: source.title, url: source.url })),
+      sources: sources.map((source) => ({
+        title: source.title,
+        url: source.url,
+      })),
       // Lo que sigue sin encajar (señalado para la redacción, en la tarjeta).
       ...(warnings.length > 0 ? { warnings } : {}),
       ...(note ? { note } : {}),

@@ -24,7 +24,10 @@ export interface Env {
   PAYPAL_API_BASE?: string; // SOLO pruebas locales (ver worker/paypal.ts)
   PAYPAL_CLIENT_ID?: string;
   PAYPAL_SECRET?: string;
-  // Redacción asistida con IA (OpenRouter)
+  // Redacción asistida con IA (Cloudflare Workers AI, Groq, Gemini, OpenRouter)
+  AI?: any; // Cloudflare Workers AI binding (100% gratis, 10.000 neuronas/día)
+  GROQ_API_KEY?: string; // Groq Cloud free tier (100% gratis, 14.400 peticiones/día)
+  GEMINI_API_KEY?: string; // Google AI Studio free tier (100% gratis, 1.500 peticiones/día)
   OPENROUTER_API_KEY?: string; // secreto con `wrangler secret put`
   OPENROUTER_MODEL?: string; // variable de wrangler.jsonc (vars)
   OPENROUTER_API_BASE?: string; // SOLO pruebas locales (ver worker/ai.ts)
@@ -73,6 +76,19 @@ async function handleApi(request: Request, env: Env, pathname: string): Promise<
       console.error('[BLACKNEWS WORKER] ai:', message);
       return json({ success: false, error: message }, 502);
     }
+  }
+
+  // Estado de los proveedores de IA: permite al panel del dashboard verificar qué claves están configuradas.
+  if (pathname === '/api/ai/provider-status' && request.method === 'GET') {
+    return json({
+      success: true,
+      providers: {
+        workers_ai: Boolean(env.AI),
+        groq: Boolean(env.GROQ_API_KEY?.trim()),
+        gemini: Boolean(env.GEMINI_API_KEY?.trim()),
+        openrouter: Boolean(env.OPENROUTER_API_KEY?.trim()),
+      },
+    });
   }
 
   if (pathname.startsWith('/api/video/')) {
