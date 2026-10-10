@@ -10,11 +10,78 @@ import {
   X,
   User,
   ChevronRight,
+  LayoutDashboard,
+  Smartphone,
+  CalendarDays,
+  SlidersHorizontal,
+  Users,
+  Tag,
+  Scale,
+  History,
+  BookmarkCheck,
+  Megaphone,
+  UserCheck,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import { CATEGORIES } from "../data/newsData";
 import { dateIn, REFERENCE_TZ } from "../utils/clock";
 import { CategoryId } from "../types/news";
-import { RedactorProfile, GUEST_USER_ID } from "../types/auth";
+import { RedactorProfile, GUEST_USER_ID, RedactorRole } from "../types/auth";
+import {
+  StudioTab,
+  ROLE_SCOPE,
+  ROLE_CHIP_CLASS,
+  canOpenStudioTab,
+} from "../types/studio";
+
+/** Atajo del menú móvil hacia una sección concreta del panel. */
+interface PanelShortcut {
+  tab: StudioTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+/**
+ * Accesos directos del panel según el rol: el menú móvil no muestra el mismo
+ * contenido a un admin, a un moderador, a un redactor ni a un lector.
+ * `canOpenStudioTab` vuelve a filtrar por si la tabla de permisos cambia.
+ */
+const PANEL_SHORTCUTS: Record<RedactorRole, PanelShortcut[]> = {
+  ADMIN: [
+    { tab: "overview", label: "Panel general", icon: LayoutDashboard },
+    { tab: "builder", label: "Redactar", icon: PenTool },
+    { tab: "layout", label: "Portada", icon: SlidersHorizontal },
+    { tab: "calendar", label: "Calendario", icon: CalendarDays },
+    { tab: "users", label: "Equipo", icon: Users },
+    { tab: "categories", label: "Categorías", icon: Tag },
+    { tab: "policies", label: "Políticas", icon: Scale },
+    { tab: "post-generator", label: "Creador Post", icon: Smartphone },
+  ],
+  MODERADOR: [
+    { tab: "overview", label: "Panel general", icon: LayoutDashboard },
+    { tab: "builder", label: "Redactar", icon: PenTool },
+    { tab: "layout", label: "Portada", icon: SlidersHorizontal },
+    { tab: "calendar", label: "Calendario", icon: CalendarDays },
+    { tab: "users", label: "Equipo", icon: Users },
+    { tab: "post-generator", label: "Creador Post", icon: Smartphone },
+  ],
+  REDACTOR: [
+    { tab: "overview", label: "Panel general", icon: LayoutDashboard },
+    { tab: "builder", label: "Redactar", icon: PenTool },
+    { tab: "post-generator", label: "Creador Post", icon: Smartphone },
+    { tab: "my-articles", label: "Despachos", icon: FileText },
+    { tab: "images", label: "Optimizador", icon: ImageIcon },
+    { tab: "calendar", label: "Calendario", icon: CalendarDays },
+  ],
+  LECTOR: [
+    { tab: "history", label: "Historial", icon: History },
+    { tab: "saved", label: "Guardados", icon: BookmarkCheck },
+    { tab: "profile", label: "Mi perfil", icon: User },
+    { tab: "ads", label: "Mi publicidad", icon: Megaphone },
+    { tab: "register", label: "Acreditación", icon: UserCheck },
+  ],
+};
 
 interface TopBarProps {
   categories?: string[];
@@ -35,6 +102,8 @@ interface TopBarProps {
   /** Menú móvil controlado desde App (lo abre también la barra inferior de tabs) */
   isMobileMenuOpen?: boolean;
   onMobileMenuOpenChange?: (open: boolean) => void;
+  /** Abre el panel directamente en la sección que corresponde al rol */
+  onOpenStudioTab?: (tab: StudioTab) => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -55,6 +124,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleLite,
   isMobileMenuOpen: isMobileMenuOpenProp,
   onMobileMenuOpenChange,
+  onOpenStudioTab,
 }) => {
   const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
   const isMobileMenuOpen =
@@ -108,6 +178,14 @@ export const TopBar: React.FC<TopBarProps> = ({
     isSignedIn && currentUser
       ? `Cuenta: ${currentUser.name} (${currentUser.role})`
       : "Acceder con tu cuenta de Google";
+
+  // Accesos del panel filtrados por permisos reales (misma tabla que el panel)
+  const shortcuts: PanelShortcut[] =
+    isSignedIn && currentUser
+      ? PANEL_SHORTCUTS[currentUser.role].filter((s) =>
+          canOpenStudioTab(currentUser.role, s.tab),
+        )
+      : [];
 
   const googleIconSvg = (
     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
@@ -343,8 +421,80 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Slide-out / Dropdown Mobile & Tablet Menu */}
       {isMobileMenuOpen && (
-        <div className="xl:hidden bg-black border-t border-white/10 px-4 sm:px-6 py-6 max-h-[70dvh] overflow-y-auto overscroll-contain space-y-6 animate-in slide-in-from-top duration-150">
-          {/* Category Links List */}
+        <div className="xl:hidden bg-black border-t border-white/10 px-4 sm:px-6 py-6 max-h-[75dvh] overflow-y-auto overscroll-contain space-y-6 animate-in slide-in-from-top duration-150">
+          {/* 1 · Quién está conectado y qué alcance tiene su rol */}
+          <div className="flex items-center gap-3">
+            {isSignedIn && currentUser ? (
+              <>
+                {currentUser.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.name}
+                    className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-white text-black font-extrabold flex items-center justify-center text-sm shrink-0">
+                    {currentUser.avatarInitials}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white truncate">
+                    {currentUser.name}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 truncate">
+                    {ROLE_SCOPE[currentUser.role]}
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-1 rounded border ${ROLE_CHIP_CLASS[currentUser.role]}`}
+                >
+                  {currentUser.role}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center shrink-0">
+                  <User className="w-4 h-4 text-neutral-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white">
+                    Lector invitado
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    Sesión guardada en este dispositivo
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 2 · Accesos directos del panel: cada rol ve los suyos */}
+          {shortcuts.length > 0 && (
+            <div>
+              <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mb-3">
+                {currentUser?.role === "LECTOR"
+                  ? "Mi Espacio"
+                  : `Accesos del panel · ${currentUser?.role}`}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {shortcuts.map(({ tab, label, icon: ShortcutIcon }) => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      onOpenStudioTab?.(tab);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="py-2.5 px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-300 border border-white/5 hover:border-white/30 hover:text-white transition-colors flex items-center gap-2 cursor-pointer min-w-0"
+                  >
+                    <ShortcutIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
+                    <span className="truncate">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3 · Category Links List */}
           <div>
             <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mb-3">
               SECCIONES EDITORIALES
@@ -370,17 +520,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
           </div>
 
-          {/* User Status & Direct Action Buttons */}
+          {/* 4 · User Status & Direct Action Buttons */}
           <div className="pt-4 border-t border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
-              <span>USUARIO ACTIVO:</span>
-              <span className="text-white font-medium">
-                {currentUser
-                  ? `${currentUser.name} [${currentUser.role}]`
-                  : "NO CONECTADO"}
-              </span>
-            </div>
-
             <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
               {canAccessEditorialStudio && (
                 <button

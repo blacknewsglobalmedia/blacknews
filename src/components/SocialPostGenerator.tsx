@@ -5337,7 +5337,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     );
 
   return (
-    <div className="font-['Lexend',sans-serif] space-y-8 pb-16">
+    <div className="font-['Lexend',sans-serif] space-y-8 pb-[calc(var(--bn-nav-h)_+_3rem)] lg:pb-16">
       {/* High-res processing canvas (positioned offscreen to maintain active compositor pipeline for captureStream) */}
       <canvas
         ref={hiddenCanvasRef}
@@ -5359,8 +5359,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-6 border-b border-white/10 gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold mb-1">
-            <Smartphone className="w-3.5 h-3.5 text-white" />
+          <div className="flex items-center gap-2 text-[10px] sm:text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold mb-1">
+            <Smartphone className="w-3.5 h-3.5 text-white shrink-0" />
             <span>FORMATO VERTICAL {postFormat} · SUPER AMOLED BLACK</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -5435,16 +5435,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-[calc(var(--bn-nav-h)_+_2.75rem)] lg:bottom-6 right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in">
+        <div className="fixed bottom-[calc(var(--bn-nav-h)_+_2.75rem)] lg:bottom-6 left-4 sm:left-auto right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in">
           <span className="w-2 h-2 rounded-full bg-black inline-block"></span>
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Main Grid: Controls (Left) vs Live Preview (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* LEFT COLUMN: Controls & Settings (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+        {/* LEFT COLUMN: Controls & Settings (7 cols).
+            En móvil va DESPUÉS de la vista previa (order-2) para que el
+            resultado sea lo primero que se ve al abrir la pestaña. */}
+        <div className="lg:col-span-7 space-y-6 order-2 lg:order-1">
           {/* Card 0: Asistente IA Editorial · Redacción Automática y Gratuita */}
           <div className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
@@ -6647,7 +6649,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 {/* Video Format Selector (MP4 for X/Twitter vs WebM) */}
                 <div className="space-y-1.5 pt-0.5">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
                     <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
                       <Film className="w-3.5 h-3.5 text-cyan-400" />
                       <span>Formato de Video</span>
@@ -6659,7 +6661,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setVideoFormat("mp4")}
@@ -6707,7 +6709,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 {/* Social Media Bitrate & Weight Optimization */}
                 <div className="space-y-2 pt-0.5">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
                     <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
                       <Zap className="w-3.5 h-3.5 text-amber-400" />
                       <span>Optimización para X, Instagram & Meta</span>
@@ -6721,7 +6723,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setVideoQuality("social")}
@@ -6797,7 +6799,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-6 gap-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                     {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) => (
                       <button
                         key={speed}
@@ -7132,9 +7134,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Live Interactive Preview (5 cols) */}
-        <div className="lg:col-span-5 sticky top-8 space-y-4">
-          <div className="flex items-center justify-between">
+        {/* RIGHT COLUMN: Live Interactive Preview (5 cols).
+            En móvil es lo PRIMERO que se ve (order-1). Sin sticky: la columna
+            (tarjeta + transporte + exportación) es más alta que el viewport y,
+            al pegarse, dejaría los botones de exportar fuera de pantalla. */}
+        <div className="lg:col-span-5 space-y-4 order-1 lg:order-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5 text-white" />
               <span>Vista Previa en Vivo {postFormat}</span>

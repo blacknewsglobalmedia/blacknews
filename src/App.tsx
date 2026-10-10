@@ -32,6 +32,7 @@ import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS, OLD_C
 import { hydrateCustomCountries } from "./data/countries";
 import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
+import type { StudioTab } from "./types/studio";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
 import { AdCampaign, INITIAL_AD_CAMPAIGNS, MOCK_AD_IDS } from "./types/ads";
 import {
@@ -176,6 +177,8 @@ export default function App() {
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   // Menú móvil del encabezado: compartido con la barra inferior de tabs
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Sección del panel pedida desde el menú móvil (se consume al aplicarse)
+  const [studioTab, setStudioTab] = useState<StudioTab | null>(null);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
@@ -1355,6 +1358,17 @@ export default function App() {
     setCurrentView(currentView === "redaccion" ? "portada" : "redaccion");
   };
 
+  // Atajo del menú móvil: abre el panel directamente en la sección del rol
+  const handleOpenStudioTab = (tab: StudioTab) => {
+    if (!canAccessInternalMedia) {
+      showToast("Inicia sesión con tu cuenta para abrir tu panel.");
+      return;
+    }
+    setStudioTab(tab);
+    setCurrentView("redaccion");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const savedReportsList = reportsList.filter((r) => bookmarkedIds.has(r.id));
 
   return (
@@ -1392,6 +1406,7 @@ export default function App() {
         onToggleLite={() => setLiteMode((v) => !v)}
         isMobileMenuOpen={isMobileMenuOpen}
         onMobileMenuOpenChange={setIsMobileMenuOpen}
+        onOpenStudioTab={handleOpenStudioTab}
       />
 
       {/* Real-time breaking ticker */}
@@ -1450,6 +1465,8 @@ export default function App() {
               handleOpenReport(report);
             }}
             onSaveProfile={handleSaveProfile}
+            initialTab={studioTab}
+            onInitialTabConsumed={() => setStudioTab(null)}
           />
         ) : (
           <>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -57,6 +57,13 @@ import {
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
 import { RedactorProfile, RedactorRole, ROLE_PERMISSIONS } from '../types/auth';
+import {
+  StudioTab,
+  DEFAULT_STUDIO_TAB,
+  ROLE_SCOPE,
+  ROLE_CHIP_CLASS,
+  canOpenStudioTab,
+} from '../types/studio';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
 import { AdCampaign, AdStatus } from '../types/ads';
@@ -122,6 +129,9 @@ interface RedactionStudioProps {
   onSelectReport?: (report: Report) => void;
   /** Guarda nombre y foto editados en Mi Perfil. */
   onSaveProfile: (patch: { name: string; avatarUrl?: string }) => void;
+  /** Pestaña pedida desde el menú móvil; se consume al aplicarse. */
+  initialTab?: StudioTab | null;
+  onInitialTabConsumed?: () => void;
 }
 
 const PRESET_IMAGES = [
@@ -209,6 +219,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onOpenCreateAd,
   onSelectReport,
   onSaveProfile,
+  initialTab = null,
+  onInitialTabConsumed,
 }) => {
   const permissions = ROLE_PERMISSIONS[currentUser.role];
 
@@ -232,8 +244,9 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const onUpdateCategories = propOnUpdateCategories || (() => {});
 
   // Default tab based on role
-  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'calendar' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved' | 'profile'>(isReader ? 'history' : 'overview');
+  const [activeTab, setActiveTab] = useState<StudioTab>(DEFAULT_STUDIO_TAB[currentUser.role]);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [selectedOptimizedImage, setSelectedOptimizedImage] = useState<OptimizedImageSet | undefined>(undefined);
@@ -333,6 +346,40 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [showAiGuide, setShowAiGuide] = useState(false);
   const [templateDownloadedToast, setTemplateDownloadedToast] = useState(false);
   const [importSuccessBanner, setImportSuccessBanner] = useState<string | null>(null);
+
+  /**
+   * En móvil el menú se inserta justo debajo de la cabecera: si el usuario ya
+   * había bajado, el panel se abriría fuera de pantalla. Lo traemos a la vista.
+   */
+  const toggleMobileSidebar = () => {
+    const next = !isMobileSidebarOpen;
+    setIsMobileSidebarOpen(next);
+    if (next && window.innerWidth < 1024) {
+      requestAnimationFrame(() =>
+        sidebarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  };
+
+  // Atajo desde el menú móvil: se abre la sección pedida (si el rol la puede
+  // ver) y se limpia el encargo para no reaplicarlo en re-renders.
+  useEffect(() => {
+    if (!initialTab) return;
+    setActiveTab(
+      canOpenStudioTab(currentUser.role, initialTab)
+        ? initialTab
+        : DEFAULT_STUDIO_TAB[currentUser.role],
+    );
+    onInitialTabConsumed?.();
+  }, [initialTab, currentUser.role, onInitialTabConsumed]);
+
+  // Red de seguridad: si el rol cambia (o un enlace aterriza en una sección
+  // restringida) volvemos a la pestaña que le corresponde.
+  useEffect(() => {
+    if (!canOpenStudioTab(currentUser.role, activeTab)) {
+      setActiveTab(DEFAULT_STUDIO_TAB[currentUser.role]);
+    }
+  }, [activeTab, currentUser.role]);
 
   // Draft handlers
   const handleSaveDraft = () => {
@@ -816,44 +863,33 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   return (
     <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row pb-[calc(var(--bn-nav-h)_+_4rem)] lg:pb-0">
-      {/* MOBILE COMPACT HEADER (< lg) */}
-      <div className="lg:hidden border-b border-white/10 bg-black px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+      {/* MOBILE COMPACT HEADER (< lg). Sólo identifica el panel: no es sticky
+          (la cabecera fija del sitio ocupa la parte alta) y los accesos viven
+          en la cabecera del espacio de trabajo y dentro del propio menú. */}
+      <div className="lg:hidden border-b border-white/10 bg-black px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-3.5 h-3.5 bg-white shrink-0" />
           <span className="text-xs font-bold uppercase tracking-wider text-white">
             BlackNews Editorial
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-neutral-300">
+          <span
+            className={`text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${ROLE_CHIP_CLASS[currentUser.role]}`}
+          >
             {currentUser.role}
           </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onBackToNews}
-            className="p-1.5 text-xs text-neutral-400 hover:text-white rounded-lg hover:bg-white/5"
-            title="Volver a Portada"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="p-1.5 text-white rounded-lg hover:bg-white/10 border border-white/10"
-            title="Abrir menú editorial"
-          >
-            {isMobileSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
         </div>
       </div>
 
       {/* COMPACT DASHBOARD SIDEBAR (Desktop sticky, Mobile collapsible) */}
-      <aside className={`
+      <aside
+        ref={sidebarRef}
+        className={`
         ${isMobileSidebarOpen ? 'block' : 'hidden'} lg:block 
         w-full lg:w-64 lg:min-h-screen border-r border-white/10 bg-black
         p-4 shrink-0 lg:sticky lg:top-[var(--bn-header-h)] lg:h-[calc(100dvh_-_var(--bn-header-h))] lg:overflow-y-auto z-40 flex flex-col justify-between
-      `}>
+        scroll-mt-[calc(var(--bn-header-h)_+_3.5rem)] lg:scroll-mt-0
+      `}
+      >
         <div className="space-y-5">
           {/* Logo & Bureau Badge */}
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -868,9 +904,20 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
-              <span>ONLINE</span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                <span>ONLINE</span>
+              </div>
+              {/* En móvil el menú es un bloque a pantalla completa: cerrar aquí */}
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="lg:hidden p-1.5 text-neutral-300 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+                title="Cerrar menú editorial"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -892,15 +939,22 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <div className="text-xs font-bold text-white truncate">
                   {currentUser.name}
                 </div>
-                <div className="flex items-center gap-1 text-[10px] text-neutral-400 font-mono">
-                  <span className="text-neutral-300 font-semibold">{currentUser.role}</span>
-                  <span>·</span>
-                  <span className="truncate">
-                    {(currentUser.bureau || '').split('/')[0]}
-                  </span>
+                <div className="text-[10px] text-neutral-500 font-mono truncate">
+                  {(currentUser.bureau || '').split('/')[0]}
                 </div>
               </div>
+              {/* Chip de rol: el color identifica el alcance de un vistazo */}
+              <span
+                className={`shrink-0 text-[9px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${ROLE_CHIP_CLASS[currentUser.role]}`}
+              >
+                {currentUser.role}
+              </span>
             </div>
+
+            {/* Qué puede hacer este rol dentro del panel */}
+            <p className="text-[10px] leading-relaxed text-neutral-500">
+              {ROLE_SCOPE[currentUser.role]}
+            </p>
 
             {/* Session capsule: no role switcher here anymore (roles change only via verified Google login) */}
             {isReader && (
@@ -1348,6 +1402,27 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
           {/* Quick Contextual Actions */}
           <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* En móvil la cabecera compacta se queda arriba, así que el menú
+                del panel viaja aquí para seguir accesible al hacer scroll */}
+            <div className="flex items-center gap-1.5 lg:hidden">
+              <button
+                type="button"
+                onClick={onBackToNews}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+                title="Volver a Portada"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleMobileSidebar}
+                aria-expanded={isMobileSidebarOpen}
+                className="p-1.5 text-white rounded-lg hover:bg-white/10 border border-white/10 transition-colors cursor-pointer"
+                title="Abrir menú editorial"
+              >
+                {isMobileSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
+            </div>
             {activeTab === 'builder' && permissions.canWritePosts ? (
               <>
                 {editingReportId && (
