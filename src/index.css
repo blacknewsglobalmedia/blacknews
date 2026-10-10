@@ -24,13 +24,20 @@
     color: #EDEDED;
     font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: -0.015em;
-    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     /* iOS: sin auto-escala de tipografía; anclas bajo la cabecera sticky */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     scroll-padding-top: calc(var(--bn-header-h) + 3.5rem);
+  }
+
+  html {
+    /* Recorte horizontal SÓLO en la raíz: la raíz sigue siendo quien gobierna
+       el scroll del viewport, pero <body> queda como contenedor normal y así
+       los `position: sticky` de la app (cabecera del sitio, cabecera del
+       panel, índices) vuelven a pegarse. Sin scrollbar lateral. */
+    overflow-x: hidden;
   }
 
   body {
