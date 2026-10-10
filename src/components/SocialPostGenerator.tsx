@@ -184,6 +184,13 @@ const capLines = (lines: string[], max: number): string[] => {
  *  metadatos del <video>: sólo la muestra la UI y cierra plazos del export. */
 const OUTRO_DUR_FALLBACK = 11.3;
 
+/** Margen que la ruta clásica concede al sello para despegar de su propio
+ *  final antes de dar la fase de cierre por muerta. El <video> del cierre
+ *  puede quedar aparcado en su último fotograma (tras haber sonado en la vista
+ *  previa) y, si el archivo se cierra en ese primer compás, el MP4 sale con la
+ *  longitud exacta del clip pero SIN el sello. */
+const OUTRO_START_GRACE_MS = 2000;
+
 /** Pinta un fotograma del cierre de marca a sangre del lienzo SIN overlays
  *  (sin chyron, sin ticker, sin velos): es un sello de cierre, no una toma del
  *  reportaje. Encuadre «contain» sobre negro para no recortar el sello en los
@@ -4170,8 +4177,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setExportedVideoUrl(url);
       setRecordingProgress(100);
       triggerDownload(url, filename);
+      // El cierre puede quedarse fuera si mp4box no extrae sus muestras AVC:
+      // se avisa en el mismo toast para que no se descubra al subir el vídeo.
+      const outroNote =
+        videoOutro && (!outroClip || outroClip.samples.length === 0)
+          ? " ⚠️ El cierre BlackNews no pudo incluirse: el archivo sale sin el sello final."
+          : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!${outroNote}`,
       );
       snap("finalize");
       return "done";
@@ -4429,6 +4442,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let outroPhase = false;
       let outroEl: HTMLVideoElement | null = null;
       let outroOnEnded: (() => void) | null = null;
+      // Rastro del cierre para el aviso final: `enterOutro` puede rendirse
+      // (interruptor apagado o <video> del sello sin montar) y `stepOutro`
+      // puede cerrar antes de pintar nada. El toast lo cuenta en vez de dejar
+      // el archivo mudo: un sello que no entra es un problema visible, no un
+      // detalle que se descubra al subirlo.
+      let outroEntered = false;
+      let outroDrew = false;
+      // Instante en que el sello empezó a intentar despegar de su final.
+      let outroStartAt = 0;
       const outTNow = () => {
         if (outroPhase) {
           return introPad + clipOutDur + (outroEl?.currentTime ?? 0);
@@ -4563,11 +4585,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         };
         // Cierre de marca: tras el clip, el sello BlackNews ocupa la tarjeta y
         // el lienzo SIN chyron ni ticker (mismo dibujo que la vista previa).
+        /** Rebobina el sello a su principio. `currentTime = 0` puede quedar en
+         *  el aire si el elemento no tenía metadatos todavía, así que se pide
+         *  otra vez desde stepOutro hasta que el reloj confirme el arranque. */
+        const rewindOutro = (el: HTMLVideoElement) => {
+          try {
+            el.currentTime = 0;
+          } catch {}
+        };
         const enterOutro = (): boolean => {
           if (outroPhase || !videoOutro) return false;
           const el = outroRef.current;
           if (!el) return false;
           outroPhase = true;
+          outroEntered = true;
+          outroStartAt = 0;
           outroEl = el;
           outroActiveRef.current = true;
           setOutroActive(true);
@@ -4575,9 +4607,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             video.pause();
           } catch {}
           el.muted = isMuted;
-          try {
-            el.currentTime = 0;
-          } catch {}
+          rewindOutro(el);
           // El sello entra en la misma pista de audio que el clip: el nodo
           // MediaElementSource de un elemento sólo se crea una vez, por eso
           // queda cacheado en outroAudioNodeRef.
@@ -4598,7 +4628,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               console.warn("Audio del cierre no disponible:", audioErr);
             }
           }
-          outroOnEnded = () => finish("fin-del-cierre");
+          // Un «ended» residual de la reproducción anterior (el sello estaba
+          // aparcado en su final) no debe cerrar el archivo sin haber pintado
+          // ni un cuadro: en ese caso manda stepOutro, que rebobina y cuenta
+          // su propio plazo de gracia.
+          outroOnEnded = () => {
+            if (!outroDrew) return;
+            finish("fin-del-cierre");
+          };
           el.addEventListener("ended", outroOnEnded);
           el.play().catch(() => {});
           // El plazo calculado para el clip ya no sirve: se amplía con el
@@ -4653,9 +4690,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (stopped) return finish("detenido");
           const el = outroEl;
           const dur = el.duration > 0 ? el.duration : outroSec;
-          if (el.ended || (dur > 0 && el.currentTime >= dur - 0.03)) {
-            return finish("fin-del-cierre");
+          const atEnd = el.ended || (dur > 0 && el.currentTime >= dur - 0.03);
+          // El sello puede seguir aparcado en su último fotograma (tras sonar
+          // en la vista previa): no se cierra todavía. Se vuelve a rebobinar y
+          // se espera OUTRO_START_GRACE_MS a que el reloj confirme el arranque.
+          // Sólo entonces manda el final del sello, y sólo después de haber
+          // pintado al menos un cuadro: el archivo nunca se cierra vacío.
+          if (atEnd) {
+            if (outroDrew) return finish("fin-del-cierre");
+            if (outroStartAt === 0) outroStartAt = performance.now();
+            if (performance.now() - outroStartAt > OUTRO_START_GRACE_MS) {
+              console.warn(
+                "[export-clasica] el sello no arrancó: se cierra sin cierre",
+              );
+              return finish("cierre-no-arranco");
+            }
+            rewindOutro(el);
+            if (el.paused) el.play().catch(() => {});
+            // rVFC no dispara con el elemento parado: el reintento lleva
+            // reloj propio para no depender de que el sello despegue.
+            window.setTimeout(() => void stepOutro(), 60);
+            return;
           }
+          outroStartAt = 0;
           if (el.readyState >= 2) {
             const tRender = performance.now();
             paintOutroFrame(
@@ -4672,6 +4729,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             if (ms > frameStats.max) frameStats.max = ms;
             if (ms > 33) frameStats.slow++;
             frameStats.lastMediaT = el.currentTime;
+            outroDrew = true;
             if (!active) return;
             if (vTrack && typeof (vTrack as any).requestFrame === "function") {
               (vTrack as any).requestFrame();
@@ -4779,8 +4837,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setExportedVideoUrl(url);
       setRecordingProgress(100);
       triggerDownload(url, filename);
+      // El cierre estaba activado pero no llegó a pintarse: el archivo sale con
+      // la longitud del clip y sin el sello. Se avisa aquí para que no se
+      // descubra al subirlo, en lugar de fallar en silencio.
+      const outroNote =
+        videoOutro && !outroDrew
+          ? outroEntered
+            ? " ⚠️ El cierre BlackNews se quedó a medias: se exportó sin el sello final."
+            : " ⚠️ El cierre BlackNews no pudo arrancar: se exportó sin el sello final."
+          : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}${outroNote}`,
       );
     } catch (err: any) {
       if (!isCancelledRef.current) {
