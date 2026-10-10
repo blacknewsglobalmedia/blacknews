@@ -49,11 +49,7 @@ import {
   useCountryCatalog,
   type CountryItem,
 } from "../data/countries";
-import {
-  CountryFlag,
-  loadFlagImage,
-  isRegionalFlagEmoji,
-} from "./CountryFlag";
+import { CountryFlag, loadFlagImage, isRegionalFlagEmoji } from "./CountryFlag";
 // Cierre de marca (opcional, apagado por defecto): se añade al final de los
 // vídeos exportados y de la vista previa. Vite lo sirve como asset estático.
 import outroVideoSrc from "../assets/videos/Blacknews.mp4";
@@ -221,7 +217,13 @@ const paintOutroFrame = (
   const dw = Math.round(dispW * scale);
   const dh = Math.round(dispH * scale);
   if (!spin) {
-    ctx.drawImage(source, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+    ctx.drawImage(
+      source,
+      Math.round((W - dw) / 2),
+      Math.round((H - dh) / 2),
+      dw,
+      dh,
+    );
     return;
   }
   // Con giro (tkhd de móvil): se rota alrededor del centro con la caja previa
@@ -302,7 +304,8 @@ const demuxAvcClip = async (
         : anyNal?.data;
     if (src instanceof Uint8Array) return src;
     if (Array.isArray(src)) return Uint8Array.from(src);
-    if (src && typeof src === "object") return Uint8Array.from(Object.values(src));
+    if (src && typeof src === "object")
+      return Uint8Array.from(Object.values(src));
     return new Uint8Array(0);
   };
   const spsList = ((avcCBox?.SPS ?? []) as unknown[])
@@ -341,9 +344,8 @@ const demuxAvcClip = async (
   // Rotación declarada en tkhd: los móviles guardan el vídeo "acostado" y el
   // <video> la aplica solo; los fotogramas decodificados llegan en crudo.
   const norm = (v: number) => (v > 0x7fffffff ? v - 0x100000000 : v);
-  const m: ArrayLike<number> | undefined = (
-    mp4.getTrackById(vTrack.id) as any
-  )?.tkhd?.matrix;
+  const m: ArrayLike<number> | undefined = (mp4.getTrackById(vTrack.id) as any)
+    ?.tkhd?.matrix;
   let rot = 0;
   if (m && m.length >= 5) {
     const a = norm(Number(m[0]));
@@ -407,7 +409,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // canónica del sitio (allAvailableCategories incluye además secciones que
   // alguien pudiera haber borrado, así que no sirve como fuente de verdad).
   const liveCategories = propCategories.filter((c) => c !== "TODAS");
-  const enabledCategories = liveCategories.length > 0 ? liveCategories : EXPANDED_CATEGORIES;
+  const enabledCategories =
+    liveCategories.length > 0 ? liveCategories : EXPANDED_CATEGORIES;
 
   // Post Text Content
   const [category, setCategory] = useState("GEOPOLÍTICA");
@@ -560,7 +563,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return "";
     }
   });
-  const [aiSources, setAiSources] = useState<{ title: string; url: string }[]>([]);
+  const [aiSources, setAiSources] = useState<{ title: string; url: string }[]>(
+    [],
+  );
   const [aiSearch, setAiSearch] = useState<{
     searched: boolean;
     note?: string;
@@ -571,6 +576,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     text: string;
   } | null>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Claves directas de IA gratuitas (fallback directo en navegador) ──────
+  // Se guardan en localStorage del redactor: van directo de su navegador a Google o Groq.
+  // 100% gratuitas: Groq (14.400 req/día) y Gemini (1.500 req/día).
+  const [geminiKey, setGeminiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem("blacknews_gemini_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [groqKey, setGroqKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem("blacknews_groq_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [showAiSettings, setShowAiSettings] = useState(false);
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [geminiKeySaved, setGeminiKeySaved] = useState(false);
+  const [groqKeySaved, setGroqKeySaved] = useState(false);
 
   // El tema sobrevive a un refresco. Va fuera del borrador para que el JSON
   // que la redacción comparte no arrastre el texto de partida.
@@ -697,7 +724,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const target = findCountryByName(trimmed) ?? addCustomCountry(trimmed);
     if (!target) return;
 
-    if (!selectedCountries.some((c) => c.name.toLowerCase() === target.name.toLowerCase())) {
+    if (
+      !selectedCountries.some(
+        (c) => c.name.toLowerCase() === target.name.toLowerCase(),
+      )
+    ) {
       setSelectedCountries([...selectedCountries, target]);
     }
     setCustomCountryName("");
@@ -707,7 +738,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Remove country — por nombre (identidad única entre seleccionados)
   const handleRemoveCountry = (country: CountryItem) => {
     const name = country.name.toLowerCase();
-    setSelectedCountries((prev) => prev.filter((c) => c.name.toLowerCase() !== name));
+    setSelectedCountries((prev) =>
+      prev.filter((c) => c.name.toLowerCase() !== name),
+    );
   };
 
   // Pre-fill from an existing article
@@ -907,7 +940,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       )
         setPostFormat(data.outputFormat);
       if (typeof data.tvShowLive === "boolean") setTvShowLive(data.tvShowLive);
-      if (typeof data.tvShowClock === "boolean") setTvShowClock(data.tvShowClock);
+      if (typeof data.tvShowClock === "boolean")
+        setTvShowClock(data.tvShowClock);
       if (typeof data.tvIntro === "boolean") setTvIntro(data.tvIntro);
       if (typeof data.tvIntroDur === "number" && data.tvIntroDur > 0) {
         setTvIntroDur(data.tvIntroDur);
@@ -1048,7 +1082,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (text.length <= max) return text;
     const head = text.slice(0, max + 1);
     const space = head.lastIndexOf(" ");
-    return (space > max * 0.6 ? head.slice(0, space) : head.slice(0, max)).trim();
+    return (
+      space > max * 0.6 ? head.slice(0, space) : head.slice(0, max)
+    ).trim();
   };
 
   /** Recorta por el final hasta que el texto quepa en `maxLines` líneas de la
@@ -1103,7 +1139,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const flags = aiTweetFlags(countries);
     const oneLine = body.replace(/\s+/g, " ").trim();
     const prefix = flags ? `[${flags}] » ` : "";
-    const budget = Math.max(40, AI_TWEET_LIMIT - prefix.length - AI_TWEET_FOOTER.length);
+    const budget = Math.max(
+      40,
+      AI_TWEET_LIMIT - prefix.length - AI_TWEET_FOOTER.length,
+    );
     const short = shortenAiBody(oneLine, budget);
     return {
       tweet: `${prefix}${short}${AI_TWEET_FOOTER}`,
@@ -1139,7 +1178,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     for (const item of value) {
       if (!item || typeof item !== "object") continue;
       const cand = item as Partial<CountryItem>;
-      const code = typeof cand.code === "string" ? cand.code.trim().toUpperCase() : "";
+      const code =
+        typeof cand.code === "string" ? cand.code.trim().toUpperCase() : "";
       const name = typeof cand.name === "string" ? cand.name.trim() : "";
       if (!code && !name) continue;
       const found =
@@ -1200,7 +1240,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const nextDescription = descCap.text;
     const nextPhotoCaption = pick("photoCaption", 120, photoCaption);
 
-    const rawCategory = typeof raw.category === "string" ? raw.category.trim() : "";
+    const rawCategory =
+      typeof raw.category === "string" ? raw.category.trim() : "";
     const matchedCategory = matchEnabledCategory(rawCategory);
     const nextCategory = matchedCategory || category;
 
@@ -1229,6 +1270,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         2,
       ),
     );
+
+    // ── Autocompletar automáticamente los campos del generador ──
+    setTitle(nextTitle);
+    setDescription(nextDescription);
+    setCategory(nextCategory);
+    setSelectedCountries(nextCountries);
+    if (nextPhotoCaption) {
+      setPhotoCaption(nextPhotoCaption);
+    }
+
     // El corchete con las banderas y la firma los monta la web: así el
     // corchete coincide siempre con los países que acaban de elegirse.
     const rawBody =
@@ -1250,7 +1301,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             )
             .filter((item) => !!item && typeof item.url === "string")
             .map((item) => ({
-              title: typeof item.title === "string" ? item.title : String(item.url),
+              title:
+                typeof item.title === "string" ? item.title : String(item.url),
               url: String(item.url),
             }))
             .slice(0, 6)
@@ -1282,7 +1334,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       givenCountries.length > 0 &&
       resolvedCountries.length === 0
     ) {
-      notes.push("ningún país propuesto existía en el catálogo, se mantienen los actuales");
+      notes.push(
+        "ningún país propuesto existía en el catálogo, se mantienen los actuales",
+      );
     }
     const tweetLength = nextTweet.tweet.length;
     if (nextTweet.trimmed) {
@@ -1290,7 +1344,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         `el cuerpo del tweet se recortó para no pasar de ${AI_TWEET_LIMIT} caracteres; amplíalo a mano en la caja si falta algo`,
       );
     } else if (tweetLength > AI_TWEET_LIMIT) {
-      notes.push(`el tweet tiene ${tweetLength} caracteres, tope ${AI_TWEET_LIMIT}`);
+      notes.push(
+        `el tweet tiene ${tweetLength} caracteres, tope ${AI_TWEET_LIMIT}`,
+      );
     }
 
     // Los tres textos se publican juntos: si la IA repite frases entre ellos
@@ -1306,9 +1362,189 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? { kind: "warn", text: `⚠︎ ${notes.join(" · ")}` }
         : {
             kind: "ok",
-            text: "✓ JSON y tweet listos: revísalos, aplica el JSON al post y sube la foto o el vídeo.",
+            text: "✓ Post autocompletado y tweet redactado. Ahora solo sube tu imagen o video.",
           },
     );
+    showToast("✓ ¡Post y tweet redactados con éxito!");
+  };
+
+  // ── Prompt compartido para llamadas directas desde el navegador ────────
+  const getClientSystemPrompt = () =>
+    [
+      "Eres el redactor jefe de BLACKNEWS, una agencia de noticias internacional en español.",
+      "Te pasan un tema de partida; redactas la publicación y el cuerpo de su tweet.",
+      "Respondes SIEMPRE en español neutro, sobrio y rotundo, con tono de agencia: sin relleno y sin adjetivos de más.",
+      "",
+      "Devuelve EXCLUSIVAMENTE un objeto JSON válido. Nada de markdown, ni bloques de código, ni texto antes o después.",
+      "La forma exacta es:",
+      '{"content":{"title":"...","description":"...","category":"...","photoCaption":"","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
+      "",
+      "REGLAS DEL TITULAR (title): 3 líneas separadas por \\n, cada una de 4-5 palabras (55-75 caracteres en total). Primera letra de cada frase en mayúscula, resto en minúsculas. Nunca en MAYÚSCULAS COMPLETAS.",
+      "REGLAS DE LA BAJADA (description): 1-2 frases EN UNA sola línea, sin \\n, entre 120-170 caracteres. Datos concretos que NO estén en el titular.",
+      `SECCIONES (elige exactamente una para category): ${enabledCategories.join(", ")}`,
+      "REGLAS DEL TWEET (tweetBody): UNA sola línea, máximo 200 caracteres. Aporta un dato distinto al titular y la bajada. Sin emojis, sin hashtags, sin enlaces.",
+      "selectedCountries: de 0 a 4 países del catálogo, con code (ISO 2 letras) y name en español.",
+    ].join("\n");
+
+  // ── Llamada directa a Groq Cloud (sin worker): 100% gratis, 14.400 req/día, ultra rápida ──
+  const callGroqDirect = async (
+    topic: string,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> => {
+    const key = groqKey.trim();
+    if (!key) return { success: false, error: "no_key" };
+
+    try {
+      const res = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: getClientSystemPrompt() },
+              { role: "user", content: `Redacta sobre: ${topic}` },
+            ],
+            temperature: 0.6,
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(45000),
+        },
+      );
+
+      if (res.status === 401)
+        return {
+          success: false,
+          error: "Clave de Groq inválida. Compruébala en console.groq.com.",
+        };
+      if (res.status === 429)
+        return {
+          success: false,
+          error:
+            "Límite temporal de Groq alcanzado. Espera unos instantes o usa Gemini.",
+        };
+      if (!res.ok)
+        return { success: false, error: `Groq respondió ${res.status}.` };
+
+      const raw = await res.json().catch(() => null);
+      const text: string | undefined = raw?.choices?.[0]?.message?.content;
+      if (!text) return { success: false, error: "Groq no devolvió texto." };
+
+      const parsed = JSON.parse(text);
+      return {
+        success: true,
+        data: {
+          content: parsed.content ?? parsed,
+          tweetBody: parsed.tweetBody ?? parsed.tweet ?? "",
+          sources: [],
+          searched: false,
+          note: "Modo directo Groq Cloud (Llama 3.3 · 14.400 req/día gratis).",
+          model: "llama-3.3-70b-versatile (Groq)",
+        },
+      };
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /timeout|abort/i.test(err.name + err.message)
+      ) {
+        return {
+          success: false,
+          error: "Groq no respondió a tiempo (45 s). Intenta de nuevo.",
+        };
+      }
+      return {
+        success: false,
+        error: "No se pudo conectar con Groq. Comprueba tu conexión.",
+      };
+    }
+  };
+
+  // ── Llamada directa a Gemini Flash (sin worker): gratis, 1.500 req/día ──
+  const callGeminiDirect = async (
+    topic: string,
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> => {
+    const key = geminiKey.trim();
+    if (!key) return { success: false, error: "no_key" };
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: getClientSystemPrompt() }] },
+          contents: [
+            { role: "user", parts: [{ text: `Redacta sobre: ${topic}` }] },
+          ],
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: 0.7,
+          },
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (res.status === 400)
+        return {
+          success: false,
+          error:
+            "Clave de Gemini inválida o mal formada. Revisa la API key en aistudio.google.com.",
+        };
+      if (res.status === 403)
+        return {
+          success: false,
+          error:
+            "La clave de Gemini no tiene permisos. Genera una nueva en aistudio.google.com.",
+        };
+      if (res.status === 429)
+        return {
+          success: false,
+          error:
+            "Límite de Gemini alcanzado (1.500 req/día gratuitas). Prueba con Groq.",
+        };
+      if (!res.ok)
+        return { success: false, error: `Gemini respondió ${res.status}.` };
+
+      const raw = await res.json().catch(() => null);
+      const text: string | undefined =
+        raw?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) return { success: false, error: "Gemini no devolvió texto." };
+
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start < 0 || end <= start)
+        return { success: false, error: "Gemini no devolvió JSON válido." };
+      const parsed = JSON.parse(text.slice(start, end + 1));
+
+      return {
+        success: true,
+        data: {
+          content: parsed.content ?? parsed,
+          tweetBody: parsed.tweetBody ?? parsed.tweet ?? "",
+          sources: [],
+          searched: false,
+          note: "Modo directo Google Gemini (Flash Lite · 1.500 req/día gratis).",
+          model: "gemini-2.0-flash-lite (directo)",
+        },
+      };
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        /timeout|abort/i.test(err.name + err.message)
+      ) {
+        return {
+          success: false,
+          error: "Gemini no respondió a tiempo (60 s). Intenta de nuevo.",
+        };
+      }
+      return {
+        success: false,
+        error: "No se pudo conectar con Gemini. Comprueba tu conexión.",
+      };
+    }
   };
 
   const handleGenerateAi = async () => {
@@ -1326,31 +1562,73 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setAiSources([]);
     setAiSearch(null);
     try {
-      // Sólo el texto de partida: la IA parte de lo que escribe la persona y
-      // de lo que encuentre en la web, sin pisar nada de lo que ya haya en el
-      // generador hasta que se pulse «Aplicar».
-      const response = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          text: topic,
-          categories: enabledCategories,
-          countries: countryCatalog.map((c) => ({ code: c.code, name: c.name })),
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.success) {
-        setAiNotice({
-          kind: "error",
-          text: data?.error || `El servidor no respondió (HTTP ${response.status}).`,
+      // 1) Intentar primero el worker de Cloudflare (Workers AI / Groq / Gemini del backend)
+      let workerUnavailable = false;
+      try {
+        const response = await fetch("/api/ai/generate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            text: topic,
+            categories: enabledCategories,
+            countries: countryCatalog.map((c) => ({
+              code: c.code,
+              name: c.name,
+            })),
+          }),
+          signal: AbortSignal.timeout(95000),
         });
-        return;
+        const data = await response.json().catch(() => null);
+        if (response.ok && data?.success) {
+          applyAiResult(data.data);
+          return;
+        }
+        if (response.status === 503) {
+          workerUnavailable = true;
+        } else if (response.status === 429) {
+          setAiNotice({
+            kind: "error",
+            text: "Límite del worker alcanzado. Prueba con tu clave directa de Groq o Gemini.",
+          });
+          return;
+        } else {
+          workerUnavailable = true;
+        }
+      } catch {
+        workerUnavailable = true;
       }
-      applyAiResult(data.data);
-    } catch {
+
+      // 2) Fallback directo: Groq Cloud (ultra rápido, 14.400 req/día gratis)
+      if (groqKey.trim()) {
+        const groqRes = await callGroqDirect(topic);
+        if (groqRes.success && groqRes.data) {
+          applyAiResult(groqRes.data);
+          return;
+        }
+        if (groqRes.error && !geminiKey.trim()) {
+          setAiNotice({ kind: "error", text: groqRes.error });
+          return;
+        }
+      }
+
+      // 3) Fallback directo: Google Gemini (1.500 req/día gratis)
+      if (geminiKey.trim()) {
+        const geminiRes = await callGeminiDirect(topic);
+        if (geminiRes.success && geminiRes.data) {
+          applyAiResult(geminiRes.data);
+          return;
+        }
+        if (geminiRes.error) {
+          setAiNotice({ kind: "error", text: geminiRes.error });
+          return;
+        }
+      }
+
+      // 4) Si ningún proveedor está disponible, abrir configuración con instrucciones
+      setShowAiSettings(true);
       setAiNotice({
-        kind: "error",
-        text: "Sin respuesta del servidor: comprueba que el Worker expone /api/ai/generate.",
+        kind: "warn",
+        text: "Introduce una clave gratuita de Groq (14.400 req/día) o Gemini (1.500 req/día) abajo para redactar sin coste alguno desde tu navegador.",
       });
     } finally {
       setAiBusy(false);
@@ -1475,7 +1753,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           handleApplyJson(saved, true);
         }
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       draftRestoredRef.current = true;
     }
   }, []);
@@ -1545,7 +1824,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const getCanvasFilterString = (forceColor = false) => {
     let b = brightness / 100;
     let c = contrast / 100;
-    if (forceColor) return `brightness(${b.toFixed(2)}) contrast(${c.toFixed(2)})`;
+    if (forceColor)
+      return `brightness(${b.toFixed(2)}) contrast(${c.toFixed(2)})`;
     switch (filter) {
       case "bw-high":
         return `grayscale(100%) contrast(${(c * 1.15).toFixed(2)}) brightness(${(b * 0.95).toFixed(2)})`;
@@ -1701,7 +1981,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tvTickerItems: TickerItem[] = [
     "BLACKNEWS",
     ...(tvIntro && tvTickerTitle
-      ? [tvTickerTitle.length > 110 ? `${tvTickerTitle.slice(0, 110)}…` : tvTickerTitle]
+      ? [
+          tvTickerTitle.length > 110
+            ? `${tvTickerTitle.slice(0, 110)}…`
+            : tvTickerTitle,
+        ]
       : []),
     ...(tvTickerCountries.length ? [tvTickerCountries] : []),
   ];
@@ -2072,11 +2356,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? ctx.measureText(it).width
         : it.reduce((sum, seg) => sum + tickerSegW(seg), 0);
     const tickerItemWs = tvTickerItems.map(tickerItemW);
-    const tickerCellW = tickerItemWs.reduce((sum, w) => sum + w + tickerSepW, 0);
+    const tickerCellW = tickerItemWs.reduce(
+      (sum, w) => sum + w + tickerSepW,
+      0,
+    );
     if (Number.isFinite(tickerCellW) && tickerCellW > 0) {
       const tickerCycle =
-        (((typeof outTime === "number" ? outTime : 0) * TV_TICKER_SPEED) %
-          tickerCellW +
+        ((((typeof outTime === "number" ? outTime : 0) * TV_TICKER_SPEED) %
+          tickerCellW) +
           tickerCellW) %
         tickerCellW;
       ctx.save();
@@ -2146,10 +2433,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + tvUi(40));
       let cap = photoCaption.trim();
       if (maxCapW > 80 && ctx.measureText(cap).width > maxCapW) {
-        while (
-          ctx.measureText(cap + "…").width > maxCapW &&
-          cap.length > 3
-        ) {
+        while (ctx.measureText(cap + "…").width > maxCapW && cap.length > 3) {
           cap = cap.slice(0, -1);
         }
         cap += "…";
@@ -2413,9 +2697,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const descLineHeight = Math.round(fontSizeDesc * descLineHeightRatio);
       // Mismo tope que la vista previa (5 líneas con "…" de corte): lo que no
       // cabe en pantalla tampoco se dibuja en el archivo exportado.
-      const descLines = capDescLines(
-        wrapText(ctx, description, contentWidth),
-      );
+      const descLines = capDescLines(wrapText(ctx, description, contentWidth));
       for (const line of descLines) {
         if (line) {
           ctx.fillText(line, padX, curY);
@@ -2671,7 +2953,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               const dataUrl = canvas.toDataURL("image/png");
               triggerDownload(dataUrl, filename);
               setExportedImageUrl(dataUrl);
-              showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
+              showToast(
+                `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+              );
             } catch (canvasErr) {
               console.error(canvasErr);
               showToast(
@@ -2684,7 +2968,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const url = URL.createObjectURL(blob);
           triggerDownload(url, filename);
           setExportedImageUrl(url);
-          showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
+          showToast(
+            `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+          );
           setIsExporting(false);
         }, "image/png");
       } catch (toBlobErr) {
@@ -2693,7 +2979,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           const dataUrl = canvas.toDataURL("image/png");
           triggerDownload(dataUrl, filename);
           setExportedImageUrl(dataUrl);
-          showToast(`¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`);
+          showToast(
+            `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+          );
         } catch {
           showToast(
             "Error de exportación por origen de imagen. Prueba subiendo la foto directamente.",
@@ -2717,8 +3005,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const PORTADA_H = 1080;
   const PORTADA_PAD_X = 104;
   const PORTADA_MESES = [
-    "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
-    "JUL", "AGO", "SEP", "OCT", "NOV", "DIC",
+    "ENE",
+    "FEB",
+    "MAR",
+    "ABR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AGO",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DIC",
   ];
 
   // Encaja el titular en varias líneas sin desbordar el bloque: baja de 112 px
@@ -2876,7 +3174,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const headlineMaxH = 360;
     const headlineBottom = H - 160;
     const ruleY = H - 124;
-    const fit = fitPortadaHeadline(ctx, headlineText, contentWidth, headlineMaxH);
+    const fit = fitPortadaHeadline(
+      ctx,
+      headlineText,
+      contentWidth,
+      headlineMaxH,
+    );
     const headlineTop = headlineBottom - fit.lines.length * fit.lineH;
 
     ctx.save();
@@ -2968,8 +3271,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         selectedCountries.map(async (c) => ({
           code: c.code,
           img: countryFormat === "names" ? null : await loadFlagImage(c.code),
-          text:
-            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+          text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
 
@@ -3072,8 +3374,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         selectedCountries.map(async (c) => ({
           code: c.code,
           img: countryFormat === "names" ? null : await loadFlagImage(c.code),
-          text:
-            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+          text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
 
@@ -3422,8 +3723,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             : Math.round(outroDurSec * 48000);
 
       const hasAudio =
-        (!!renderedAudio && renderedAudio.length > 0) ||
-        outroAudioLen > 0;
+        (!!renderedAudio && renderedAudio.length > 0) || outroAudioLen > 0;
       snap("audio");
 
       // Primer error capturado (codificadores, muxer, decoder…): se propaga a
@@ -3557,14 +3857,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         })),
       );
       // Fuentes y overlay base (marquee en su posición 0 / arranque de intro).
-      await renderToCanvas(
-        canvas,
-        undefined,
-        cachedFlags,
-        false,
-        undefined,
-        0,
-      );
+      await renderToCanvas(canvas, undefined, cachedFlags, false, undefined, 0);
       setRecordingProgress(10);
       snap("warmup");
 
@@ -3635,9 +3928,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const padUntil = async (target: number): Promise<void> => {
         if (!paintedOnce) return;
         while (nextSlot < target) {
-          await waitWhile(
-            () => (encoder as VideoEncoder).encodeQueueSize > 10,
-          );
+          await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 10);
           emitSlot(nextSlot);
         }
       };
@@ -3780,10 +4071,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             new EncodedVideoChunk({
               type: s.is_sync ? "key" : "delta",
               timestamp: Math.round((s.cts / oc.ts) * 1e6),
-              duration: Math.max(
-                1,
-                Math.round((s.duration / oc.ts) * 1e6),
-              ),
+              duration: Math.max(1, Math.round((s.duration / oc.ts) * 1e6)),
               data: s.data,
             }),
           );
@@ -3818,11 +4106,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           : outroAudioLen > 0
             ? Math.round(outDur * 48000)
             : 0;
-        const segs: Array<{ buf: AudioBuffer | null; start: number; len: number }> =
-          [
-            { buf: ra, start: introSamples, len: mainLen },
-            { buf: oa, start: introSamples + mainLen, len: outroAudioLen },
-          ];
+        const segs: Array<{
+          buf: AudioBuffer | null;
+          start: number;
+          len: number;
+        }> = [
+          { buf: ra, start: introSamples, len: mainLen },
+          { buf: oa, start: introSamples + mainLen, len: outroAudioLen },
+        ];
         const outLen = introSamples + mainLen + outroAudioLen;
         for (let i = 0; i < outLen; i += frameSize) {
           await waitWhile(() => ae.encodeQueueSize > 8);
@@ -4024,14 +4315,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
-      await renderToCanvas(
-        canvas,
-        video,
-        cachedFlags,
-        false,
-        undefined,
-        0,
-      );
+      await renderToCanvas(canvas, video, cachedFlags, false, undefined, 0);
       setRecordingProgress(10);
 
       video.pause();
@@ -4672,15 +4956,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const measure = () => setTickerCellW(el.offsetWidth);
     measure();
     const ro =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(measure)
+        : null;
     ro?.observe(el);
     if (document.fonts?.ready) {
       document.fonts.ready.then(measure).catch(() => {});
     }
     return () => ro?.disconnect();
   }, [tvTickerKey, postFormat]);
-  const tickerMarqueeDur =
-    tickerCellW > 0 ? tickerCellW / TV_TICKER_SPEED : 20;
+  const tickerMarqueeDur = tickerCellW > 0 ? tickerCellW / TV_TICKER_SPEED : 20;
 
   const previewTitleSize = fontSizeTitle * previewScale;
   const previewDescSize = fontSizeDesc * previewScale;
@@ -4728,7 +5013,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     (countryPlacement === "badge" && selectedCountries.length > 0
       ? 18 + gapCategoryToTitle
       : 0) +
-    previewTitleLines.length * Math.round(fontSizeTitle * titleLineHeightRatio) +
+    previewTitleLines.length *
+      Math.round(fontSizeTitle * titleLineHeightRatio) +
     gapTitleToDesc +
     (description.trim()
       ? previewDescLines.length * Math.round(fontSizeDesc * descLineHeightRatio)
@@ -5159,6 +5445,389 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* LEFT COLUMN: Controls & Settings (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
+          {/* Card 0: Asistente IA Editorial · Redacción Automática y Gratuita */}
+          <div className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                    <span>Redacción Asistida con IA</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold lowercase">
+                      gratis &amp; ilimitada
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-neutral-400 font-light">
+                    Redacta titular, bajada, sección, banderas y tweet en 1 clic
+                  </p>
+                </div>
+              </div>
+
+              {/* Botón de configuración de claves / proveedor activo */}
+              <button
+                type="button"
+                onClick={() => setShowAiSettings((prev) => !prev)}
+                className={`text-[11px] font-medium px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                  groqKey.trim() || geminiKey.trim()
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20"
+                    : "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>
+                  {groqKey.trim()
+                    ? "Groq Llama 3.3 (Activo)"
+                    : geminiKey.trim()
+                      ? "Gemini Flash (Activo)"
+                      : "Configurar Clave Gratis"}
+                </span>
+              </button>
+            </div>
+
+            {/* Aviso: éxito, salvaguarda o error */}
+            {aiNotice && (
+              <div
+                className={`p-3.5 rounded-xl text-xs font-medium leading-relaxed border ${
+                  aiNotice.kind === "error"
+                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                    : aiNotice.kind === "warn"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                }`}
+              >
+                {aiNotice.text}
+              </div>
+            )}
+
+            {/* Panel de Configuración de Claves Gratuitas (Groq / Gemini) */}
+            {showAiSettings && (
+              <div className="bg-neutral-900/90 border border-white/10 rounded-xl p-4 space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      Proveedores de IA 100% Gratuitos (Sin Tarjeta)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAiSettings(false)}
+                    className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-neutral-300 leading-relaxed font-light">
+                  BlackNews funciona con modelos de lenguaje gratuitos. Las
+                  claves se guardan solo en tu navegador y van directo a los
+                  proveedores:
+                </p>
+
+                {/* Opción 1: Groq Cloud (Recomendada · 14.400 req/día) */}
+                <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                      Groq Cloud · Llama 3.3 70B (Recomendado)
+                    </span>
+                    <a
+                      href="https://console.groq.com/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-orange-400 hover:text-orange-300 underline font-medium"
+                    >
+                      Obtener clave gratis (14.400/día) →
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={groqKey}
+                      onChange={(e) => {
+                        setGroqKey(e.target.value);
+                        setGroqKeySaved(false);
+                      }}
+                      placeholder="gsk_..."
+                      className="flex-1 bg-neutral-900 border border-white/10 focus:border-orange-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const k = groqKey.trim();
+                        try {
+                          if (k) localStorage.setItem("blacknews_groq_key", k);
+                          else localStorage.removeItem("blacknews_groq_key");
+                        } catch {}
+                        setGroqKeySaved(true);
+                        showToast(
+                          k
+                            ? "✓ Clave de Groq guardada"
+                            : "Clave de Groq borrada",
+                        );
+                      }}
+                      className="px-3.5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {groqKeySaved ? "✓ Guardada" : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Opción 2: Google Gemini (1.500 req/día) */}
+                <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                      Google Gemini · Flash Lite
+                    </span>
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-blue-400 hover:text-blue-300 underline font-medium"
+                    >
+                      Obtener clave gratis (1.500/día) →
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={geminiKey}
+                      onChange={(e) => {
+                        setGeminiKey(e.target.value);
+                        setGeminiKeySaved(false);
+                      }}
+                      placeholder="AIza..."
+                      className="flex-1 bg-neutral-900 border border-white/10 focus:border-blue-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const k = geminiKey.trim();
+                        try {
+                          if (k)
+                            localStorage.setItem("blacknews_gemini_key", k);
+                          else localStorage.removeItem("blacknews_gemini_key");
+                        } catch {}
+                        setGeminiKeySaved(true);
+                        showToast(
+                          k
+                            ? "✓ Clave de Gemini guardada"
+                            : "Clave de Gemini borrada",
+                        );
+                      }}
+                      className="px-3.5 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      {geminiKeySaved ? "✓ Guardada" : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Entrada del Tema / Titular / Contexto */}
+            <div className="space-y-2">
+              <label
+                htmlFor="ai-topic-input"
+                className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center justify-between"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Type className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Tema, noticia o contexto de partida</span>
+                </span>
+                {aiTopic && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiTopic("");
+                      setAiNotice(null);
+                    }}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer lowercase"
+                  >
+                    borrar texto
+                  </button>
+                )}
+              </label>
+
+              <textarea
+                id="ai-topic-input"
+                rows={3}
+                value={aiTopic}
+                onChange={(e) => {
+                  setAiTopic(e.target.value);
+                  setAiNotice(null);
+                }}
+                placeholder="Pega aquí el tema, borrador de titular o contexto (ej: Bombardeos de precisión en instalaciones nucleares en Isfahán provocan alerta máxima en el Golfo Pérsico...)"
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed placeholder-neutral-500 focus:outline-none focus:border-emerald-400 resize-y min-h-18"
+              />
+            </div>
+
+            {/* Botón de Generación + Acciones secundarias */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleGenerateAi}
+                disabled={aiBusy}
+                className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-100/60 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait shadow-lg shadow-emerald-500/10 shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>
+                  {aiBusy
+                    ? "Investigando y redactando con IA…"
+                    : "Redactar y Autocompletar Post"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvancedJson((prev) => !prev)}
+                className="px-3.5 py-3 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border border-white/10 shrink-0"
+              >
+                <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                <span>{showAdvancedJson ? "Ocultar JSON" : "Modo JSON"}</span>
+              </button>
+
+              <span className="text-[11px] text-neutral-400 font-light leading-relaxed">
+                Rellena el titular, bajada, sección y banderas automáticamente.
+                Después solo subes la foto o el vídeo.
+              </span>
+            </div>
+
+            {/* Tweet Result Card (si ya se ha redactado) */}
+            {aiTweet && (
+              <div className="bg-neutral-900/90 border border-white/15 rounded-xl p-4 space-y-2.5 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      Tweet Redactado (X)
+                    </span>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        aiTweet.length > AI_TWEET_LIMIT
+                          ? "bg-red-500/20 text-red-400 border-red-500/40"
+                          : "bg-neutral-800 text-neutral-300 border-white/10"
+                      }`}
+                    >
+                      {aiTweet.length}/{AI_TWEET_LIMIT} caracteres
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyAiTweet}
+                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Copiar Tweet</span>
+                  </button>
+                </div>
+
+                <textarea
+                  rows={3}
+                  value={aiTweet}
+                  onChange={(e) => setAiTweet(e.target.value)}
+                  className="w-full bg-neutral-950 border border-white/10 rounded-lg p-3 text-xs text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-amber-400 resize-y"
+                />
+              </div>
+            )}
+
+            {/* Fuentes consultadas (si las hay) */}
+            {(aiSearch?.note || aiSources.length > 0) && (
+              <div className="space-y-2">
+                {aiSearch?.note && (
+                  <p className="text-[11px] leading-relaxed text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                    {aiSearch.note}
+                  </p>
+                )}
+                {aiSources.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+                      Fuentes web consultadas:
+                    </span>
+                    <ul className="space-y-1">
+                      {aiSources.map((source) => (
+                        <li
+                          key={source.url}
+                          className="text-[11px] text-neutral-400 flex items-start gap-1.5"
+                        >
+                          <Globe className="w-3 h-3 mt-0.5 shrink-0 text-neutral-600" />
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-white transition-colors underline decoration-white/20 truncate"
+                          >
+                            {source.title || source.url}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Panel de JSON Técnico Colapsable */}
+            {showAdvancedJson && (
+              <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-3 animate-in fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>JSON Técnico del Post</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadCurrentJson}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                    >
+                      Cargar actual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePasteAiJson}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                    >
+                      Pegar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!aiJsonText) return;
+                        try {
+                          await navigator.clipboard.writeText(aiJsonText);
+                          showToast("✓ JSON copiado al portapapeles");
+                        } catch {}
+                      }}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                    >
+                      Copiar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyAiJson}
+                      className="px-3 py-1 bg-white hover:bg-neutral-200 text-black text-xs font-bold rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
+                    >
+                      Aplicar al Post
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={8}
+                  value={aiJsonText}
+                  onChange={(e) => setAiJsonText(e.target.value)}
+                  spellCheck={false}
+                  placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "..."\n  }\n}'
+                  className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-cyan-400 resize-y"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Card 1: Text Content & Typography */}
           <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -5742,241 +6411,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   );
                 })}
               </div>
-            </div>
-          </div>
-
-          {/* Card 2b: IA Editorial — JSON del post + tweet */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
-            <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>IA Editorial · JSON + Tweet</span>
-              </h3>
-              <span className="text-[11px] text-neutral-400 font-mono">
-                {enabledCategories.length} secciones · {countryCatalog.length} países
-              </span>
-            </div>
-
-            {/* Aviso: éxito, salvaguarda del catálogo o fallo de la llamada */}
-            {aiNotice && (
-              <div
-                className={`p-3 rounded-xl text-xs font-medium leading-relaxed border ${
-                  aiNotice.kind === "error"
-                    ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : aiNotice.kind === "warn"
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
-                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                }`}
-              >
-                {aiNotice.text}
-              </div>
-            )}
-
-            {/* Tema o texto de partida: el único input que necesita la IA */}
-            <div className="space-y-2">
-              <label
-                htmlFor="ai-topic"
-                className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5"
-              >
-                <Type className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Tema o texto de partida</span>
-              </label>
-
-              <textarea
-                id="ai-topic"
-                rows={4}
-                value={aiTopic}
-                onChange={(e) => {
-                  setAiTopic(e.target.value);
-                  setAiNotice(null);
-                }}
-                placeholder="Escribe o pega el tema, la noticia o el contexto del que partir. La IA busca información relacionada en la web y redacta de ahí el JSON del post y el cuerpo del tweet."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed placeholder-neutral-600 focus:outline-none focus:border-emerald-400 resize-y min-h-[5.5rem]"
-              />
-
-              <p className="text-[11px] text-neutral-500 font-light leading-relaxed">
-                Se guarda en este navegador. Lo que ya tengas en el generador no
-                se toca hasta que pulses «Aplicar».
-              </p>
-            </div>
-
-            {/* Acción principal + atajo a la configuración actual */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <button
-                type="button"
-                onClick={handleGenerateAi}
-                disabled={aiBusy}
-                title="Busca información relacionada en la web y devuelve el JSON del post y el cuerpo del tweet"
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-100/70 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait shrink-0"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{aiBusy ? "Buscando y redactando…" : "Generar con IA"}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleLoadCurrentJson}
-                className="px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-white/10 shrink-0"
-                title="Copia la configuración actual del generador a la caja de JSON"
-              >
-                <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Cargar JSON actual</span>
-              </button>
-              <span className="text-[11px] text-neutral-500 font-light leading-relaxed">
-                Investiga, redacta el JSON del post y el cuerpo del tweet (máx.{" "}
-                {AI_TWEET_LIMIT} caracteres). Después subes la foto o el vídeo.
-              </span>
-            </div>
-
-            {/* Qué ha buscado la IA: aviso si no hubo búsqueda y lista de fuentes */}
-            {(aiSearch?.note || aiSources.length > 0) && (
-              <div className="space-y-2">
-                {aiSearch?.note && (
-                  <p className="text-[11px] leading-relaxed text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                    {aiSearch.note}
-                  </p>
-                )}
-
-                {aiSources.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
-                      Fuentes consultadas
-                    </span>
-                    <ul className="space-y-1">
-                      {aiSources.map((source) => (
-                        <li
-                          key={source.url}
-                          className="text-[11px] text-neutral-400 flex items-start gap-1.5"
-                        >
-                          <Globe className="w-3 h-3 mt-0.5 shrink-0 text-neutral-600" />
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={source.url}
-                            className="hover:text-white transition-colors underline decoration-white/20 truncate"
-                          >
-                            {source.title || source.url}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* JSON del post: ver, editar, copiar, pegar y aplicar */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>JSON del Post</span>
-                </label>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!aiJsonText) {
-                        setAiNotice({
-                          kind: "warn",
-                          text: "No hay JSON que copiar todavía.",
-                        });
-                        return;
-                      }
-                      try {
-                        await navigator.clipboard.writeText(aiJsonText);
-                        showToast("✓ JSON copiado al portapapeles");
-                      } catch {
-                        showToast("No se pudo copiar directamente al portapapeles.");
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Copiar</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handlePasteAiJson}
-                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
-                  >
-                    <FileDown className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Pegar</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleApplyAiJson}
-                    className="px-3 py-1.5 bg-white hover:bg-neutral-200 text-black text-xs font-bold uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Aplicar</span>
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                rows={10}
-                value={aiJsonText}
-                onChange={(e) => {
-                  setAiJsonText(e.target.value);
-                  setAiNotice(null);
-                }}
-                spellCheck={false}
-                placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "...",\n    "category": "..."\n  }\n}'
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-emerald-400 resize-y min-h-[13rem]"
-              />
-            </div>
-
-            {/* Tweet: ver, editar, copiar, con contador de 250 */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Tweet (X)</span>
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
-                      aiTweet.length > AI_TWEET_LIMIT
-                        ? "bg-red-500/10 border-red-500/40 text-red-400"
-                        : "bg-neutral-900 border-white/10 text-neutral-300"
-                    }`}
-                    title={
-                      aiTweet.length > AI_TWEET_LIMIT
-                        ? "El tweet supera el límite: acorta el cuerpo"
-                        : "Límite de 250 caracteres"
-                    }
-                  >
-                    {aiTweet.length}/{AI_TWEET_LIMIT}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyAiTweet}
-                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Copiar</span>
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                rows={5}
-                value={aiTweet}
-                onChange={(e) => {
-                  setAiTweet(e.target.value);
-                  setAiNotice(null);
-                }}
-                placeholder={
-                  "[🇨🇳🇮🇷] » Cuerpo del tweet en una sola línea.\n\n■ #BlackNews"
-                }
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm text-neutral-100 leading-relaxed focus:outline-none focus:border-emerald-400 resize-y"
-              />
             </div>
           </div>
 
@@ -7236,169 +7670,172 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </>
             ) : (
               <>
-            {/* Top Text Content Area (1:1 with canvas metrics) */}
-            <div
-              style={{
-                paddingTop: `${previewPadTop}px`,
-                paddingLeft: `${previewPadX}px`,
-                paddingRight: `${previewPadRight}px`,
-              }}
-              className="z-20 relative select-none"
-            >
-              {/* Category + Country Single-line Bar */}
-              <div className="flex items-center gap-2 w-full overflow-hidden whitespace-nowrap min-w-0">
-                <span
+                {/* Top Text Content Area (1:1 with canvas metrics) */}
+                <div
                   style={{
-                    fontSize: `${previewHeaderSize}px`,
-                    letterSpacing: previewHeaderTracking,
+                    paddingTop: `${previewPadTop}px`,
+                    paddingLeft: `${previewPadX}px`,
+                    paddingRight: `${previewPadRight}px`,
                   }}
-                  className="font-semibold uppercase text-white font-['Lexend'] shrink-0 select-none"
+                  className="z-20 relative select-none"
                 >
-                  {category || "GEOPOLÍTICA"}
-                </span>
+                  {/* Category + Country Single-line Bar */}
+                  <div className="flex items-center gap-2 w-full overflow-hidden whitespace-nowrap min-w-0">
+                    <span
+                      style={{
+                        fontSize: `${previewHeaderSize}px`,
+                        letterSpacing: previewHeaderTracking,
+                      }}
+                      className="font-semibold uppercase text-white font-['Lexend'] shrink-0 select-none"
+                    >
+                      {category || "GEOPOLÍTICA"}
+                    </span>
 
-                {countryPlacement === "line" &&
-                  selectedCountries.length > 0 && (
-                    <>
-                      <span
-                        style={{ fontSize: `${previewHeaderSize}px` }}
-                        className="text-neutral-500 shrink-0 font-mono px-0.5"
-                      >
-                        ·
-                      </span>
+                    {countryPlacement === "line" &&
+                      selectedCountries.length > 0 && (
+                        <>
+                          <span
+                            style={{ fontSize: `${previewHeaderSize}px` }}
+                            className="text-neutral-500 shrink-0 font-mono px-0.5"
+                          >
+                            ·
+                          </span>
+                          <div
+                            style={{
+                              fontSize: `${previewHeaderSize}px`,
+                              letterSpacing: previewHeaderTracking,
+                            }}
+                            className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
+                          >
+                            {selectedCountries.map((c, idx) => (
+                              <React.Fragment key={c.name}>
+                                {idx > 0 && (
+                                  <span className="text-neutral-500 text-[10px]">
+                                    ·
+                                  </span>
+                                )}
+                                <span className="inline-flex items-center gap-1 shrink-0">
+                                  {countryFormat !== "names" && (
+                                    <CountryFlag
+                                      code={c.code}
+                                      className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
+                                    />
+                                  )}
+                                  <span>
+                                    {countryFormat === "flags-codes"
+                                      ? c.code
+                                      : c.name.toUpperCase()}
+                                  </span>
+                                </span>
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                    <span className="flex-1 max-w-[50px] min-w-[16px] h-[1.5px] bg-white inline-block shrink-0"></span>
+                  </div>
+
+                  {/* Country Badge (if badge placement is selected) */}
+                  {countryPlacement === "badge" &&
+                    selectedCountries.length > 0 && (
                       <div
                         style={{
-                          fontSize: `${previewHeaderSize}px`,
-                          letterSpacing: previewHeaderTracking,
+                          marginTop: `${Math.round(14 * previewScale)}px`,
                         }}
-                        className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
+                        className="flex flex-wrap items-center gap-1.5"
                       >
-                        {selectedCountries.map((c, idx) => (
-                          <React.Fragment key={c.name}>
-                            {idx > 0 && (
-                              <span className="text-neutral-500 text-[10px]">
-                                ·
-                              </span>
-                            )}
-                            <span className="inline-flex items-center gap-1 shrink-0">
-                              {countryFormat !== "names" && (
-                                <CountryFlag
-                                  code={c.code}
-                                  className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
-                                />
-                              )}
-                              <span>
-                                {countryFormat === "flags-codes"
-                                  ? c.code
-                                  : c.name.toUpperCase()}
-                              </span>
-                            </span>
-                          </React.Fragment>
+                        {selectedCountries.map((c) => (
+                          <span
+                            key={c.name}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
+                          >
+                            <CountryFlag
+                              code={c.code}
+                              className="w-3.5 h-2.5 object-cover rounded-[1px]"
+                            />
+                            <span>{c.name.toUpperCase()}</span>
+                          </span>
                         ))}
                       </div>
-                    </>
+                    )}
+
+                  {/* Title with dynamic Real-time Font Size and Spacing */}
+                  <h1
+                    style={{
+                      marginTop: `${previewGapCatTitle}px`,
+                      fontSize: `${previewTitleSize}px`,
+                      lineHeight: `${previewTitleLineH}px`,
+                      // El lienzo exporta sin tracking (el global de la app hereda
+                      // −0.015em): aquí se anula para render igual que el archivo.
+                      letterSpacing: 0,
+                    }}
+                    className="font-bold text-white font-['Lexend'] drop-shadow-sm transition-[font-size,margin]"
+                  >
+                    {previewTitleLines.map((line, i) => (
+                      <span key={i} className="block whitespace-nowrap">
+                        {line || "\u00A0"}
+                      </span>
+                    ))}
+                  </h1>
+
+                  {/* Description with dynamic Real-time Font Size and Spacing */}
+                  {previewDescLines.length > 0 && (
+                    <p
+                      style={{
+                        marginTop: `${previewGapTitleDesc}px`,
+                        fontSize: `${previewDescSize}px`,
+                        lineHeight: `${previewDescLineH}px`,
+                        letterSpacing: 0,
+                      }}
+                      className="text-neutral-300 font-normal font-['Lexend'] transition-[font-size,margin]"
+                    >
+                      {previewDescLines.map((line, i) => (
+                        <span key={i} className="block whitespace-nowrap">
+                          {line || "\u00A0"}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
+
+                {/* Media Container (inicio dinámico en 9:16, 40 % fijo en 4:5) */}
+                <div
+                  className="absolute inset-0 overflow-hidden z-0"
+                  style={{ top: `${previewMediaTopPct}%` }}
+                >
+                  {previewMediaEl}
+
+                  {/* Soft Gradient Fade from black on top of media */}
+                  {blendFade && (
+                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black via-black/60 to-transparent pointer-events-none" />
                   )}
 
-                <span className="flex-1 max-w-[50px] min-w-[16px] h-[1.5px] bg-white inline-block shrink-0"></span>
-              </div>
-
-              {/* Country Badge (if badge placement is selected) */}
-              {countryPlacement === "badge" && selectedCountries.length > 0 && (
-                <div
-                  style={{ marginTop: `${Math.round(14 * previewScale)}px` }}
-                  className="flex flex-wrap items-center gap-1.5"
-                >
-                  {selectedCountries.map((c) => (
-                    <span
-                      key={c.name}
-                      className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
-                    >
-                      <CountryFlag
-                        code={c.code}
-                        className="w-3.5 h-2.5 object-cover rounded-[1px]"
-                      />
-                      <span>{c.name.toUpperCase()}</span>
-                    </span>
-                  ))}
+                  {/* Subtle bottom vignette */}
+                  <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                 </div>
-              )}
 
-              {/* Title with dynamic Real-time Font Size and Spacing */}
-              <h1
-                style={{
-                  marginTop: `${previewGapCatTitle}px`,
-                  fontSize: `${previewTitleSize}px`,
-                  lineHeight: `${previewTitleLineH}px`,
-                  // El lienzo exporta sin tracking (el global de la app hereda
-                  // −0.015em): aquí se anula para render igual que el archivo.
-                  letterSpacing: 0,
-                }}
-                className="font-bold text-white font-['Lexend'] drop-shadow-sm transition-[font-size,margin]"
-              >
-                {previewTitleLines.map((line, i) => (
-                  <span key={i} className="block whitespace-nowrap">
-                    {line || "\u00A0"}
-                  </span>
-                ))}
-              </h1>
-
-              {/* Description with dynamic Real-time Font Size and Spacing */}
-              {previewDescLines.length > 0 && (
-                <p
-                  style={{
-                    marginTop: `${previewGapTitleDesc}px`,
-                    fontSize: `${previewDescSize}px`,
-                    lineHeight: `${previewDescLineH}px`,
-                    letterSpacing: 0,
-                  }}
-                  className="text-neutral-300 font-normal font-['Lexend'] transition-[font-size,margin]"
-                >
-                  {previewDescLines.map((line, i) => (
-                    <span key={i} className="block whitespace-nowrap">
-                      {line || "\u00A0"}
+                {/* Bottom Watermark Logo: "■ BlackNews" & Right-Aligned Caption */}
+                <div className="p-6 sm:p-7 z-20 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-4 h-4 bg-white rounded-none"></div>
+                    <span className="text-sm sm:text-base font-bold text-white tracking-tight font-['Lexend']">
+                      BlackNews
                     </span>
-                  ))}
-                </p>
-              )}
-            </div>
+                  </div>
 
-            {/* Media Container (inicio dinámico en 9:16, 40 % fijo en 4:5) */}
-            <div
-              className="absolute inset-0 overflow-hidden z-0"
-              style={{ top: `${previewMediaTopPct}%` }}
-            >
-              {previewMediaEl}
-
-              {/* Soft Gradient Fade from black on top of media */}
-              {blendFade && (
-                <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black via-black/60 to-transparent pointer-events-none" />
-              )}
-
-              {/* Subtle bottom vignette */}
-              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
-            </div>
-
-            {/* Bottom Watermark Logo: "■ BlackNews" & Right-Aligned Caption */}
-            <div className="p-6 sm:p-7 z-20 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent">
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="w-4 h-4 bg-white rounded-none"></div>
-                <span className="text-sm sm:text-base font-bold text-white tracking-tight font-['Lexend']">
-                  BlackNews
-                </span>
-              </div>
-
-              {/* Right-aligned compact photo caption / character text (Only if present, at same height) */}
-              <div className="flex items-center gap-2.5 justify-end flex-1 min-w-0 pl-3">
-                {photoCaption && photoCaption.trim() ? (
-                  <span
-                    className="text-[10px] sm:text-[11.5px] font-normal text-neutral-300 font-['Lexend'] tracking-wide truncate block text-right drop-shadow-md select-none max-w-[280px] sm:max-w-[400px]"
-                    title={photoCaption.trim()}
-                  >
-                    {photoCaption.trim()}
-                  </span>
-                ) : null}
-              </div>
-            </div>
+                  {/* Right-aligned compact photo caption / character text (Only if present, at same height) */}
+                  <div className="flex items-center gap-2.5 justify-end flex-1 min-w-0 pl-3">
+                    {photoCaption && photoCaption.trim() ? (
+                      <span
+                        className="text-[10px] sm:text-[11.5px] font-normal text-neutral-300 font-['Lexend'] tracking-wide truncate block text-right drop-shadow-md select-none max-w-[280px] sm:max-w-[400px]"
+                        title={photoCaption.trim()}
+                      >
+                        {photoCaption.trim()}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </>
             )}
 
@@ -7789,7 +8226,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] text-neutral-400 font-mono">
-                      {exportedPortada ? "1920 × 1080" : `${POST_W} × ${POST_H}`}{" "}
+                      {exportedPortada
+                        ? "1920 × 1080"
+                        : `${POST_W} × ${POST_H}`}{" "}
                       px
                     </span>
                     {exportedVideoSize && (
@@ -7837,9 +8276,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               ) : (
                 <img
                   src={exportedImageUrl!}
-                  alt={
-                    exportedPortada ? "Portada Exportada" : "Post Exportado"
-                  }
+                  alt={exportedPortada ? "Portada Exportada" : "Post Exportado"}
                   className="w-full h-full object-contain"
                 />
               )}
