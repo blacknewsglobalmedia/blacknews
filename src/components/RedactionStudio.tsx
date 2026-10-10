@@ -51,7 +51,8 @@ import {
   Megaphone,
   DollarSign,
   MapPin,
-  Scale
+  Scale,
+  CalendarDays
 } from 'lucide-react';
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
@@ -68,6 +69,7 @@ import { FrontPageManager } from './FrontPageManager';
 import { ImageOptimizationStudio } from './ImageOptimizationStudio';
 import { CategoryManager } from './CategoryManager';
 import { SocialPostGenerator, CountryFlag } from './SocialPostGenerator';
+import { EditorialCalendar } from './EditorialCalendar';
 import {
   addCustomCountry,
   countryKey,
@@ -230,7 +232,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const onUpdateCategories = propOnUpdateCategories || (() => {});
 
   // Default tab based on role
-  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved' | 'profile'>(isReader ? 'history' : 'overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'layout' | 'builder' | 'images' | 'categories' | 'post-generator' | 'calendar' | 'ads' | 'users' | 'my-articles' | 'register' | 'policies' | 'history' | 'saved' | 'profile'>(isReader ? 'history' : 'overview');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
@@ -1160,6 +1162,33 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             </div>
             )}
 
+            {/* Category: Agenda (todos los acreditados de prensa) */}
+            {permissions.canAccessInternalMedia && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
+                  Agenda
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('calendar');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                    activeTab === 'calendar'
+                      ? 'bg-white text-black font-bold'
+                      : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" />
+                    <span>Calendario Editorial</span>
+                  </div>
+                </button>
+              </div>
+            )}
+
             {/* Category: Portada & Sistema (Admins & Moderators) */}
             {(permissions.canManageLayout || permissions.canManageCategories || permissions.canManageUsers || permissions.canManagePolicies) && (
               <div className="space-y-1">
@@ -1304,6 +1333,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'my-articles' && 'CATÁLOGO DE DESPACHOS'}
               {activeTab === 'post-generator' && 'GENERADOR DE POSTS 4:5 / 9:16 / 16:9'}
               {activeTab === 'images' && 'OPTIMIZADOR .AVIF'}
+              {activeTab === 'calendar' && 'CALENDARIO EDITORIAL'}
               {activeTab === 'layout' && 'GESTIÓN DE PORTADA'}
               {activeTab === 'categories' && 'GESTIÓN DE CATEGORÍAS'}
               {activeTab === 'users' && 'EQUIPO & ROLES'}
@@ -3053,6 +3083,16 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
           <SocialPostGenerator
             reports={publishedReports}
             categories={categories}
+          />
+        </div>
+      )}
+
+      {/* TAB CONTENT: CALENDARIO EDITORIAL (acreditados de prensa) */}
+      {activeTab === 'calendar' && permissions.canAccessInternalMedia && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12">
+          <EditorialCalendar
+            currentUser={currentUser}
+            canManage={permissions.canManageBreakingTicker}
           />
         </div>
       )}
