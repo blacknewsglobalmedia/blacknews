@@ -26,6 +26,7 @@ import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
 import { InstallPromo } from "./components/InstallPromo";
+import { VersionNotice } from "./components/VersionNotice";
 import { TrustSection } from "./components/TrustSection";
 import { SubscriptionModal } from "./components/SubscriptionModal";
 import { REPORTS, CATEGORIES, FLASH_NEWS, MOCK_REPORT_IDS, MOCK_FLASH_IDS, OLD_CATEGORY_ALIASES } from "./data/newsData";
@@ -1383,6 +1384,9 @@ export default function App() {
 
       {/* Aviso de políticas a todos los visitantes (si hay versión nueva) */}
       <PoliciesNoticeBanner onOpenPolicies={() => handleOpenPolicies()} />
+
+      {/* Hay un despliegue más nuevo que esta sesión: aviso discreto para refrescar */}
+      <VersionNotice />
 
       {/* Top Navigation */}
       <TopBar
