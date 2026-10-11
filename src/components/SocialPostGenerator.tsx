@@ -292,17 +292,7 @@ const drawCoverFrame = (
   ctx.save();
   ctx.translate(W / 2, H / 2);
   ctx.rotate((rot * Math.PI) / 180);
-  ctx.drawImage(
-    src,
-    csx,
-    csy,
-    csw,
-    csh,
-    -dispW / 2,
-    -dispH / 2,
-    dispW,
-    dispH,
-  );
+  ctx.drawImage(src, csx, csy, csw, csh, -dispW / 2, -dispH / 2, dispW, dispH);
   ctx.restore();
 };
 
@@ -653,12 +643,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [audioPeaks, setAudioPeaks] = useState<number[]>([]);
   // true mientras se decodifica el archivo para dibujar la onda.
   const [audioAnalyzing, setAudioAnalyzing] = useState(false);
-  // Cabecera del podcast: serie y episodio, ambos OPCIONALES y vacíos por
-  // defecto (sin serie no se pinta nada en la cabecera, sin EP no hay píldora).
-  const [podcastSeries, setPodcastSeries] = useState("");
+  // Cabecera del podcast: serie y episodio, ambos opcionales.
+  // Por defecto la serie arranca con "Noticias en 1 minuto".
+  const [podcastSeries, setPodcastSeries] = useState("Noticias en 1 minuto");
   const [podcastEpisode, setPodcastEpisode] = useState("");
-  // Titular automático con la fecha: sin serie sale "Noticias del 11 oct 2026"
-  // y con serie "Serie · 11 oct 2026". Apagado = manda el titular escrito.
+  // Titular automático con la fecha: serie en grande y fecha en línea separada más pequeña.
   const [podcastAutoTitle, setPodcastAutoTitle] = useState(true);
   // Cama musical de BlackNews: sonido de fondo MUY por debajo de la voz.
   // Se mezcla igual en la vista previa y en el archivo exportado.
@@ -865,7 +854,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   /** Tirador del panel de contexto: arrastrando en vertical se agranda o se
    *  achica, y al soltar se guarda la medida para la próxima vez. */
-  const handleComposerResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleComposerResizeStart = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     const startY = event.clientY;
     const startH = aiComposerH;
@@ -2944,9 +2935,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Render high-res canvas (1080×1350 en 4:5, 1080×1920 en 9:16, 1920×1080 en 16:9)
   // ── Post podcast: variante AMOLED minimalista ──────────────────────────
   // Composición propia para las notas en audio: fondo negro absoluto (o el
-  // vídeo/imagen de fondo oscurecido), cabecera de serie, titular corto, onda
-  // con reloj y el pie de siempre. Todo lo que se ve depende de `outTime`, así
-  // que la vista previa y el archivo exportado coinciden fotograma a fotograma.
+  // vídeo/imagen de fondo oscurecido), sección y países arriba (mismo formato
+  // que la noticia), titular en dos líneas (serie grande, fecha pequeña), onda
+  // con reloj y la marca con el episodio abajo. Todo lo que se ve depende de
+  // `outTime`, así que la vista previa y el archivo exportado coinciden
+  // fotograma a fotograma.
   // ── Titular del podcast ──
   // Con el automático no hay que escribir nada cada día: la fecha se calcula en
   // cada pintado, así que un export hecho mañana sale con su fecha.
@@ -2969,9 +2962,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
   })();
   const podcastTitulo = podcastAutoTitle
-    ? podcastSeries.trim()
-      ? `${podcastSeries.trim()} · ${podcastFecha}`
-      : `Noticias del ${podcastFecha}`
+    ? `${podcastSeries.trim() || "Noticias en 1 minuto"}\n${podcastFecha}`
     : title;
 
   const drawPodcastFrame = (
@@ -3005,10 +2996,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // Unidad tipográfica: 4:5 y 9:16 van a 1080 de ancho, 16:9 crece algo
     // (no en proporción: su alto es 1080 y el texto no puede dispararse).
     const u = isWide ? 1.12 : isTall ? 1.04 : 1;
-    const padX = isWide ? 104 : Math.round(84 * u);
-    const padTop = isWide ? 60 : isTall ? 150 : Math.round(84 * u);
+    const padX = isWide ? 104 : 84;
+    const padTop = isWide ? 60 : isTall ? PAD_TOP_9X16 : 76;
+    const padRight = isWide ? 104 : isTall ? PAD_RIGHT_9X16 : 84;
     const padBottom = isWide ? 56 : isTall ? 150 : Math.round(80 * u);
-    const contentW = W - padX * 2;
+    const contentW = W - padX - padRight;
 
     // Reloj y progreso: segundos dentro del clip (0 = arranque del recorte).
     const dur = trimEnd > trimStart ? trimEnd - trimStart : videoDuration;
@@ -3040,15 +3032,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           H;
       ctx.save();
       ctx.filter = getCanvasFilterString();
-      drawCoverFrame(
-        ctx,
-        bgSrc,
-        bgW,
-        bgH,
-        frameOverride?.rotation ?? 0,
-        W,
-        H,
-      );
+      drawCoverFrame(ctx, bgSrc, bgW, bgH, frameOverride?.rotation ?? 0, W, H);
       ctx.restore();
       // Velo: el texto manda. Con vídeo en movimiento basta con 58 % para que
       // la onda se lea sin perder el ambiente de la toma.
@@ -3066,87 +3050,205 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
-    // ── Cabecera: marca a la izquierda, serie a la derecha ──
-    let y = padTop;
-    const markSize = Math.round(13 * u);
-    ctx.fillStyle = "#34d399";
-    ctx.fillRect(padX, y + Math.round(6 * u), markSize, markSize);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `600 ${Math.round(23 * u)}px 'Lexend', sans-serif`;
-    ctx.letterSpacing = `${Math.round(0.8 * u)}px`;
-    const bnX = padX + markSize + Math.round(11 * u);
-    ctx.fillText("BlackNews", bnX, y);
-    const bnW = ctx.measureText("BlackNews").width;
-
-    // EP pegado a la marca: la píldora sale justo detrás del wordmark.
+    // ── Cabecera: sección editorial y países (mismo formato que en los otros modos) ──
+    let curY = padTop;
     const epText = podcastEpisode.trim() ? `EP. ${podcastEpisode.trim()}` : "";
-    let epRight = bnX + bnW;
-    if (epText) {
-      ctx.font = `600 ${Math.round(13 * u)}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = `${Math.round(2 * u)}px`;
-      const epW = ctx.measureText(epText).width + Math.round(26 * u);
-      const epH = Math.round(30 * u);
-      const epX = epRight + Math.round(14 * u);
-      const epY = y + Math.round(5 * u);
-      ctx.strokeStyle = "rgba(255,255,255,0.22)";
-      ctx.lineWidth = Math.max(1, Math.round(1.5 * u));
+    const catUpper = (category || "GEOPOLÍTICA").trim().toUpperCase();
+    const maxTextWidth = contentW - 65; // Deja espacio para al menos 45px de línea
+
+    let curHeaderSize = autoFitHeader
+      ? Math.round(20 * u)
+      : Math.round(headerSize * u);
+    let curLetterSpacing = 2.0;
+
+    // Medida de la línea completa: se encoge hasta que cabe en una sola línea
+    const computeTotalWidth = (fSize: number, lSpacing: number) => {
+      ctx.font = `600 ${fSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${lSpacing}px`;
+      let totalW = ctx.measureText(catUpper).width;
+      if (countryPlacement === "line" && flagsData.length > 0) {
+        totalW += ctx.measureText("  ·  ").width;
+        const flagW = Math.round(fSize * 1.3);
+        for (let i = 0; i < flagsData.length; i++) {
+          if (countryFormat !== "names" && flagsData[i].img) {
+            totalW += flagW + 6;
+          }
+          totalW += ctx.measureText(flagsData[i].text).width;
+          if (i < flagsData.length - 1) {
+            totalW += ctx.measureText(" · ").width;
+          }
+        }
+      }
+      return totalW;
+    };
+
+    while (
+      computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth &&
+      curHeaderSize > 10.5
+    ) {
+      curHeaderSize -= 0.5;
+      curLetterSpacing = Math.max(
+        0.5,
+        Number((curHeaderSize * 0.1).toFixed(1)),
+      );
+    }
+
+    ctx.save();
+    ctx.textBaseline = "top";
+    ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${curLetterSpacing}px`;
+    ctx.fillStyle = "#FFFFFF";
+
+    let curX = padX;
+    ctx.fillText(catUpper, curX, curY);
+    curX += ctx.measureText(catUpper).width;
+
+    if (countryPlacement === "line" && flagsData.length > 0) {
+      ctx.fillStyle = "#64748B";
+      const sepStr = "  ·  ";
+      ctx.fillText(sepStr, curX, curY);
+      curX += ctx.measureText(sepStr).width;
+
+      const flagW = Math.round(curHeaderSize * 1.3);
+      const flagH = Math.round(flagW * 0.68);
+      const flagOffsetY = Math.round((curHeaderSize - flagH) / 2);
+
+      for (let i = 0; i < flagsData.length; i++) {
+        const item = flagsData[i];
+        if (countryFormat !== "names" && item.img) {
+          ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
+          curX += flagW + 6;
+        }
+        ctx.fillStyle = "#E2E8F0";
+        ctx.fillText(item.text, curX, curY);
+        curX += ctx.measureText(item.text).width;
+
+        if (i < flagsData.length - 1) {
+          ctx.fillStyle = "#64748B";
+          const midSep = " · ";
+          ctx.fillText(midSep, curX, curY);
+          curX += ctx.measureText(midSep).width;
+        }
+      }
+    }
+
+    // Filete blanco horizontal: idéntico a los otros modos
+    const lineStartX = curX + 18;
+    const lineEndX = Math.min(lineStartX + 60, W - padRight);
+
+    if (lineEndX > lineStartX + 8) {
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      if (typeof ctx.roundRect === "function") {
-        ctx.roundRect(epX, epY, epW, epH, epH / 2);
-      } else {
-        ctx.rect(epX, epY, epW, epH);
-      }
+      const lineCenterY = Math.round(curY + curHeaderSize / 2);
+      ctx.moveTo(lineStartX, lineCenterY);
+      ctx.lineTo(lineEndX, lineCenterY);
       ctx.stroke();
-      ctx.fillStyle = "#d4d4d4";
-      ctx.fillText(epText, epX + Math.round(13 * u), epY + Math.round(7 * u));
-      epRight = epX + epW;
+    }
+    ctx.restore();
+
+    curY += curHeaderSize + Math.round(gapCategoryToTitle * u);
+
+    // Fila de insignias de países (si countryPlacement === "badge")
+    if (countryPlacement === "badge" && flagsData.length > 0) {
+      ctx.save();
+      const badgeFontSize = Math.round(18 * u);
+      ctx.font = `600 ${badgeFontSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "1.5px";
+      ctx.textBaseline = "top";
+
+      const bFlagW = Math.round(badgeFontSize * 1.3);
+      const bFlagH = Math.round(bFlagW * 0.68);
+      const bFlagOffsetY = Math.round((badgeFontSize - bFlagH) / 2);
+      let bX = padX;
+
+      for (let i = 0; i < flagsData.length; i++) {
+        const item = flagsData[i];
+        if (item.img) {
+          ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
+          bX += bFlagW + 7;
+        }
+        ctx.fillStyle = "#CBD5E1";
+        ctx.fillText(item.text, bX, curY);
+        bX += ctx.measureText(item.text).width;
+        if (i < flagsData.length - 1) {
+          ctx.fillStyle = "#64748B";
+          const sep = "   ·   ";
+          ctx.fillText(sep, bX, curY);
+          bX += ctx.measureText(sep).width;
+        }
+      }
+      ctx.restore();
+      curY += badgeFontSize + Math.round(gapCategoryToTitle * u);
     }
 
-    // Serie a la derecha: opcional y sólo si cabe sin pisar la marca/EP.
-    const serieText = podcastSeries.trim();
-    if (serieText) {
-      ctx.font = `500 ${Math.round(14 * u)}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = `${Math.round(3.4 * u)}px`;
-      ctx.fillStyle = "#737373";
-      const serieW = ctx.measureText(serieText.toUpperCase()).width;
-      if (serieW <= W - padX * 2 - (epRight - padX) - Math.round(24 * u)) {
-        ctx.textAlign = "right";
-        ctx.fillText(serieText.toUpperCase(), W - padX, y + Math.round(6 * u));
-        ctx.textAlign = "left";
+    // ── Titular del podcast: serie y fecha en dos líneas separadas ──
+    // Línea 1: Serie ("Noticias en 1 minuto" o cualquier serie introducida) en tamaño grande
+    // Línea 2: Fecha en tamaño más pequeño en línea separada
+    const titleFs = Math.round((isWide ? 58 : 62) * u);
+    const titleLH = Math.round(titleFs * 1.16);
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#ffffff";
+
+    const serieText = podcastSeries.trim() || "Noticias en 1 minuto";
+
+    if (podcastAutoTitle) {
+      ctx.font = `700 ${titleFs}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "0px";
+      const serieLines = capLines(wrapText(ctx, serieText, contentW), 2);
+      serieLines.forEach((line, i) => {
+        ctx.fillText(line, padX, curY + i * titleLH);
+      });
+      curY += serieLines.length * titleLH;
+
+      // Fecha en una línea separada, con tamaño diferenciado y menor
+      const dateFs = Math.round(28 * u);
+      ctx.font = `600 ${dateFs}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${Math.round(2 * u)}px`;
+      ctx.fillStyle = "#94a3b8";
+      curY += Math.round(14 * u);
+      ctx.fillText(podcastFecha.toUpperCase(), padX, curY);
+      ctx.letterSpacing = "0px";
+      curY += dateFs;
+    } else {
+      ctx.font = `700 ${titleFs}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "0px";
+      const mainTitle = title.trim() || serieText;
+      const titleLines = capLines(wrapText(ctx, mainTitle, contentW), 3);
+      titleLines.forEach((line, i) => {
+        ctx.fillText(line, padX, curY + i * titleLH);
+      });
+      curY += titleLines.length * titleLH;
+
+      if (podcastSeries.trim()) {
+        const dateFs = Math.round(26 * u);
+        ctx.font = `500 ${dateFs}px 'Lexend', sans-serif`;
+        ctx.letterSpacing = `${Math.round(1.5 * u)}px`;
+        ctx.fillStyle = "#94a3b8";
+        curY += Math.round(12 * u);
+        ctx.fillText(
+          `${podcastSeries.trim().toUpperCase()} · ${podcastFecha.toUpperCase()}`,
+          padX,
+          curY,
+        );
+        ctx.letterSpacing = "0px";
+        curY += dateFs;
       }
     }
-    ctx.letterSpacing = "0px";
-
-    y += Math.round(46 * u);
-
-    // ── Titular (corto: es el gancho de la nota, no el cuerpo) ──
-    const titleFs = Math.round((isWide ? 62 : 64) * u);
-    ctx.font = `700 ${titleFs}px 'Lexend', sans-serif`;
-    const titleLines = capLines(
-      wrapText(ctx, podcastTitulo || "Titular de la nota…", contentW),
-      4,
-    );
-    const titleLH = Math.round(titleFs * 1.16);
-    y += Math.round(44 * u);
-    ctx.fillStyle = "#ffffff";
-    titleLines.forEach((line, i) => {
-      ctx.fillText(line, padX, y + i * titleLH);
-    });
-    y += titleLines.length * titleLH;
 
     // ── Bajada: el guion resumido, breve ──
     if (description.trim()) {
-      const descFs = Math.round(25 * u);
+      const descFs = Math.round(24 * u);
       ctx.font = `400 ${descFs}px 'Lexend', sans-serif`;
       const descLines = capLines(
         wrapText(ctx, description.trim(), contentW),
         3,
       );
       const descLH = Math.round(descFs * 1.45);
-      y += Math.round(24 * u);
-      ctx.fillStyle = "#a1a1aa";
+      curY += Math.round(22 * u);
+      ctx.fillStyle = "#cbd5e1";
       descLines.forEach((line, i) => {
-        ctx.fillText(line, padX, y + i * descLH);
+        ctx.fillText(line, padX, curY + i * descLH);
       });
     }
 
@@ -3201,7 +3303,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const peaks = audioPeaks.length > 0 ? audioPeaks : null;
     const bars = peaks ? peaks.length : PODCAST_BARS;
     const slotW = waveW / bars;
-    const barW = Math.max(2, Math.min(Math.round(slotW * 0.56), Math.round(9 * u)));
+    const barW = Math.max(
+      2,
+      Math.min(Math.round(slotW * 0.56), Math.round(9 * u)),
+    );
     const playedTo = progress * bars;
     for (let i = 0; i < bars; i++) {
       const peak = peaks ? Math.max(0.06, peaks[i]) : 0.28;
@@ -3238,38 +3343,25 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.textAlign = "left";
     ctx.letterSpacing = "0px";
 
-    // ── Pie: categoría y países a la izquierda, marca a la derecha ──
-    ctx.font = `500 ${Math.round(17 * u)}px 'Lexend', sans-serif`;
-    ctx.letterSpacing = `${Math.round(2 * u)}px`;
-    ctx.fillStyle = "#a1a1aa";
-    let fx = padX;
-    const catText = (category || "GEOPOLÍTICA").trim().toUpperCase();
-    ctx.fillText(catText, fx, footY + Math.round(4 * u));
-    fx += ctx.measureText(catText).width;
-    const flagSize = Math.round(20 * u);
-    for (const f of flagsData) {
-      if (countryFormat === "names") {
-        ctx.fillStyle = "#737373";
-        ctx.fillText(`  ·  ${f.text}`, fx, footY + Math.round(4 * u));
-        fx += ctx.measureText(`  ·  ${f.text}`).width;
-        continue;
-      }
-      if (!f.img) continue;
-      ctx.fillStyle = "#737373";
-      ctx.fillText("  ·  ", fx, footY + Math.round(4 * u));
-      fx += ctx.measureText("  ·  ").width;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(fx, footY + Math.round(3 * u), flagSize * 1.45, flagSize);
-      ctx.clip();
-      ctx.drawImage(f.img, fx, footY + Math.round(3 * u), flagSize * 1.45, flagSize);
-      ctx.restore();
-      fx += flagSize * 1.45 + Math.round(6 * u);
+    // ── Pie: la marca como en el modo noticia (cuadro blanco + wordmark) y,
+    //    pegada a ella, la línea del episodio cuando la hay ──
+    const brandSize = Math.round(32 * u);
+    const brandY = H - padBottom - Math.round(20 * u);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(padX, brandY, brandSize, brandSize);
+    ctx.font = `700 ${Math.round(34 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(0.4 * u)}px`;
+    const bnX = padX + brandSize + Math.round(12 * u);
+    const bnY = brandY - Math.round(1 * u);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("BlackNews", bnX, bnY);
+    if (epText) {
+      const bnW = ctx.measureText("BlackNews").width;
+      ctx.font = `500 ${Math.round(19 * u)}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${Math.round(2 * u)}px`;
+      ctx.fillStyle = "#a1a1aa";
+      ctx.fillText(`  ·  ${epText}`, bnX + bnW, bnY + Math.round(11 * u));
     }
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#52525b";
-    ctx.fillText("BlackNews", W - padX, footY + Math.round(4 * u));
-    ctx.textAlign = "left";
     ctx.letterSpacing = "0px";
 
     // ── Barra de progreso a sangre ──
@@ -4427,7 +4519,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const mutedForExport = audioOnly ? false : isMuted;
     // Solo MP4/MOV (primer átomo "ftyp"). WebM y demás → ruta clásica.
     try {
-      if (!audioOnly && new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== "ftyp")
+      if (
+        !audioOnly &&
+        new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== "ftyp"
+      )
         return "unsupported";
     } catch {
       return "unsupported";
@@ -4597,8 +4692,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               // Cama no disponible: se exporta sin ella (nunca aborta).
             }
           }
-          if (hasVoice || hasMusic)
-            renderedAudio = await oac.startRendering();
+          if (hasVoice || hasMusic) renderedAudio = await oac.startRendering();
         } catch {
           renderedAudio = null; // sin audio exportable → el MP4 sale mudo
         }
@@ -5197,7 +5291,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       | HTMLVideoElement
       | HTMLAudioElement
       | undefined =
-      mediaType === "audio" ? podcastBgRef.current ?? undefined : video;
+      mediaType === "audio" ? (podcastBgRef.current ?? undefined) : video;
 
     isCancelledRef.current = false;
 
@@ -6437,8 +6531,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         selectedCountries.map(async (c) => ({
           code: c.code,
           img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
-          text:
-            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+          text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
       if (!dead) setPodcastFlags(data);
@@ -6501,7 +6594,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     category,
     podcastSeries,
     podcastEpisode,
+    podcastAutoTitle,
     podcastBgSrc,
+    countryPlacement,
+    countryFormat,
+    selectedCountries,
+    gapCategoryToTitle,
     trimStart,
     trimEnd,
     videoDuration,
@@ -6576,8 +6674,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           src={podcastBgSrc}
           alt=""
           crossOrigin={
-            podcastBgSrc.startsWith("blob:") ||
-            podcastBgSrc.startsWith("data:")
+            podcastBgSrc.startsWith("blob:") || podcastBgSrc.startsWith("data:")
               ? undefined
               : "anonymous"
           }
@@ -6758,7 +6855,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={handleToggleAiJson}
-                  title={showAdvancedJson ? "Ocultar el JSON" : "Ver el JSON del post"}
+                  title={
+                    showAdvancedJson
+                      ? "Ocultar el JSON"
+                      : "Ver el JSON del post"
+                  }
                   className={`px-2.5 h-7 rounded-full text-[11px] font-semibold transition-colors cursor-pointer border ${
                     showAdvancedJson
                       ? "bg-white/10 border-white/20 text-white"
@@ -6809,7 +6910,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">
-              {aiBusy ? "Redactando…" : aiComposerOpen ? "Redactar" : "Redactar con IA"}
+              {aiBusy
+                ? "Redactando…"
+                : aiComposerOpen
+                  ? "Redactar"
+                  : "Redactar con IA"}
             </span>
           </button>
 
@@ -6879,285 +6984,286 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             showAiSettings ||
             showAdvancedJson ||
             (aiNotice && !aiComposerOpen)) && (
-          <div
-            ref={aiCardRef}
-            className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden"
-          >
-
-            {/* Aviso: éxito, salvaguarda o error. Con el compositor abierto
+            <div
+              ref={aiCardRef}
+              className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden"
+            >
+              {/* Aviso: éxito, salvaguarda o error. Con el compositor abierto
                 se enseña allí, que es donde se está trabajando. */}
-            {aiNotice && !aiComposerOpen && (
-              <div
-                className={`p-3.5 rounded-xl text-xs font-medium leading-relaxed border ${
-                  aiNotice.kind === "error"
-                    ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : aiNotice.kind === "warn"
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
-                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                }`}
-              >
-                {aiNotice.text}
-              </div>
-            )}
-
-            {/* Panel de Configuración de Claves Gratuitas (Groq / Gemini) */}
-            {showAiSettings && (
-              <div className="bg-neutral-900/90 border border-white/10 rounded-xl p-4 space-y-4 animate-in fade-in">
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-white">
-                      Proveedores de IA 100% Gratuitos (Sin Tarjeta)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAiSettings(false)}
-                    className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+              {aiNotice && !aiComposerOpen && (
+                <div
+                  className={`p-3.5 rounded-xl text-xs font-medium leading-relaxed border ${
+                    aiNotice.kind === "error"
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : aiNotice.kind === "warn"
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                        : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  }`}
+                >
+                  {aiNotice.text}
                 </div>
+              )}
 
-                <p className="text-[11px] text-neutral-300 leading-relaxed font-light">
-                  BlackNews funciona con modelos de lenguaje gratuitos. Las
-                  claves se guardan solo en tu navegador y van directo a los
-                  proveedores:
-                </p>
-
-                {/* Opción 1: Groq Cloud (Recomendada · 14.400 req/día) */}
-                <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-orange-400"></span>
-                      Groq Cloud · Llama 3.3 70B (Recomendado)
-                    </span>
-                    <a
-                      href="https://console.groq.com/keys"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-orange-400 hover:text-orange-300 underline font-medium"
-                    >
-                      Obtener clave gratis (14.400/día) →
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="password"
-                      value={groqKey}
-                      onChange={(e) => {
-                        setGroqKey(e.target.value);
-                        setGroqKeySaved(false);
-                      }}
-                      placeholder="gsk_..."
-                      className="flex-1 bg-neutral-900 border border-white/10 focus:border-orange-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
-                    />
+              {/* Panel de Configuración de Claves Gratuitas (Groq / Gemini) */}
+              {showAiSettings && (
+                <div className="bg-neutral-900/90 border border-white/10 rounded-xl p-4 space-y-4 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                        Proveedores de IA 100% Gratuitos (Sin Tarjeta)
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        const k = groqKey.trim();
-                        try {
-                          if (k) localStorage.setItem("blacknews_groq_key", k);
-                          else localStorage.removeItem("blacknews_groq_key");
-                        } catch {}
-                        setGroqKeySaved(true);
-                        showToast(
-                          k
-                            ? "✓ Clave de Groq guardada"
-                            : "Clave de Groq borrada",
-                        );
-                      }}
-                      className="px-3.5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                      onClick={() => setShowAiSettings(false)}
+                      className="text-neutral-400 hover:text-white transition-colors cursor-pointer"
                     >
-                      {groqKeySaved ? "✓ Guardada" : "Guardar"}
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
-                </div>
 
-                {/* Opción 2: Google Gemini (1.500 req/día) */}
-                <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                      Google Gemini · Flash Lite
-                    </span>
-                    <a
-                      href="https://aistudio.google.com/app/apikey"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-blue-400 hover:text-blue-300 underline font-medium"
-                    >
-                      Obtener clave gratis (1.500/día) →
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="password"
-                      value={geminiKey}
-                      onChange={(e) => {
-                        setGeminiKey(e.target.value);
-                        setGeminiKeySaved(false);
-                      }}
-                      placeholder="AIza..."
-                      className="flex-1 bg-neutral-900 border border-white/10 focus:border-blue-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const k = geminiKey.trim();
-                        try {
-                          if (k)
-                            localStorage.setItem("blacknews_gemini_key", k);
-                          else localStorage.removeItem("blacknews_gemini_key");
-                        } catch {}
-                        setGeminiKeySaved(true);
-                        showToast(
-                          k
-                            ? "✓ Clave de Gemini guardada"
-                            : "Clave de Gemini borrada",
-                        );
-                      }}
-                      className="px-3.5 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
-                    >
-                      {geminiKeySaved ? "✓ Guardada" : "Guardar"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tweet Result Card (si ya se ha redactado) */}
-            {aiTweet && (
-              <div className="bg-neutral-900/90 border border-white/15 rounded-xl p-4 space-y-2.5 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-white">
-                      Tweet Redactado (X)
-                    </span>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                        aiTweet.length > AI_TWEET_LIMIT
-                          ? "bg-red-500/20 text-red-400 border-red-500/40"
-                          : "bg-neutral-800 text-neutral-300 border-white/10"
-                      }`}
-                    >
-                      {aiTweet.length}/{AI_TWEET_LIMIT} caracteres
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyAiTweet}
-                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copiar Tweet</span>
-                  </button>
-                </div>
-
-                <textarea
-                  rows={3}
-                  value={aiTweet}
-                  onChange={(e) => setAiTweet(e.target.value)}
-                  className="w-full bg-neutral-950 border border-white/10 rounded-lg p-3 text-xs text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-amber-400 resize-y"
-                />
-              </div>
-            )}
-
-            {/* Fuentes consultadas (si las hay) */}
-            {(aiSearch?.note || aiSources.length > 0) && (
-              <div className="space-y-2">
-                {aiSearch?.note && (
-                  <p className="text-[11px] leading-relaxed text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
-                    {aiSearch.note}
+                  <p className="text-[11px] text-neutral-300 leading-relaxed font-light">
+                    BlackNews funciona con modelos de lenguaje gratuitos. Las
+                    claves se guardan solo en tu navegador y van directo a los
+                    proveedores:
                   </p>
-                )}
-                {aiSources.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
-                      Fuentes web consultadas:
-                    </span>
-                    <ul className="space-y-1">
-                      {aiSources.map((source) => (
-                        <li
-                          key={source.url}
-                          className="text-[11px] text-neutral-400 flex items-start gap-1.5"
-                        >
-                          <Globe className="w-3 h-3 mt-0.5 shrink-0 text-neutral-600" />
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-white transition-colors underline decoration-white/20 truncate"
-                          >
-                            {source.title || source.url}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Panel de JSON Técnico Colapsable */}
-            {showAdvancedJson && (
-              <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-3 animate-in fade-in">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>JSON Técnico del Post</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleLoadCurrentJson}
-                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
-                    >
-                      Cargar actual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePasteAiJson}
-                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
-                    >
-                      Pegar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!aiJsonText) return;
-                        try {
-                          await navigator.clipboard.writeText(aiJsonText);
-                          showToast("✓ JSON copiado al portapapeles");
-                        } catch {}
-                      }}
-                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
-                    >
-                      Copiar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleApplyAiJson}
-                      className="px-3 py-1 bg-white hover:bg-neutral-200 text-black text-xs font-bold rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
-                    >
-                      Aplicar al Post
-                    </button>
+                  {/* Opción 1: Groq Cloud (Recomendada · 14.400 req/día) */}
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-orange-400"></span>
+                        Groq Cloud · Llama 3.3 70B (Recomendado)
+                      </span>
+                      <a
+                        href="https://console.groq.com/keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-orange-400 hover:text-orange-300 underline font-medium"
+                      >
+                        Obtener clave gratis (14.400/día) →
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        value={groqKey}
+                        onChange={(e) => {
+                          setGroqKey(e.target.value);
+                          setGroqKeySaved(false);
+                        }}
+                        placeholder="gsk_..."
+                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-orange-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const k = groqKey.trim();
+                          try {
+                            if (k)
+                              localStorage.setItem("blacknews_groq_key", k);
+                            else localStorage.removeItem("blacknews_groq_key");
+                          } catch {}
+                          setGroqKeySaved(true);
+                          showToast(
+                            k
+                              ? "✓ Clave de Groq guardada"
+                              : "Clave de Groq borrada",
+                          );
+                        }}
+                        className="px-3.5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        {groqKeySaved ? "✓ Guardada" : "Guardar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Opción 2: Google Gemini (1.500 req/día) */}
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                        Google Gemini · Flash Lite
+                      </span>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-blue-400 hover:text-blue-300 underline font-medium"
+                      >
+                        Obtener clave gratis (1.500/día) →
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        value={geminiKey}
+                        onChange={(e) => {
+                          setGeminiKey(e.target.value);
+                          setGeminiKeySaved(false);
+                        }}
+                        placeholder="AIza..."
+                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-blue-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const k = geminiKey.trim();
+                          try {
+                            if (k)
+                              localStorage.setItem("blacknews_gemini_key", k);
+                            else
+                              localStorage.removeItem("blacknews_gemini_key");
+                          } catch {}
+                          setGeminiKeySaved(true);
+                          showToast(
+                            k
+                              ? "✓ Clave de Gemini guardada"
+                              : "Clave de Gemini borrada",
+                          );
+                        }}
+                        className="px-3.5 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        {geminiKeySaved ? "✓ Guardada" : "Guardar"}
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <textarea
-                  rows={8}
-                  value={aiJsonText}
-                  onChange={(e) => setAiJsonText(e.target.value)}
-                  spellCheck={false}
-                  placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "..."\n  }\n}'
-                  className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-cyan-400 resize-y"
-                />
-              </div>
-            )}
-          </div>
+              {/* Tweet Result Card (si ya se ha redactado) */}
+              {aiTweet && (
+                <div className="bg-neutral-900/90 border border-white/15 rounded-xl p-4 space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                        Tweet Redactado (X)
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                          aiTweet.length > AI_TWEET_LIMIT
+                            ? "bg-red-500/20 text-red-400 border-red-500/40"
+                            : "bg-neutral-800 text-neutral-300 border-white/10"
+                        }`}
+                      >
+                        {aiTweet.length}/{AI_TWEET_LIMIT} caracteres
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyAiTweet}
+                      className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copiar Tweet</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={aiTweet}
+                    onChange={(e) => setAiTweet(e.target.value)}
+                    className="w-full bg-neutral-950 border border-white/10 rounded-lg p-3 text-xs text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-amber-400 resize-y"
+                  />
+                </div>
+              )}
+
+              {/* Fuentes consultadas (si las hay) */}
+              {(aiSearch?.note || aiSources.length > 0) && (
+                <div className="space-y-2">
+                  {aiSearch?.note && (
+                    <p className="text-[11px] leading-relaxed text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                      {aiSearch.note}
+                    </p>
+                  )}
+                  {aiSources.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+                        Fuentes web consultadas:
+                      </span>
+                      <ul className="space-y-1">
+                        {aiSources.map((source) => (
+                          <li
+                            key={source.url}
+                            className="text-[11px] text-neutral-400 flex items-start gap-1.5"
+                          >
+                            <Globe className="w-3 h-3 mt-0.5 shrink-0 text-neutral-600" />
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-white transition-colors underline decoration-white/20 truncate"
+                            >
+                              {source.title || source.url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel de JSON Técnico Colapsable */}
+              {showAdvancedJson && (
+                <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-3 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>JSON Técnico del Post</span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadCurrentJson}
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                      >
+                        Cargar actual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePasteAiJson}
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                      >
+                        Pegar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!aiJsonText) return;
+                          try {
+                            await navigator.clipboard.writeText(aiJsonText);
+                            showToast("✓ JSON copiado al portapapeles");
+                          } catch {}
+                        }}
+                        className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
+                      >
+                        Copiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyAiJson}
+                        className="px-3 py-1 bg-white hover:bg-neutral-200 text-black text-xs font-bold rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
+                      >
+                        Aplicar al Post
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    rows={8}
+                    value={aiJsonText}
+                    onChange={(e) => setAiJsonText(e.target.value)}
+                    spellCheck={false}
+                    placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "..."\n  }\n}'
+                    className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-cyan-400 resize-y"
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {/* Card 1: Text Content & Typography */}
@@ -7619,43 +7725,43 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </button>
                     </div>
 
-                  {/* Header Auto-Fit vs Manual Size */}
-                  <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="autoFitCheck"
-                        checked={autoFitHeader}
-                        onChange={(e) => setAutoFitHeader(e.target.checked)}
-                        className="w-3.5 h-3.5 accent-white rounded cursor-pointer"
-                      />
-                      <label
-                        htmlFor="autoFitCheck"
-                        className="text-neutral-300 font-medium cursor-pointer"
-                      >
-                        Ajuste automático inteligente a 1 sola línea (garantiza
-                        que quepan todos)
-                      </label>
-                    </div>
-
-                    {!autoFitHeader && (
+                    {/* Header Auto-Fit vs Manual Size */}
+                    <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
                       <div className="flex items-center gap-2">
-                        <span className="text-neutral-400 font-mono">
-                          {headerSize}px
-                        </span>
                         <input
-                          type="range"
-                          min={12}
-                          max={26}
-                          value={headerSize}
-                          onChange={(e) =>
-                            setHeaderSize(Number(e.target.value))
-                          }
-                          className="w-20 accent-white h-1 bg-neutral-800 rounded-lg cursor-pointer"
+                          type="checkbox"
+                          id="autoFitCheck"
+                          checked={autoFitHeader}
+                          onChange={(e) => setAutoFitHeader(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-white rounded cursor-pointer"
                         />
+                        <label
+                          htmlFor="autoFitCheck"
+                          className="text-neutral-300 font-medium cursor-pointer"
+                        >
+                          Ajuste automático inteligente a 1 sola línea
+                          (garantiza que quepan todos)
+                        </label>
                       </div>
-                    )}
-                  </div>
+
+                      {!autoFitHeader && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-neutral-400 font-mono">
+                            {headerSize}px
+                          </span>
+                          <input
+                            type="range"
+                            min={12}
+                            max={26}
+                            value={headerSize}
+                            onChange={(e) =>
+                              setHeaderSize(Number(e.target.value))
+                            }
+                            className="w-20 accent-white h-1 bg-neutral-800 rounded-lg cursor-pointer"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CollapseSection>
               )}
@@ -7933,7 +8039,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="space-y-4 pt-3 border-t border-white/5">
                 <p className="text-[11px] text-neutral-400 font-light">
                   Variante minimalista para las notas habladas: fondo negro
-                  absoluto, onda de audio con reloj y la serie arriba. El
+                  absoluto, sección y países arriba (como en la noticia), onda
+                  de audio con reloj y la marca con el episodio abajo. El
                   archivo se exporta siempre como VÍDEO, porque las redes no
                   aceptan audio suelto.
                 </p>
@@ -7947,7 +8054,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       type="text"
                       value={podcastSeries}
                       onChange={(e) => setPodcastSeries(e.target.value)}
-                      placeholder="Vacía = sin serie arriba"
+                      placeholder="P. ej. Noticias en 1 minuto"
                       className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
                     />
                   </div>
@@ -7985,10 +8092,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <p className="text-[11px] text-neutral-400 font-light">
                     {podcastAutoTitle ? (
                       <>
-                        Ahora se pinta{" "}
-                        <strong className="text-white">{podcastTitulo}</strong>.
-                        La fecha se calcula el día que exportas: nada que
-                        cambiar a mano.
+                        Ahora se pinta la serie{" "}
+                        <strong className="text-white">
+                          {podcastSeries.trim() || "Noticias en 1 minuto"}
+                        </strong>{" "}
+                        en grande y en una línea separada{" "}
+                        <strong className="text-white">{podcastFecha}</strong>{" "}
+                        en tamaño más pequeño. La fecha se calcula el día que
+                        exportas: nada que cambiar a mano.
                       </>
                     ) : (
                       <>
@@ -8093,8 +8204,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
                   ) : mediaType === "audio" ? (
                     <span className="text-amber-400/90">
-                      ⚠️ No se pudo decodificar este audio: la onda saldrá
-                      plana (el vídeo y el sonido salen igual).
+                      ⚠️ No se pudo decodificar este audio: la onda saldrá plana
+                      (el vídeo y el sonido salen igual).
                     </span>
                   ) : (
                     <span className="text-neutral-500">
@@ -8239,147 +8350,147 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         : "6 Mbps"
                   }`}
                 >
-                <div className="space-y-1.5 pt-0.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setVideoFormat("mp4")}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoFormat === "mp4"
-                          ? "bg-white text-black border-white shadow-md"
-                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
-                        <span>MP4 (.mp4)</span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-black text-[9px] font-extrabold tracking-normal">
-                          PARA X / TWITTER
-                        </span>
-                      </div>
-                      <div
-                        className={`text-[10px] mt-1 ${videoFormat === "mp4" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
-                      >
-                        Compatible con X, Instagram, Facebook y WhatsApp sin
-                        errores de formato
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setVideoFormat("webm")}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoFormat === "webm"
-                          ? "bg-white text-black border-white shadow-md"
-                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">
-                        WebM (.webm)
-                      </div>
-                      <div
-                        className={`text-[10px] mt-1 ${videoFormat === "webm" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
-                      >
-                        Formato web abierto para Chrome o navegadores de
-                        escritorio
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Optimización de peso para redes sociales */}
-                <div className="space-y-2 pt-0.5">
-                  <p className="font-mono text-[11px] text-neutral-500">
-                    {videoQuality === "social"
-                      ? "3 Mbps · ~4 MB por cada 10 s"
-                      : videoQuality === "compact"
-                        ? "1.5 Mbps · ~2 MB por cada 10 s"
-                        : "6 Mbps · ~7.5 MB por cada 10 s"}
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setVideoQuality("social")}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === "social"
-                          ? "bg-white text-black border-white shadow-md"
-                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">
-                        Redes Sociales
-                      </div>
-                      <div
-                        className={`text-[10px] ${videoQuality === "social" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
-                      >
-                        Equilibrado (X / Insta)
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setVideoQuality("compact")}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === "compact"
-                          ? "bg-white text-black border-white shadow-md"
-                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">
-                        Ultra Ligero
-                      </div>
-                      <div
-                        className={`text-[10px] ${videoQuality === "compact" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
-                      >
-                        WhatsApp / Web rápida
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setVideoQuality("hq")}
-                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                        videoQuality === "hq"
-                          ? "bg-white text-black border-white shadow-md"
-                          : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="text-[11px] font-bold uppercase tracking-wider">
-                        Master HQ
-                      </div>
-                      <div
-                        className={`text-[10px] ${videoQuality === "hq" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
-                      >
-                        Bitrate alto (6M)
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Velocidad de reproducción y exportación */}
-                <div className="space-y-1.5 pt-1 border-t border-white/5">
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
-                    {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) => (
+                  <div className="space-y-1.5 pt-0.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
-                        key={speed}
                         type="button"
-                        onClick={() => {
-                          setVideoSpeed(speed);
-                          const el = activeMediaEl();
-                          if (el) el.playbackRate = speed;
-                          showToast(`Velocidad ajustada a ${speed}x`);
-                        }}
-                        className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border text-center ${
-                          videoSpeed === speed
-                            ? "bg-white text-black font-bold border-white shadow-sm"
-                            : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
+                        onClick={() => setVideoFormat("mp4")}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          videoFormat === "mp4"
+                            ? "bg-white text-black border-white shadow-md"
+                            : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        {speed}x
+                        <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
+                          <span>MP4 (.mp4)</span>
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-black text-[9px] font-extrabold tracking-normal">
+                            PARA X / TWITTER
+                          </span>
+                        </div>
+                        <div
+                          className={`text-[10px] mt-1 ${videoFormat === "mp4" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                        >
+                          Compatible con X, Instagram, Facebook y WhatsApp sin
+                          errores de formato
+                        </div>
                       </button>
-                    ))}
+
+                      <button
+                        type="button"
+                        onClick={() => setVideoFormat("webm")}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          videoFormat === "webm"
+                            ? "bg-white text-black border-white shadow-md"
+                            : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                          WebM (.webm)
+                        </div>
+                        <div
+                          className={`text-[10px] mt-1 ${videoFormat === "webm" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                        >
+                          Formato web abierto para Chrome o navegadores de
+                          escritorio
+                        </div>
+                      </button>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Optimización de peso para redes sociales */}
+                  <div className="space-y-2 pt-0.5">
+                    <p className="font-mono text-[11px] text-neutral-500">
+                      {videoQuality === "social"
+                        ? "3 Mbps · ~4 MB por cada 10 s"
+                        : videoQuality === "compact"
+                          ? "1.5 Mbps · ~2 MB por cada 10 s"
+                          : "6 Mbps · ~7.5 MB por cada 10 s"}
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVideoQuality("social")}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          videoQuality === "social"
+                            ? "bg-white text-black border-white shadow-md"
+                            : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                          Redes Sociales
+                        </div>
+                        <div
+                          className={`text-[10px] ${videoQuality === "social" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                        >
+                          Equilibrado (X / Insta)
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setVideoQuality("compact")}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          videoQuality === "compact"
+                            ? "bg-white text-black border-white shadow-md"
+                            : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                          Ultra Ligero
+                        </div>
+                        <div
+                          className={`text-[10px] ${videoQuality === "compact" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                        >
+                          WhatsApp / Web rápida
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setVideoQuality("hq")}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          videoQuality === "hq"
+                            ? "bg-white text-black border-white shadow-md"
+                            : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                          Master HQ
+                        </div>
+                        <div
+                          className={`text-[10px] ${videoQuality === "hq" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                        >
+                          Bitrate alto (6M)
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Velocidad de reproducción y exportación */}
+                  <div className="space-y-1.5 pt-1 border-t border-white/5">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                      {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) => (
+                        <button
+                          key={speed}
+                          type="button"
+                          onClick={() => {
+                            setVideoSpeed(speed);
+                            const el = activeMediaEl();
+                            if (el) el.playbackRate = speed;
+                            showToast(`Velocidad ajustada a ${speed}x`);
+                          }}
+                          className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border text-center ${
+                            videoSpeed === speed
+                              ? "bg-white text-black font-bold border-white shadow-sm"
+                              : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
+                          }`}
+                        >
+                          {speed}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </CollapseSection>
 
                 {/* Video Trimmer (Start & End) */}
@@ -8653,55 +8764,55 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               value={`${contrast}% · ${brightness}%`}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-neutral-400">
-                  <span>Contraste</span>
-                  <span className="font-mono text-white">{contrast}%</span>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-neutral-400">
+                    <span>Contraste</span>
+                    <span className="font-mono text-white">{contrast}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={80}
+                    max={180}
+                    value={contrast}
+                    onChange={(e) => setContrast(Number(e.target.value))}
+                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min={80}
-                  max={180}
-                  value={contrast}
-                  onChange={(e) => setContrast(Number(e.target.value))}
-                  className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                />
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-neutral-400">
+                    <span>Brillo</span>
+                    <span className="font-mono text-white">{brightness}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={60}
+                    max={140}
+                    value={brightness}
+                    onChange={(e) => setBrightness(Number(e.target.value))}
+                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-neutral-400">
-                  <span>Brillo</span>
-                  <span className="font-mono text-white">{brightness}%</span>
+              {/* Fade toggle */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                <div>
+                  <span className="text-xs font-semibold text-neutral-200 block">
+                    Desvanecimiento superior hacia negro (Gradient Mask)
+                  </span>
+                  <span className="text-[11px] text-neutral-400 font-light">
+                    Difumina sutilmente el horizonte de la imagen contra el
+                    fondo negro superior.
+                  </span>
                 </div>
                 <input
-                  type="range"
-                  min={60}
-                  max={140}
-                  value={brightness}
-                  onChange={(e) => setBrightness(Number(e.target.value))}
-                  className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                  type="checkbox"
+                  checked={blendFade}
+                  onChange={(e) => setBlendFade(e.target.checked)}
+                  className="w-4 h-4 accent-white rounded cursor-pointer"
                 />
               </div>
-            </div>
-
-            {/* Fade toggle */}
-            <div className="flex items-center justify-between pt-2 border-t border-white/5">
-              <div>
-                <span className="text-xs font-semibold text-neutral-200 block">
-                  Desvanecimiento superior hacia negro (Gradient Mask)
-                </span>
-                <span className="text-[11px] text-neutral-400 font-light">
-                  Difumina sutilmente el horizonte de la imagen contra el fondo
-                  negro superior.
-                </span>
-              </div>
-              <input
-                type="checkbox"
-                checked={blendFade}
-                onChange={(e) => setBlendFade(e.target.checked)}
-                className="w-4 h-4 accent-white rounded cursor-pointer"
-              />
-            </div>
             </CollapseSection>
           </div>
         </div>
