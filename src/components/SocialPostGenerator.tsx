@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ChevronDown,
   Maximize2,
   Trash2,
   Palette,
@@ -394,6 +395,56 @@ const tvIntroBoxIn = (t: number) => easeOutCubic(t / 0.35);
 /** Salida del chyron completo en el último tramo de la intro (0 → 1). */
 const tvIntroExit = (t: number, dur: number) =>
   clamp01((t - (dur - 0.7)) / 0.6);
+
+/** Sección plegable del generador.
+ *
+ *  El contenido se oculta con `hidden` y NO se desmonta: los controles
+ *  conservan su valor, el foco no se pierde al recolocar y el JSON del
+ *  borrador no cambia. Plegar es, por tanto, siempre reversible y nunca
+ *  pierde nada — que es la condición para poder aligerar la columna de
+ *  controles sin tocar funciones.
+ *
+ *  Visual: mismo lenguaje que el resto del panel (etiqueta en versalitas,
+ *  filete `border-white/5`, nada de bordes duros). Cerrada, la cabecera es
+ *  una sola línea; abierta aparece el valor actual en mono a la derecha. */
+const CollapseSection: React.FC<{
+  title: string;
+  icon?: React.ReactNode;
+  /** Valor actual en mono junto al chevron; sólo se muestra abierta. */
+  value?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}> = ({ title, icon, value, defaultOpen = false, children }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={open ? "pt-3 border-t border-white/5 space-y-3" : "pt-0.5"}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="group flex w-full cursor-pointer items-center justify-between gap-2 text-left"
+      >
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 transition-colors group-hover:text-white">
+          {icon}
+          <span>{title}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {open && value ? (
+            <span className="font-mono text-[10px] text-neutral-500">
+              {value}
+            </span>
+          ) : null}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-neutral-500 transition-transform duration-200 group-hover:text-neutral-300 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </span>
+      </button>
+      <div className={open ? "space-y-3" : "hidden"}>{children}</div>
+    </div>
+  );
+};
 
 type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
@@ -5757,11 +5808,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <FileCode className="w-3.5 h-3.5 text-cyan-400" />
                 <span>{showAdvancedJson ? "Ocultar JSON" : "Modo JSON"}</span>
               </button>
-
-              <span className="text-[11px] text-neutral-400 font-light leading-relaxed">
-                Rellena el titular, bajada, sección y banderas automáticamente.
-                Después solo subes la foto o el vídeo.
-              </span>
             </div>
 
             {/* Tweet Result Card (si ya se ha redactado) */}
@@ -6027,18 +6073,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               />
             </div>
 
-            {/* Spacing & Interlineado Sub-section */}
-            <div className="pt-3 border-t border-white/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Espaciado entre Textos (1:1 con la exportación)</span>
-                </span>
-                <span className="text-[10px] text-neutral-400 font-mono">
-                  Sep: {gapTitleToDesc}px · Interl: {titleLineHeightRatio}x
-                </span>
-              </div>
-
+            {/* Espaciado e interlineado · plegado por defecto: es la parte
+                más densa de la tarjeta y sólo hace falta al ajustar maquetación. */}
+            <CollapseSection
+              title="Espaciado e interlineado"
+              icon={<Sliders className="h-3.5 w-3.5 text-neutral-400" />}
+              value={`Sep ${gapTitleToDesc}px · Interl ${titleLineHeightRatio}x`}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-900/60 p-3 rounded-xl border border-white/5">
                 {/* Gap Title to Desc */}
                 <div className="space-y-1.5">
@@ -6167,7 +6208,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
+            </CollapseSection>
           </div>
 
           {/* Card 2: Categorías & Atribución de Países */}
@@ -6219,23 +6260,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </select>
               </div>
 
-              {/* Quick Category Chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {allAvailableCategories.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCategory(c)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-all cursor-pointer ${
-                      category === c
-                        ? "bg-white text-black font-bold shadow-sm"
-                        : "bg-neutral-900 text-neutral-400 hover:text-white border border-white/5"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
+              {/* Quick Category Chips · plegadas por defecto: el desplegable del
+                  catálogo de arriba ofrece las mismas secciones en una línea. */}
+              <CollapseSection
+                title="Secciones rápidas"
+                icon={<Layers className="h-3.5 w-3.5 text-neutral-400" />}
+                value={category}
+              >
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {allAvailableCategories.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setCategory(c)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-all cursor-pointer ${
+                        category === c
+                          ? "bg-white text-black font-bold shadow-sm"
+                          : "bg-neutral-900 text-neutral-400 hover:text-white border border-white/5"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </CollapseSection>
             </div>
 
             {/* Countries Section */}
@@ -6293,14 +6341,23 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </div>
               </div>
 
-              {/* Single-line Format & Sizing Controls (When 'line' placement is active) */}
+              {/* Single-line Format & Sizing Controls · plegado: sólo aparece
+                  con países en la barra superior y sólo hace falta al cambiar
+                  de estilo o al desactivar el auto-ajuste. */}
               {countryPlacement === "line" && selectedCountries.length > 0 && (
-                <div className="p-3 bg-neutral-900/90 rounded-xl border border-white/10 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                    <span className="text-neutral-300 font-semibold uppercase tracking-wider text-[11px]">
-                      Estilo de países en línea
-                    </span>
-                    <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                <CollapseSection
+                  title="Estilo y auto-ajuste de la línea"
+                  icon={<Globe className="h-3.5 w-3.5 text-neutral-400" />}
+                  value={
+                    countryFormat === "names"
+                      ? "Nombres"
+                      : countryFormat === "flags-names"
+                        ? "Banderas"
+                        : "Códigos"
+                  }
+                >
+                  <div className="p-3 bg-neutral-900/90 rounded-xl border border-white/10 space-y-2.5">
+                    <div className="flex items-center justify-end gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
                       <button
                         type="button"
                         onClick={() => setCountryFormat("names")}
@@ -6338,7 +6395,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         Códigos (Compacto)
                       </button>
                     </div>
-                  </div>
 
                   {/* Header Auto-Fit vs Manual Size */}
                   <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
@@ -6377,7 +6433,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       </div>
                     )}
                   </div>
-                </div>
+                  </div>
+                </CollapseSection>
               )}
 
               {/* Selected Countries Badges */}
@@ -6714,20 +6771,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </button>
                 </div>
 
-                {/* Video Format Selector (MP4 for X/Twitter vs WebM) */}
+                {/* Formato, peso y velocidad de entrega · plegado: son valores
+                    de salida que se ajustan una vez y rara vez se tocan. */}
+                <CollapseSection
+                  title="Formato, peso y velocidad"
+                  icon={<Film className="h-3.5 w-3.5 text-cyan-400" />}
+                  value={`${videoFormat.toUpperCase()} · ${videoSpeed}x · ${
+                    videoQuality === "social"
+                      ? "3 Mbps"
+                      : videoQuality === "compact"
+                        ? "1.5 Mbps"
+                        : "6 Mbps"
+                  }`}
+                >
                 <div className="space-y-1.5 pt-0.5">
-                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-                    <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <Film className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Formato de Video</span>
-                    </label>
-                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 font-bold">
-                      {videoFormat === "mp4"
-                        ? "MP4 (H.264 / AAC) · 100% X (Twitter) & Meta"
-                        : "WebM (VP9) · Web abierta"}
-                    </span>
-                  </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -6774,21 +6831,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </div>
                 </div>
 
-                {/* Social Media Bitrate & Weight Optimization */}
+                {/* Optimización de peso para redes sociales */}
                 <div className="space-y-2 pt-0.5">
-                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-                    <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Optimización para X, Instagram & Meta</span>
-                    </label>
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-                      {videoQuality === "social"
-                        ? "3 Mbps · ~4 MB / 10 s"
-                        : videoQuality === "compact"
-                          ? "1.5 Mbps · ~2 MB / 10 s"
-                          : "6 Mbps · ~7.5 MB / 10 s"}
-                    </span>
-                  </div>
+                  <p className="font-mono text-[11px] text-neutral-500">
+                    {videoQuality === "social"
+                      ? "3 Mbps · ~4 MB por cada 10 s"
+                      : videoQuality === "compact"
+                        ? "1.5 Mbps · ~2 MB por cada 10 s"
+                        : "6 Mbps · ~7.5 MB por cada 10 s"}
+                  </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button
@@ -6850,22 +6901,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </div>
                 </div>
 
-                {/* Video Playback & Export Speed */}
+                {/* Velocidad de reproducción y exportación */}
                 <div className="space-y-1.5 pt-1 border-t border-white/5">
-                  <div className="flex items-center justify-between text-xs">
-                    <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <Gauge className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Velocidad de Video</span>
-                    </label>
-                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 font-bold">
-                      {videoSpeed === 1.0
-                        ? "1.0x (Normal)"
-                        : videoSpeed < 1.0
-                          ? `${videoSpeed}x (Lento)`
-                          : `${videoSpeed}x (Rápido)`}
-                    </span>
-                  </div>
-
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                     {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) => (
                       <button
@@ -6889,6 +6926,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     ))}
                   </div>
                 </div>
+                </CollapseSection>
 
                 {/* Video Trimmer (Start & End) */}
                 <div className="space-y-2.5 pt-2 border-t border-white/5">
@@ -6999,8 +7037,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </div>
                   </div>
 
-                  {/* Summary badge & presets */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px]">
+                  {/* Duración efectiva del clip, tras recorte y velocidad */}
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[11px]">
                     <span className="text-neutral-300 font-medium">
                       ✂️ Clip:{" "}
                       <strong className="text-white">
@@ -7025,8 +7063,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         </span>
                       )}
                     </span>
+                  </div>
 
-                    <div className="flex items-center gap-1">
+                  {/* Presets de recorte · plegados: son atajos de los propios
+                      sliders, no una función aparte. */}
+                  <CollapseSection
+                    title="Recortes rápidos"
+                    icon={<Scissors className="h-3.5 w-3.5 text-neutral-400" />}
+                  >
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -7076,21 +7121,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         Completo
                       </button>
                     </div>
-                  </div>
+                  </CollapseSection>
                 </div>
 
-                {/* Duration Limiter */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-300 font-medium">
-                      Duración máxima del clip de noticia:
-                    </span>
-                    <span className="text-[11px] font-mono text-neutral-400">
-                      {maxVideoDuration > 0
-                        ? `${maxVideoDuration} segundos`
-                        : "Video completo"}
-                    </span>
-                  </div>
+                {/* Duración máxima del clip · plegada: se ajusta una vez y
+                    rara vez se vuelve a tocar. */}
+                <CollapseSection
+                  title="Duración máxima del clip"
+                  icon={<Gauge className="h-3.5 w-3.5 text-neutral-400" />}
+                  value={
+                    maxVideoDuration > 0 ? `${maxVideoDuration}s` : "Completo"
+                  }
+                >
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[5, 10, 15, 30, 60, 0].map((dur) => (
                       <button
@@ -7113,7 +7155,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     algoritmo de compresión de Meta destruya la calidad del
                     video.
                   </p>
-                </div>
+                </CollapseSection>
 
                 {/* Cierre de marca opcional: Blacknews.mp4 al final */}
                 <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
@@ -7147,8 +7189,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </div>
             )}
 
-            {/* Sliders for exposure & blend fade */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            {/* Exposición y fundido · plegados: ajuste fino de imagen que casi
+                siempre se deja en los valores por defecto. */}
+            <CollapseSection
+              title="Exposición y fundido"
+              icon={<Palette className="h-3.5 w-3.5 text-neutral-400" />}
+              value={`${contrast}% · ${brightness}%`}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-neutral-400">
                   <span>Contraste</span>
@@ -7198,6 +7246,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 className="w-4 h-4 accent-white rounded cursor-pointer"
               />
             </div>
+            </CollapseSection>
           </div>
         </div>
 
