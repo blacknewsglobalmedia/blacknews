@@ -1132,7 +1132,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Los bytes crudos quedan a mano para la exportación acelerada (demux
       // del MP4 o decodificación del audio: las dos rutas leen `raw`).
       uploadedVideoFileRef.current = file;
-      setIsVideoPlaying(true);
+      // Para vídeo arrancamos la preview de inmediato; para audio esperamos
+      // al evento onPlay del <audio> real — así la cama musical no empieza
+      // antes de que el usuario dé a play.
+      if (isVideo) setIsVideoPlaying(true);
       const tempEl = document.createElement(isAudio ? "audio" : "video");
       tempEl.preload = "metadata";
       tempEl.src = objectUrl;
@@ -1201,12 +1204,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // La cama suena en la vista previa exactamente mientras suena la nota, se
   // apaga con el cierre de marca y se calla mientras graba (allí la mezcla la
   // hace la exportación y, si no, se escucharía dos veces).
+  // IMPORTANTE: sólo puede sonar en modo podcast con audio puro; nunca en
+  // modo noticia ni mientras la nota esté pausada esperando a que el usuario
+  // pulse play (isVideoPlaying lo pone true el evento onPlay real del <audio>,
+  // no la carga del archivo).
   useEffect(() => {
     const m = podcastMusicRef.current;
     if (!m) return;
     m.volume = podcastMusicVol;
     const shouldPlay =
-      podcastMusicOn && isVideoPlaying && !outroActive && !isRecordingVideo;
+      postDesign === "podcast" &&
+      mediaType === "audio" &&
+      podcastMusicOn &&
+      isVideoPlaying &&
+      !outroActive &&
+      !isRecordingVideo;
     if (shouldPlay) {
       if (m.paused) void m.play().catch(() => {});
     } else if (!m.paused) {
@@ -1219,6 +1231,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     outroActive,
     isRecordingVideo,
     postDesign,
+    mediaType,
   ]);
 
   /** Imagen de fondo del podcast: una imagen plana (blob/data/https). */
