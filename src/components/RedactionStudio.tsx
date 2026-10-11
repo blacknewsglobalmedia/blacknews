@@ -862,10 +862,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const userPublishedCount = publishedReports.filter((r) => canUserEditThisReport(r)).length;
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row pb-[calc(var(--bn-nav-h)_+_4rem)] lg:pb-0">
+    <div className="min-h-screen bg-black text-white font-sans flex flex-col lg:flex-row">
       {/* MOBILE COMPACT HEADER (< lg). Sólo identifica el panel: no es sticky
-          (la cabecera fija del sitio ocupa la parte alta) y los accesos viven
-          en la cabecera del espacio de trabajo y dentro del propio menú. */}
+          porque la cabecera del espacio de trabajo (más abajo) ya lo es y se
+          quedaría pegada al borde; los accesos viven ahí y en el propio menú. */}
       <div className="lg:hidden border-b border-white/10 bg-black px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-3.5 h-3.5 bg-white shrink-0" />

@@ -19,6 +19,18 @@
     :root { --bn-nav-h: 0px; }
   }
 
+  /* Panel de redacción (el <html> lleva data-vista="redaccion"): es una app a
+     pantalla completa, sin la barra superior pública ni la navegación inferior
+     (no se renderizan). Estas variables miden justo esas barras, y las usan
+     las cabeceras pegajosas del estudio, el scroll-padding de las anclas y el
+     hueco de los toasts y barras flotantes: si siguieran midiendo 133px y
+     3.5rem, todo quedaría descolocado y con un hueco muerto arriba. */
+  html[data-vista="redaccion"] {
+    --bn-header-h: 0px;
+    --bn-nav-h: 0px;
+    scroll-padding-top: 3.5rem;
+  }
+
   html, body {
     background-color: #000000;
     color: #EDEDED;

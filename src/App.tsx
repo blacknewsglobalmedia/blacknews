@@ -155,19 +155,35 @@ const INITIAL_REDACTORS: RedactorProfile[] = [
 /** Una sola cuenta de visita por carga de página (StrictMode ejecuta los efectos dos veces en dev). */
 let visitCountedThisLoad = false;
 
+/** Ruta del panel de redacción. El Worker sirve index.html para cualquier
+ *  ruta (not_found_handling: single-page-application en wrangler.jsonc), así
+ *  que se puede entrar con F5, compartir el enlace o usar «atrás». */
+const STUDIO_PATH = "/dashboard";
+
+/** Única vista con URL propia: el panel va a pantalla completa. */
+const viewFromPath = (path: string): "redaccion" | "portada" =>
+  path.replace(/\/+$/, "") === STUDIO_PATH ? "redaccion" : "portada";
+
 export default function App() {
   const [currentView, setCurrentView] = useState<
     "portada" | "redaccion" | "politicas"
   >(() => {
     // Deep-link de la página de políticas (?politicas o ?politicas=<n>)
     const params = new URLSearchParams(window.location.search);
-    return params.has("politicas") ? "politicas" : "portada";
+    if (params.has("politicas")) return "politicas";
+    // Deep-link al panel: /dashboard abre el estudio sin barra superior.
+    return viewFromPath(window.location.pathname);
   });
   const [policiesSection, setPoliciesSection] = useState<number | null>(() => {
     const raw = new URLSearchParams(window.location.search).get("politicas");
     const n = raw ? Number.parseInt(raw, 10) : NaN;
     return Number.isFinite(n) && n > 0 ? n : null;
   });
+  /** true en el panel (/dashboard). Se calcula aquí arriba, antes de cualquier
+   *  efecto que compare la vista: el guard de seguridad de más abajo deja a
+   *  TypeScript sin la rama «redaccion» para el resto del cuerpo y cualquier
+   *  `currentView === "redaccion"` posterior daría TS2367. */
+  const isStudioView = currentView === "redaccion";
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("TODAS");
   const [activeReport, setActiveReport] = useState<Report | null>(null);
   const [shareTargetReport, setShareTargetReport] = useState<Report | null>(
@@ -936,7 +952,7 @@ export default function App() {
       handleClosePolicies();
       return;
     }
-    if (currentView !== "portada") setCurrentView("portada");
+    if (currentView !== "portada") navigateToView("portada");
     window.scrollTo({ top: 0 });
   };
 
@@ -1250,7 +1266,7 @@ export default function App() {
       await signOut(auth);
     } catch {}
     setCurrentUser(GUEST_USER);
-    setCurrentView("portada");
+    navigateToView("portada");
     try {
       localStorage.removeItem("blacknews_active_user");
     } catch {}
@@ -1344,10 +1360,46 @@ export default function App() {
     currentUser && currentUser.id !== GUEST_USER_ID,
   );
 
+  // Navegación con URL propia. El panel vive en /dashboard para no heredar la
+  // barra superior pública ni los ~133 px que se lleva encima. Se hace con
+  // history.pushState y sin recargar, para no perder el estado del estudio.
+  const navigateToView = (view: "portada" | "redaccion" | "politicas") => {
+    setCurrentView(view);
+    // Sólo el panel tiene ruta propia: «políticas» sigue usando ?politicas.
+    if (view === "redaccion" || view === "portada") {
+      const target = view === "redaccion" ? STUDIO_PATH : "/";
+      if (window.location.pathname !== target) {
+        window.history.pushState({ view }, "", target);
+      }
+    }
+  };
+
+  // «Atrás» y «adelante» del navegador entre portada y panel.
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("politicas")) {
+        setCurrentView("politicas");
+        return;
+      }
+      setCurrentView(viewFromPath(window.location.pathname));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // El panel es una app a pantalla completa: sin barra superior ni navegación
+  // inferior públicas. La marca en <html> baja a cero las variables de altura
+  // de esas barras (index.css), para que las cabeceras pegajosas del estudio
+  // se peguen al borde y el scroll no reserve hueco para lo que ya no existe.
+  useEffect(() => {
+    document.documentElement.dataset.vista = currentView;
+  }, [currentView]);
+
   // Strict security guard: redirect away from redaccion immediately if user is LECTOR
   useEffect(() => {
-    if (!canAccessInternalMedia && currentView === "redaccion") {
-      setCurrentView("portada");
+    if (!canAccessInternalMedia && isStudioView) {
+      navigateToView("portada");
     }
   }, [canAccessInternalMedia, currentView]);
 
@@ -1356,7 +1408,7 @@ export default function App() {
       showToast("Inicia sesión con tu cuenta para abrir tu panel.");
       return;
     }
-    setCurrentView(currentView === "redaccion" ? "portada" : "redaccion");
+    navigateToView(currentView === "redaccion" ? "portada" : "redaccion");
   };
 
   // Atajo del menú móvil: abre el panel directamente en la sección del rol
@@ -1366,7 +1418,7 @@ export default function App() {
       return;
     }
     setStudioTab(tab);
-    setCurrentView("redaccion");
+    navigateToView("redaccion");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1388,13 +1440,16 @@ export default function App() {
       {/* Hay un despliegue más nuevo que esta sesión: aviso discreto para refrescar */}
       <VersionNotice />
 
-      {/* Top Navigation */}
+      {/* Top Navigation. No se renderiza en el panel: el estudio vive en
+          /dashboard a pantalla completa y esta barra pegajosa sólo le roba
+          altura y lo tapa. */}
+      {!isStudioView && (
       <TopBar
         categories={categoriesList}
         selectedCategory={selectedCategory}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
-          setCurrentView("portada");
+          navigateToView("portada");
         }}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenBookmarks={() => setIsBookmarksOpen(true)}
@@ -1403,7 +1458,7 @@ export default function App() {
         liveTickerActive={liveTickerActive}
         onToggleLiveTicker={() => setLiveTickerActive(!liveTickerActive)}
         onOpenStudio={handleToggleStudio}
-        isStudioOpen={currentView === "redaccion" && canAccessInternalMedia}
+        isStudioOpen={isStudioView && canAccessInternalMedia}
         currentUser={currentUser}
         onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
         liteMode={liteMode}
@@ -1412,6 +1467,7 @@ export default function App() {
         onMobileMenuOpenChange={setIsMobileMenuOpen}
         onOpenStudioTab={handleOpenStudioTab}
       />
+      )}
 
       {/* Real-time breaking ticker */}
       {liveTickerActive && currentView === "portada" && (
@@ -1435,7 +1491,7 @@ export default function App() {
           />
         ) : currentView === "redaccion" && canAccessInternalMedia ? (
           <RedactionStudio
-            onBackToNews={() => setCurrentView("portada")}
+            onBackToNews={() => navigateToView("portada")}
             onPublishReport={handlePublishReport}
             onUpdateExistingReport={handleUpdateExistingReport}
             currentUser={currentUser}
@@ -1465,7 +1521,7 @@ export default function App() {
             onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
             onOpenCreateAd={() => setIsAdModalOpen(true)}
             onSelectReport={(report) => {
-              setCurrentView("portada");
+              navigateToView("portada");
               handleOpenReport(report);
             }}
             onSaveProfile={handleSaveProfile}
@@ -1570,17 +1626,20 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer. No aparece en el panel: allí el estudio ocupa la pantalla
+          entera y un pie de sitio público sólo estorbaría. */}
+      {!isStudioView && (
       <Footer
         categories={categoriesList}
         onSelectCategory={(cat) => {
           setSelectedCategory(cat);
-          setCurrentView("portada");
+          navigateToView("portada");
         }}
         onShareSite={() => handleOpenShare(null)}
         onOpenAdModal={() => setIsAdModalOpen(true)}
         onOpenPolicies={handleOpenPolicies}
       />
+      )}
 
       {/* Deep Report Reader Modal */}
       <ReportDetailModal
@@ -1680,7 +1739,7 @@ export default function App() {
       />
 
       {/* Barra flotante inferior: cuota de lecturas del día + volver arriba */}
-      {currentView !== "redaccion" && (
+      {!isStudioView && (
         <ReadingDock
           meter={readMeter}
           onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
@@ -1688,7 +1747,8 @@ export default function App() {
       )}
 
       {/* Navegación inferior estilo app (móvil/tablet): pulgar, espejo del header.
-          Antes de WorldClockBar para que su backdrop la tape cuando esté abierta. */}
+          Tampoco aparece en el panel, que lleva la suya propia. */}
+      {!isStudioView && (
       <MobileTabBar
         onGoHome={handleGoHome}
         isPortada={currentView === "portada"}
@@ -1702,9 +1762,11 @@ export default function App() {
         isSubscribeOpen={isSubscriptionModalOpen}
         onOpenSubscribe={() => setIsSubscriptionModalOpen(true)}
       />
+      )}
 
-      {/* Relojes del mundo: marquee pegado al borde inferior, en todo el sitio */}
-      <WorldClockBar />
+      {/* Relojes del mundo: marquee pegado al borde inferior. Oculto en el
+          panel por lo mismo: allí no hay barra inferior que los tape. */}
+      {!isStudioView && <WorldClockBar />}
     </div>
   );
 }
