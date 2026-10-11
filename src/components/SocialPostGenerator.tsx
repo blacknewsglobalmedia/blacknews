@@ -3106,6 +3106,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       );
     }
 
+    // Si incluso al tamaño mínimo sigue desbordando (muchos países con nombres
+    // largos), recortamos la lista hasta que quepa y añadimos un indicador +N.
+    let podcastVisibleFlags = flagsData;
+    let podcastHiddenCount = 0;
+    if (
+      countryPlacement === "line" &&
+      computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth
+    ) {
+      ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${curLetterSpacing}px`;
+      const fFlagW = Math.round(curHeaderSize * 1.3);
+      for (let limit = flagsData.length - 1; limit >= 0; limit--) {
+        const hidden = flagsData.length - limit;
+        let w = ctx.measureText(catUpper).width;
+        if (limit > 0) {
+          w += ctx.measureText("  ·  ").width;
+          for (let i = 0; i < limit; i++) {
+            if (countryFormat !== "names" && flagsData[i].img) w += fFlagW + 6;
+            w += ctx.measureText(flagsData[i].text).width;
+            if (i < limit - 1) w += ctx.measureText(" · ").width;
+          }
+        }
+        if (hidden > 0) w += ctx.measureText(` +${hidden}`).width;
+        if (w <= maxTextWidth) {
+          podcastVisibleFlags = flagsData.slice(0, limit);
+          podcastHiddenCount = hidden;
+          break;
+        }
+      }
+    }
+
     ctx.save();
     ctx.textBaseline = "top";
     ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
@@ -3116,7 +3147,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillText(catUpper, curX, curY);
     curX += ctx.measureText(catUpper).width;
 
-    if (countryPlacement === "line" && flagsData.length > 0) {
+    if (countryPlacement === "line" && podcastVisibleFlags.length > 0) {
       ctx.fillStyle = "#64748B";
       const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
@@ -3126,8 +3157,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const flagH = Math.round(flagW * 0.68);
       const flagOffsetY = Math.round((curHeaderSize - flagH) / 2);
 
-      for (let i = 0; i < flagsData.length; i++) {
-        const item = flagsData[i];
+      for (let i = 0; i < podcastVisibleFlags.length; i++) {
+        const item = podcastVisibleFlags[i];
         if (countryFormat !== "names" && item.img) {
           ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
           curX += flagW + 6;
@@ -3136,12 +3167,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ctx.fillText(item.text, curX, curY);
         curX += ctx.measureText(item.text).width;
 
-        if (i < flagsData.length - 1) {
+        if (i < podcastVisibleFlags.length - 1) {
           ctx.fillStyle = "#64748B";
           const midSep = " · ";
           ctx.fillText(midSep, curX, curY);
           curX += ctx.measureText(midSep).width;
         }
+      }
+
+      if (podcastHiddenCount > 0) {
+        ctx.fillStyle = "#64748B";
+        const moreLabel = ` +${podcastHiddenCount}`;
+        ctx.fillText(moreLabel, curX, curY);
+        curX += ctx.measureText(moreLabel).width;
       }
     }
 
@@ -3538,6 +3576,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       );
     }
 
+    // Si aún desborda con el mínimo (muchos países con nombres largos),
+    // recortar progresivamente hasta que quepa y mostrar +N.
+    let normalVisibleFlags = flagsData;
+    let normalHiddenCount = 0;
+    if (
+      countryPlacement === "line" &&
+      computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth
+    ) {
+      ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${curLetterSpacing}px`;
+      const nFlagW = Math.round(curHeaderSize * 1.3);
+      for (let limit = flagsData.length - 1; limit >= 0; limit--) {
+        const hidden = flagsData.length - limit;
+        let w = ctx.measureText(catUpper).width;
+        if (limit > 0) {
+          w += ctx.measureText("  ·  ").width;
+          for (let i = 0; i < limit; i++) {
+            if (countryFormat !== "names" && flagsData[i].img) w += nFlagW + 6;
+            w += ctx.measureText(flagsData[i].text).width;
+            if (i < limit - 1) w += ctx.measureText(" · ").width;
+          }
+        }
+        if (hidden > 0) w += ctx.measureText(` +${hidden}`).width;
+        if (w <= maxTextWidth) {
+          normalVisibleFlags = flagsData.slice(0, limit);
+          normalHiddenCount = hidden;
+          break;
+        }
+      }
+    }
+
     ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
     ctx.letterSpacing = `${curLetterSpacing}px`;
     ctx.fillStyle = "#FFFFFF";
@@ -3546,7 +3615,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillText(catUpper, curX, curY);
     curX += ctx.measureText(catUpper).width;
 
-    if (countryPlacement === "line" && flagsData.length > 0) {
+    if (countryPlacement === "line" && normalVisibleFlags.length > 0) {
       ctx.fillStyle = "#64748B";
       const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
@@ -3556,8 +3625,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const flagH = Math.round(flagW * 0.68);
       const flagOffsetY = Math.round((curHeaderSize - flagH) / 2);
 
-      for (let i = 0; i < flagsData.length; i++) {
-        const item = flagsData[i];
+      for (let i = 0; i < normalVisibleFlags.length; i++) {
+        const item = normalVisibleFlags[i];
         if (countryFormat !== "names" && item.img) {
           ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
           curX += flagW + 6;
@@ -3566,12 +3635,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ctx.fillText(item.text, curX, curY);
         curX += ctx.measureText(item.text).width;
 
-        if (i < flagsData.length - 1) {
+        if (i < normalVisibleFlags.length - 1) {
           ctx.fillStyle = "#64748B";
           const midSep = " · ";
           ctx.fillText(midSep, curX, curY);
           curX += ctx.measureText(midSep).width;
         }
+      }
+
+      if (normalHiddenCount > 0) {
+        ctx.fillStyle = "#64748B";
+        const moreLabel = ` +${normalHiddenCount}`;
+        ctx.fillText(moreLabel, curX, curY);
+        curX += ctx.measureText(moreLabel).width;
       }
     }
 
@@ -9412,46 +9488,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
 
                     {countryPlacement === "line" &&
-                      selectedCountries.length > 0 && (
-                        <>
-                          <span
-                            style={{ fontSize: `${previewHeaderSize}px` }}
-                            className="text-neutral-500 shrink-0 font-mono px-0.5"
-                          >
-                            ·
-                          </span>
-                          <div
-                            style={{
-                              fontSize: `${previewHeaderSize}px`,
-                              letterSpacing: previewHeaderTracking,
-                            }}
-                            className="inline-flex items-center gap-1.5 font-semibold uppercase text-neutral-300 font-['Lexend'] truncate shrink min-w-0 select-none"
-                          >
-                            {selectedCountries.map((c, idx) => (
-                              <React.Fragment key={c.name}>
-                                {idx > 0 && (
-                                  <span className="text-neutral-500 text-[10px]">
-                                    ·
-                                  </span>
-                                )}
-                                <span className="inline-flex items-center gap-1 shrink-0">
-                                  {countryFormat !== "names" && (
-                                    <CountryFlag
-                                      code={c.code}
-                                      className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
-                                    />
+                      selectedCountries.length > 0 &&
+                      (() => {
+                        // Límite dinámico de países visibles: con categorías cortas
+                        // se pueden mostrar más; con categorías largas menos.
+                        const catLen = (category || "GEOPOLÍTICA").length;
+                        const maxVisible =
+                          catLen > 20 ? 3 : catLen > 12 ? 4 : 5;
+                        const visible = selectedCountries.slice(0, maxVisible);
+                        const hiddenN =
+                          selectedCountries.length - visible.length;
+                        return (
+                          <>
+                            <span
+                              style={{ fontSize: `${previewHeaderSize}px` }}
+                              className="text-neutral-500 shrink-0 font-mono px-0.5"
+                            >
+                              ·
+                            </span>
+                            <div
+                              style={{
+                                fontSize: `${previewHeaderSize}px`,
+                                letterSpacing: previewHeaderTracking,
+                              }}
+                              className="inline-flex items-center gap-1 font-semibold uppercase text-neutral-300 font-['Lexend'] shrink-0 select-none"
+                            >
+                              {visible.map((c, idx) => (
+                                <React.Fragment key={c.name}>
+                                  {idx > 0 && (
+                                    <span className="text-neutral-500 text-[10px] mx-0.5">
+                                      ·
+                                    </span>
                                   )}
-                                  <span>
-                                    {countryFormat === "flags-codes"
-                                      ? c.code
-                                      : c.name.toUpperCase()}
+                                  <span className="inline-flex items-center gap-0.5">
+                                    {countryFormat !== "names" && (
+                                      <CountryFlag
+                                        code={c.code}
+                                        className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
+                                      />
+                                    )}
+                                    <span>
+                                      {countryFormat === "flags-codes"
+                                        ? c.code
+                                        : c.name.toUpperCase()}
+                                    </span>
                                   </span>
+                                </React.Fragment>
+                              ))}
+                              {hiddenN > 0 && (
+                                <span className="text-neutral-500 font-mono ml-0.5">
+                                  +{hiddenN}
                                 </span>
-                              </React.Fragment>
-                            ))}
-                          </div>
-                        </>
-                      )}
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
 
                     <span className="flex-1 max-w-[50px] min-w-[16px] h-[1.5px] bg-white inline-block shrink-0"></span>
                   </div>
