@@ -194,6 +194,115 @@ const OUTRO_START_GRACE_MS = 2000;
 /** Altura por defecto del panel de contexto del asistente flotante. */
 const AI_COMPOSER_H_DEFAULT = 170;
 
+/** Número de barras de la onda del post-podcast. Es el mismo valor en la vista
+ *  previa y en el archivo: la onda se calcula una vez al cargar el audio y se
+ *  pinta siempre con los mismos picos, así el frame exportado es idéntico al
+ *  que se ve en pantalla. */
+const PODCAST_BARS = 88;
+
+/** Picos (RMS normalizado 0..1) de un archivo de audio, repartidos en
+ *  `buckets` muestras. Se calcula con el decoder del navegador sobre el
+ *  archivo completo, no con AnalyserNode en vivo: así la onda es
+ *  determinista y se puede pintar fuera de la reproducción (pausa, export). */
+const computeAudioPeaks = async (
+  blob: Blob,
+  buckets = PODCAST_BARS,
+): Promise<number[]> => {
+  const raw = await blob.arrayBuffer();
+  const probe = new OfflineAudioContext(1, 1, 44100);
+  const decoded = await probe.decodeAudioData(raw);
+  const ch = decoded.getChannelData(0);
+  const size = Math.max(1, Math.floor(ch.length / buckets));
+  const peaks: number[] = [];
+  let max = 0;
+  for (let i = 0; i < buckets; i++) {
+    const start = i * size;
+    const end = Math.min(ch.length, start + size);
+    let sum = 0;
+    let n = 0;
+    // Un paso de 4 muestras basta para el RMS visual y va 4× más rápido.
+    for (let j = start; j < end; j += 4) {
+      sum += ch[j] * ch[j];
+      n++;
+    }
+    const rms = n > 0 ? Math.sqrt(sum / n) : 0;
+    peaks.push(rms);
+    if (rms > max) max = rms;
+  }
+  return peaks.map((v) => (max > 0 ? Math.min(1, v / max) : 0));
+};
+
+/** Reloj del post-podcast: m:ss (sin décimas: es un indicador, no un editor). */
+const fmtPodcastClock = (t: number): string => {
+  const s = Math.max(0, Math.floor(t));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/** Encuadre «cover» de un medio sobre el lienzo (recorta por el centro, con
+ *  rotación ISO 14496). Lo comparten el fondo del post-podcast y el 16:9. */
+const drawCoverFrame = (
+  ctx: CanvasRenderingContext2D,
+  src: CanvasImageSource,
+  elW: number,
+  elH: number,
+  rot: number,
+  W: number,
+  H: number,
+) => {
+  const dispW = rot % 180 === 90 ? elH : elW;
+  const dispH = rot % 180 === 90 ? elW : elH;
+  const targetRatio = W / H;
+  const sourceRatio = dispW / dispH;
+  let sx = 0;
+  let sy = 0;
+  let sw = dispW;
+  let sh = dispH;
+  if (sourceRatio > targetRatio) {
+    sw = dispH * targetRatio;
+    sx = (dispW - sw) / 2;
+  } else {
+    sh = dispW / targetRatio;
+    sy = (dispH - sh) / 2;
+  }
+  if (!rot) {
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+    return;
+  }
+  let csx = sx;
+  let csy = sy;
+  let csw = sw;
+  let csh = sh;
+  if (rot === 90) {
+    csx = sy;
+    csy = dispW - sx - sw;
+    csw = sh;
+    csh = sw;
+  } else if (rot === 180) {
+    csx = dispW - sx - sw;
+    csy = dispH - sy - sh;
+  } else if (rot === 270) {
+    csx = dispH - sy - sh;
+    csy = sx;
+    csw = sh;
+    csh = sw;
+  }
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.drawImage(
+    src,
+    csx,
+    csy,
+    csw,
+    csh,
+    -dispW / 2,
+    -dispH / 2,
+    dispW,
+    dispH,
+  );
+  ctx.restore();
+};
+
 /** Pinta un fotograma del cierre de marca a sangre del lienzo SIN overlays
  *  (sin chyron, sin ticker, sin velos): es un sello de cierre, no una toma del
  *  reportaje. Encuadre «contain» sobre negro para no recortar el sello en los
@@ -519,10 +628,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [headerSize, setHeaderSize] = useState(20);
 
   // Media state
-  const [mediaType, setMediaType] = useState<"image" | "video">("image");
+  // "audio" = modo podcast: el medio principal es un archivo de sonido y el
+  // fondo es opcional (negro puro o una imagen plana oscurecida).
+  const [mediaType, setMediaType] = useState<"image" | "video" | "audio">(
+    "image",
+  );
   const [mediaSrc, setMediaSrc] = useState<string>(DEFAULT_MEDIA_SRC);
   const [mediaName, setMediaName] = useState<string>("Imagen predeterminada");
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // ── Post podcast: variante AMOLED minimalista ──
+  // "news" es la estética de siempre; "podcast" es la variante de las notas en
+  // audio (fondo negro absoluto, onda y reloj). Subir un audio activa el modo
+  // solo, y se puede volver a la estética clásica sin perder el archivo.
+  const [postDesign, setPostDesign] = useState<"news" | "podcast">("news");
+  // Fondo del podcast: imagen plana opcional (blob/data/https). Vacío = negro.
+  const [podcastBgSrc, setPodcastBgSrc] = useState<string>("");
+  const [podcastBgName, setPodcastBgName] = useState<string>("");
+  // Picos de la onda (0..1) del audio cargado. Vacío = onda plana (todavía
+  // analizando o sin audio decodificable).
+  const [audioPeaks, setAudioPeaks] = useState<number[]>([]);
+  // true mientras se decodifica el archivo para dibujar la onda.
+  const [audioAnalyzing, setAudioAnalyzing] = useState(false);
+  // Cabecera del podcast: serie y episodio.
+  const [podcastSeries, setPodcastSeries] = useState("Noticias en 1 minuto");
+  const [podcastEpisode, setPodcastEpisode] = useState("01");
 
   // Formato de salida: el mismo post se genera en 4:5 (1080×1350), 9:16
   // (1080×1920, el vertical de TikTok / Shorts / Reels) o 16:9 (1920×1080) con
@@ -793,6 +923,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const recBarRef = useRef<HTMLDivElement>(null);
   const recPctRef = useRef<HTMLSpanElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // <audio> del modo podcast: mismo papel que el <video> (reloj de la vista
+  // previa, recorte y fuente de audio de la ruta clásica de exportación).
+  const audioRef = useRef<HTMLAudioElement>(null);
+  // Imagen de fondo del podcast (opcional): se pinta oscurecida detrás de la
+  // onda. Va en un <img> aparte para que el export pueda dibujarla.
+  const podcastBgRef = useRef<HTMLImageElement>(null);
+  // WebAudio del <audio>: igual que audioGraphRef, pero para el otro elemento
+  // (un elemento sólo puede enrutarse una vez por nodo fuente).
+  const audioOnlyGraphRef = useRef<{
+    ctx: AudioContext;
+    dest: MediaStreamAudioDestinationNode;
+  } | null>(null);
+  /** Elemento de medio activo: el <audio> en modo podcast y el <video> en los
+   *  demás. Comparten currentTime/play/pause/duration, así que los controles
+   *  de transporte (barra, ±, velocidad, silencio) valen para los dos. */
+  const activeMediaEl = (): HTMLVideoElement | HTMLAudioElement | null =>
+    mediaType === "audio" ? audioRef.current : videoRef.current;
+  // Selector de archivo de la imagen de fondo del podcast (opcional).
+  const podcastBgInputRef = useRef<HTMLInputElement>(null);
+  // Modo «sale vídeo»: el vídeo de siempre y el audio del podcast (las redes
+  // no aceptan audio suelto, así que la nota se exporta como vídeo con su
+  // onda dentro). Comparten recorte, calidad y cierre de marca.
+  const exportsVideo = mediaType === "video" || mediaType === "audio";
   // <video> del cierre de marca: lo comparten la vista previa y la fase de
   // cierre de la ruta clásica (queda visible mientras graba, para que el
   // navegador decodifique fotogramas y el usuario vea lo que se está grabando).
@@ -840,7 +993,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // máxima + velocidad). Se muestra antes y durante la grabación para que
   // nunca sorprenda un clip más corto que el original.
   const exportClipSeconds = (() => {
-    if (mediaType !== "video" || !(videoDuration > 0)) return null;
+    if (!exportsVideo || !(videoDuration > 0)) return null;
     const duration = videoDuration;
     const s = Math.max(0, Math.min(trimStart, Math.max(duration - 0.1, 0)));
     let e =
@@ -929,24 +1082,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     const isVideo = file.type.startsWith("video/");
     const isImage = file.type.startsWith("image/");
+    const isAudio = file.type.startsWith("audio/");
 
-    if (!isImage && !isVideo) {
-      showToast("Por favor sube un archivo de imagen o video válido.");
+    if (!isImage && !isVideo && !isAudio) {
+      showToast("Por favor sube un archivo de imagen, video o audio válido.");
       return;
     }
 
     const objectUrl = URL.createObjectURL(file);
     setMediaSrc(objectUrl);
-    setMediaType(isVideo ? "video" : "image");
+    setMediaType(isVideo ? "video" : isAudio ? "audio" : "image");
     setMediaName(file.name);
 
-    if (isVideo) {
+    if (isVideo || isAudio) {
+      // Los bytes crudos quedan a mano para la exportación acelerada (demux
+      // del MP4 o decodificación del audio: las dos rutas leen `raw`).
       uploadedVideoFileRef.current = file;
       setIsVideoPlaying(true);
-      const tempVideo = document.createElement("video");
-      tempVideo.src = objectUrl;
-      tempVideo.onloadedmetadata = () => {
-        const dur = Math.round((tempVideo.duration || 0) * 10) / 10;
+      const tempEl = document.createElement(isAudio ? "audio" : "video");
+      tempEl.preload = "metadata";
+      tempEl.src = objectUrl;
+      tempEl.onloadedmetadata = () => {
+        const dur = Math.round((tempEl.duration || 0) * 10) / 10;
         if (dur > 0) {
           setVideoDuration(dur);
           setTrimStart(0);
@@ -954,6 +1111,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       };
     }
+
+    if (isAudio) {
+      // Un audio es una nota hablada: entra en modo podcast, con sonido en la
+      // vista previa (silenciada no se puede juzgar el corte).
+      setPostDesign("podcast");
+      setIsMuted(false);
+      showToast(`Audio "${file.name}" cargado · modo podcast activo`);
+      return;
+    }
+
     showToast(
       `${isVideo ? "Video" : "Imagen"} "${file.name}" cargada correctamente`,
     );
@@ -965,6 +1132,47 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFile(e.dataTransfer.files[0]);
     }
+  };
+
+  // ── Onda del post-podcast ──
+  // Se calcula una sola vez por medio cargado (el audio subido, o el audio
+  // propio de un vídeo de fondo). Si el archivo no se puede decodificar —o
+  // está bloqueado por CORS al venir de otra web— la onda sale plana y el
+  // resto del post sigue funcionando: la barra de progreso no depende de ella.
+  const peaksSrcRef = useRef("");
+  useEffect(() => {
+    if (postDesign !== "podcast" || mediaType === "image") return;
+    if (!mediaSrc || mediaSrc === DEFAULT_MEDIA_SRC) return;
+    if (peaksSrcRef.current === mediaSrc) return;
+    peaksSrcRef.current = mediaSrc;
+    setAudioPeaks([]);
+    setAudioAnalyzing(true);
+    let dead = false;
+    void (async () => {
+      try {
+        const blob = await (await fetch(mediaSrc)).blob();
+        const peaks = await computeAudioPeaks(blob);
+        if (!dead) setAudioPeaks(peaks);
+      } catch {
+        if (!dead) setAudioPeaks([]);
+      } finally {
+        if (!dead) setAudioAnalyzing(false);
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [postDesign, mediaType, mediaSrc]);
+
+  /** Imagen de fondo del podcast: una imagen plana (blob/data/https). */
+  const handlePodcastBgFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      showToast("El fondo del podcast tiene que ser una imagen.");
+      return;
+    }
+    setPodcastBgSrc(URL.createObjectURL(file));
+    setPodcastBgName(file.name);
+    showToast(`Fondo "${file.name}" cargado`);
   };
 
   const LOCAL_STORAGE_KEY = "blacknews_post_generator_draft";
@@ -1018,6 +1226,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // Cierre de marca (Blacknews.mp4) al final del vídeo. Por defecto false.
         videoOutro,
         mediaUrl: mediaSrc.startsWith("blob:") ? null : mediaSrc,
+        // Diseño del post (noticias o podcast) y ajustes de la variante de
+        // audio. La onda se recalcula al cargar el archivo: aquí sólo va lo
+        // editable (serie, episodio y fondo, si no es un blob de esta sesión).
+        postDesign,
+        podcastSeries,
+        podcastEpisode,
+        podcastBg: podcastBgSrc.startsWith("blob:") ? null : podcastBgSrc,
+        podcastBgName: podcastBgSrc.startsWith("blob:") ? "" : podcastBgName,
       },
     };
   };
@@ -1152,10 +1368,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           !staleBlobMedia &&
           (/^data:video\//.test(mediaUrl) ||
             /\.(mp4|webm|mov|m4v|ogv)(\?|#|$)/i.test(mediaUrl));
+        // El audio del podcast sigue el mismo camino que el vídeo: sólo se
+        // restaura si la URL es reproducible (nunca un blob de otra sesión).
+        const isAudioMedia =
+          data.mediaSettings.mediaType === "audio" &&
+          !staleBlobMedia &&
+          (/^data:audio\//.test(mediaUrl) ||
+            /\.(mp3|m4a|wav|aac|ogg|oga|opus|flac)(\?|#|$)/i.test(mediaUrl));
         const videoFallback =
           data.mediaSettings.mediaType === "video" && !isVideoMedia;
         if (data.mediaSettings.mediaType)
-          setMediaType(isVideoMedia ? "video" : "image");
+          setMediaType(
+            isAudioMedia ? "audio" : isVideoMedia ? "video" : "image",
+          );
         if (data.mediaSettings.mediaName)
           setMediaName(
             videoFallback || staleBlobMedia
@@ -1178,6 +1403,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
         if (typeof data.mediaSettings.videoOutro === "boolean")
           setVideoOutro(data.mediaSettings.videoOutro);
+        // Variante podcast: diseño, serie, episodio y fondo (si la URL sigue
+        // viva). El diseño se aplica aunque el audio se haya perdido, para
+        // que un JSON siga abriendo el post tal y como se dejó.
+        if (
+          data.mediaSettings.postDesign === "podcast" ||
+          data.mediaSettings.postDesign === "news"
+        )
+          setPostDesign(data.mediaSettings.postDesign);
+        if (typeof data.mediaSettings.podcastSeries === "string")
+          setPodcastSeries(data.mediaSettings.podcastSeries);
+        if (typeof data.mediaSettings.podcastEpisode === "string")
+          setPodcastEpisode(data.mediaSettings.podcastEpisode);
+        const savedBg =
+          typeof data.mediaSettings.podcastBg === "string"
+            ? data.mediaSettings.podcastBg
+            : "";
+        if (savedBg && !/^blob:/.test(savedBg)) {
+          setPodcastBgSrc(savedBg);
+          if (typeof data.mediaSettings.podcastBgName === "string")
+            setPodcastBgName(data.mediaSettings.podcastBgName);
+        }
         if (mediaUrl && !staleBlobMedia) setMediaSrc(mediaUrl);
         else if (videoFallback || staleBlobMedia)
           setMediaSrc(DEFAULT_MEDIA_SRC);
@@ -1902,6 +2148,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     maxVideoDuration,
     videoOutro,
     postFormat,
+    postDesign,
+    podcastSeries,
+    podcastEpisode,
+    podcastBgSrc,
     tvShowLive,
     tvShowClock,
     tvIntro,
@@ -1942,12 +2192,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     };
   }, []);
 
-  // Sync video speed with preview video element
+  // Sync video speed with preview media element (el <audio> del podcast también)
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = videoSpeed;
-    }
-  }, [videoSpeed]);
+    const el = activeMediaEl();
+    if (el) el.playbackRate = videoSpeed;
+  }, [videoSpeed, mediaType]);
 
   // Global paste listener (Ctrl+V / Cmd+V for images)
   useEffect(() => {
@@ -2613,9 +2862,309 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // Render high-res canvas (1080×1350 en 4:5, 1080×1920 en 9:16, 1920×1080 en 16:9)
+  // ── Post podcast: variante AMOLED minimalista ──────────────────────────
+  // Composición propia para las notas en audio: fondo negro absoluto (o el
+  // vídeo/imagen de fondo oscurecido), cabecera de serie, titular corto, onda
+  // con reloj y el pie de siempre. Todo lo que se ve depende de `outTime`, así
+  // que la vista previa y el archivo exportado coinciden fotograma a fotograma.
+  const drawPodcastFrame = (
+    ctx: CanvasRenderingContext2D,
+    opts: {
+      mediaElement?: HTMLImageElement | HTMLVideoElement | HTMLAudioElement;
+      frameOverride?: {
+        source: CanvasImageSource;
+        width: number;
+        height: number;
+        rotation?: number;
+      };
+      /** Segundo dentro del clip: mueve reloj, onda y barra de progreso. */
+      outTime?: number;
+      /** La vista previa pinta el estado real; el archivo, siempre sonando. */
+      playing?: boolean;
+      /** Banderas ya cargadas (imagen o texto), igual que en el resto. */
+      flagsData?: Array<{
+        code: string;
+        img: HTMLImageElement | null;
+        text: string;
+      }>;
+    },
+  ) => {
+    const { mediaElement, frameOverride, outTime, playing } = opts;
+    const flagsData = opts.flagsData ?? [];
+    const W = POST_W;
+    const H = POST_H;
+    const isWide = postFormat === "16:9";
+    const isTall = postFormat === "9:16";
+    // Unidad tipográfica: 4:5 y 9:16 van a 1080 de ancho, 16:9 crece algo
+    // (no en proporción: su alto es 1080 y el texto no puede dispararse).
+    const u = isWide ? 1.12 : isTall ? 1.04 : 1;
+    const padX = isWide ? 104 : Math.round(84 * u);
+    const padTop = isWide ? 60 : isTall ? 150 : Math.round(84 * u);
+    const padBottom = isWide ? 56 : isTall ? 150 : Math.round(80 * u);
+    const contentW = W - padX * 2;
+
+    // Reloj y progreso: segundos dentro del clip (0 = arranque del recorte).
+    const dur = trimEnd > trimStart ? trimEnd - trimStart : videoDuration;
+    const cur = Math.min(Math.max(outTime ?? 0, 0), Math.max(dur, 0));
+    const progress = dur > 0 ? Math.min(1, cur / dur) : 0;
+
+    // ── Fondo: negro absoluto o medio oscurecido ──
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, W, H);
+    // El <audio> no aporta píxeles: el fondo, si lo hay, llega como <img>.
+    const bgEl = mediaElement;
+    const bgIsAudio =
+      !!bgEl && (bgEl as HTMLAudioElement).tagName.toLowerCase() === "audio";
+    const bgSrc: CanvasImageSource | undefined = frameOverride
+      ? frameOverride.source
+      : bgEl && !bgIsAudio
+        ? (bgEl as CanvasImageSource)
+        : undefined;
+    if (bgSrc) {
+      const bgW = frameOverride
+        ? frameOverride.width
+        : (bgEl as HTMLVideoElement).videoWidth ||
+          (bgEl as HTMLImageElement).naturalWidth ||
+          W;
+      const bgH = frameOverride
+        ? frameOverride.height
+        : (bgEl as HTMLVideoElement).videoHeight ||
+          (bgEl as HTMLImageElement).naturalHeight ||
+          H;
+      ctx.save();
+      ctx.filter = getCanvasFilterString();
+      drawCoverFrame(
+        ctx,
+        bgSrc,
+        bgW,
+        bgH,
+        frameOverride?.rotation ?? 0,
+        W,
+        H,
+      );
+      ctx.restore();
+      // Velo: el texto manda. Con vídeo en movimiento basta con 58 % para que
+      // la onda se lea sin perder el ambiente de la toma.
+      ctx.fillStyle = "rgba(0,0,0,0.58)";
+      ctx.fillRect(0, 0, W, H);
+    }
+    // Ajuste inferior a negro puro: el reloj y el pie descansan sobre negro,
+    // sea cual sea el fondo (y con fondo negro ni se nota).
+    const fade = ctx.createLinearGradient(0, H * 0.42, 0, H);
+    fade.addColorStop(0, "rgba(0,0,0,0)");
+    fade.addColorStop(1, "rgba(0,0,0,0.92)");
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+
+    // ── Cabecera: marca a la izquierda, serie a la derecha ──
+    let y = padTop;
+    const markSize = Math.round(13 * u);
+    ctx.fillStyle = "#34d399";
+    ctx.fillRect(padX, y + Math.round(6 * u), markSize, markSize);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `600 ${Math.round(23 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(0.8 * u)}px`;
+    ctx.fillText("BlackNews", padX + markSize + Math.round(11 * u), y);
+    ctx.font = `500 ${Math.round(14 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(3.4 * u)}px`;
+    ctx.fillStyle = "#737373";
+    ctx.textAlign = "right";
+    ctx.fillText(
+      (podcastSeries || "Noticias en 1 minuto").toUpperCase(),
+      W - padX,
+      y + Math.round(6 * u),
+    );
+    ctx.textAlign = "left";
+    ctx.letterSpacing = "0px";
+
+    // ── Píldora de episodio ──
+    y += Math.round(46 * u);
+    const epText = `EP. ${(podcastEpisode || "01").trim()}`;
+    ctx.font = `600 ${Math.round(15 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(2 * u)}px`;
+    const epW = ctx.measureText(epText).width + Math.round(30 * u);
+    const epH = Math.round(38 * u);
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = Math.max(1, Math.round(1.5 * u));
+    ctx.beginPath();
+    if (typeof ctx.roundRect === "function") {
+      ctx.roundRect(padX, y, epW, epH, epH / 2);
+    } else {
+      ctx.rect(padX, y, epW, epH);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#d4d4d4";
+    ctx.fillText(epText, padX + Math.round(15 * u), y + Math.round(9 * u));
+    ctx.letterSpacing = "0px";
+    y += epH;
+
+    // ── Titular (corto: es el gancho de la nota, no el cuerpo) ──
+    const titleFs = Math.round((isWide ? 62 : 64) * u);
+    ctx.font = `700 ${titleFs}px 'Lexend', sans-serif`;
+    const titleLines = capLines(
+      wrapText(ctx, title || "Titular de la nota…", contentW),
+      4,
+    );
+    const titleLH = Math.round(titleFs * 1.16);
+    y += Math.round(44 * u);
+    ctx.fillStyle = "#ffffff";
+    titleLines.forEach((line, i) => {
+      ctx.fillText(line, padX, y + i * titleLH);
+    });
+    y += titleLines.length * titleLH;
+
+    // ── Bajada: el guion resumido, breve ──
+    if (description.trim()) {
+      const descFs = Math.round(25 * u);
+      ctx.font = `400 ${descFs}px 'Lexend', sans-serif`;
+      const descLines = capLines(
+        wrapText(ctx, description.trim(), contentW),
+        3,
+      );
+      const descLH = Math.round(descFs * 1.45);
+      y += Math.round(24 * u);
+      ctx.fillStyle = "#a1a1aa";
+      descLines.forEach((line, i) => {
+        ctx.fillText(line, padX, y + i * descLH);
+      });
+    }
+
+    // ── Reproductor: botón, onda y reloj ──
+    const footH = Math.round(30 * u);
+    const footY = H - padBottom - footH;
+    const clockY = footY - Math.round(62 * u);
+    const waveH = Math.round((isTall ? 130 : 110) * u);
+    const waveBottom = clockY - Math.round(22 * u);
+    const waveTop = waveBottom - waveH;
+    const badgeR = Math.round(32 * u);
+    const badgeCx = padX + badgeR;
+    const waveX = padX + badgeR * 2 + Math.round(28 * u);
+    const waveW = W - padX - waveX;
+
+    // Disco del botón (indica "esto suena").
+    ctx.beginPath();
+    ctx.arc(badgeCx, waveTop + waveH / 2, badgeR, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.26)";
+    ctx.lineWidth = Math.max(1, Math.round(1.5 * u));
+    ctx.stroke();
+    // Glifo: barras (sonando) o triángulo (en pausa).
+    ctx.fillStyle = "#ffffff";
+    const gcx = badgeCx;
+    const gcy = waveTop + waveH / 2;
+    if (playing !== false) {
+      const bw = Math.round(5.5 * u);
+      const bh = Math.round(26 * u);
+      const gap = Math.round(9 * u);
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(gcx - gap - bw, gcy - bh / 2, bw, bh, bw / 2);
+        ctx.roundRect(gcx + gap, gcy - bh / 2, bw, bh, bw / 2);
+      } else {
+        ctx.rect(gcx - gap - bw, gcy - bh / 2, bw, bh);
+        ctx.rect(gcx + gap, gcy - bh / 2, bw, bh);
+      }
+      ctx.fill();
+    } else {
+      const s = Math.round(13 * u);
+      ctx.beginPath();
+      ctx.moveTo(gcx - s * 0.6, gcy - s);
+      ctx.lineTo(gcx + s, gcy);
+      ctx.lineTo(gcx - s * 0.6, gcy + s);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Onda: barras fijas (picos del archivo) con las ya sonadas en blanco.
+    const peaks = audioPeaks.length > 0 ? audioPeaks : null;
+    const bars = peaks ? peaks.length : PODCAST_BARS;
+    const slotW = waveW / bars;
+    const barW = Math.max(2, Math.min(Math.round(slotW * 0.56), Math.round(9 * u)));
+    const playedTo = progress * bars;
+    for (let i = 0; i < bars; i++) {
+      const peak = peaks ? Math.max(0.06, peaks[i]) : 0.28;
+      const bh = Math.max(Math.round(6 * u), Math.round(peak * waveH));
+      const bx = Math.round(waveX + i * slotW + (slotW - barW) / 2);
+      const by = Math.round(waveTop + (waveH - bh) / 2);
+      ctx.fillStyle = i < playedTo ? "#ffffff" : "rgba(255,255,255,0.16)";
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(bx, by, barW, bh, barW / 2);
+      } else {
+        ctx.rect(bx, by, barW, bh);
+      }
+      ctx.fill();
+    }
+    // Cabeza de lectura.
+    const headX = Math.round(waveX + progress * waveW);
+    ctx.fillStyle = "#34d399";
+    ctx.fillRect(
+      Math.min(headX, W - padX - Math.round(2 * u)),
+      waveTop - Math.round(6 * u),
+      Math.round(2 * u),
+      waveH + Math.round(12 * u),
+    );
+
+    // Reloj: transcurrido a la izquierda, total a la derecha.
+    ctx.font = `500 ${Math.round(21 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(0.6 * u)}px`;
+    ctx.fillStyle = "#8a8a8a";
+    ctx.fillText(fmtPodcastClock(cur), waveX, clockY);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#52525b";
+    ctx.fillText(fmtPodcastClock(dur), W - padX, clockY);
+    ctx.textAlign = "left";
+    ctx.letterSpacing = "0px";
+
+    // ── Pie: categoría y países a la izquierda, marca a la derecha ──
+    ctx.font = `500 ${Math.round(17 * u)}px 'Lexend', sans-serif`;
+    ctx.letterSpacing = `${Math.round(2 * u)}px`;
+    ctx.fillStyle = "#a1a1aa";
+    let fx = padX;
+    const catText = (category || "GEOPOLÍTICA").trim().toUpperCase();
+    ctx.fillText(catText, fx, footY + Math.round(4 * u));
+    fx += ctx.measureText(catText).width;
+    const flagSize = Math.round(20 * u);
+    for (const f of flagsData) {
+      if (countryFormat === "names") {
+        ctx.fillStyle = "#737373";
+        ctx.fillText(`  ·  ${f.text}`, fx, footY + Math.round(4 * u));
+        fx += ctx.measureText(`  ·  ${f.text}`).width;
+        continue;
+      }
+      if (!f.img) continue;
+      ctx.fillStyle = "#737373";
+      ctx.fillText("  ·  ", fx, footY + Math.round(4 * u));
+      fx += ctx.measureText("  ·  ").width;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(fx, footY + Math.round(3 * u), flagSize * 1.45, flagSize);
+      ctx.clip();
+      ctx.drawImage(f.img, fx, footY + Math.round(3 * u), flagSize * 1.45, flagSize);
+      ctx.restore();
+      fx += flagSize * 1.45 + Math.round(6 * u);
+    }
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#52525b";
+    ctx.fillText("BlackNews", W - padX, footY + Math.round(4 * u));
+    ctx.textAlign = "left";
+    ctx.letterSpacing = "0px";
+
+    // ── Barra de progreso a sangre ──
+    const barY = H - Math.round(6 * u);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(0, barY, W, Math.round(6 * u));
+    ctx.fillStyle = "#34d399";
+    ctx.fillRect(0, barY, Math.round(W * progress), Math.round(6 * u));
+  };
+
   const renderToCanvas = async (
     targetCanvas: HTMLCanvasElement,
-    mediaElement?: HTMLImageElement | HTMLVideoElement,
+    mediaElement?: HTMLImageElement | HTMLVideoElement | HTMLAudioElement,
     cachedFlags?: Array<{
       code: string;
       img: HTMLImageElement | null;
@@ -2689,11 +3238,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.fillRect(0, 0, W, H);
     }
 
+    // Post podcast: variante AMOLED. Manda su propio diseño en los tres
+    // formatos (también en 16:9, donde no hay señal de televisión).
+    if (postDesign === "podcast") {
+      drawPodcastFrame(ctx, {
+        mediaElement,
+        frameOverride,
+        outTime,
+        playing: true,
+        flagsData,
+      });
+      return;
+    }
+
     // Formato TV 16:9: composición propia de señal de televisión.
     if (postFormat === "16:9") {
       drawTvFrame(
         ctx,
-        mediaElement,
+        mediaElement as HTMLImageElement | HTMLVideoElement,
         frameOverride,
         isOverlayOnly,
         flagsData,
@@ -3083,7 +3645,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
-      if (mediaType === "video" && videoRef.current) {
+      if (postDesign === "podcast") {
+        // Post podcast: el PNG es el frame que se ve en la vista previa, con
+        // el reloj de la onda en su sitio actual.
+        const el = activeMediaEl();
+        const cur = el ? Math.max(0, el.currentTime - trimStart) : 0;
+        let bg: HTMLImageElement | HTMLVideoElement | null = null;
+        if (mediaType === "video") bg = videoRef.current;
+        else if (mediaType === "audio") bg = podcastBgRef.current;
+        else bg = await loadImageSafely(mediaSrc);
+        await renderToCanvas(
+          canvas,
+          bg ?? undefined,
+          podcastFlags,
+          false,
+          undefined,
+          cur,
+        );
+      } else if (mediaType === "video" && videoRef.current) {
         // Con la intro activa el PNG sale en el estado "HOLD" de la intro
         // (titular visible sobre la imagen en B&N): es la cara del clip.
         await renderToCanvas(
@@ -3488,9 +4067,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
-      let mediaEl: HTMLImageElement | HTMLVideoElement | undefined = undefined;
+      let mediaEl:
+        | HTMLImageElement
+        | HTMLVideoElement
+        | HTMLAudioElement
+        | undefined = undefined;
       if (mediaType === "video" && videoRef.current) {
         mediaEl = videoRef.current;
+      } else if (mediaType === "audio") {
+        // Post podcast: el fondo (si lo hay) es la imagen plana; la <audio>
+        // no aporta píxeles y el pintor se queda en negro absoluto.
+        mediaEl = podcastBgRef.current ?? undefined;
       } else {
         const img = await loadImageSafely(mediaSrc);
         if (img && img.complete && img.naturalWidth > 0) mediaEl = img;
@@ -3499,10 +4086,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       await renderToCanvas(
         canvas,
         mediaEl,
-        undefined,
+        postDesign === "podcast" ? podcastFlags : undefined,
         false,
         undefined,
-        tvIntro ? tvIntroDur * 0.5 : 0,
+        postDesign === "podcast"
+          ? Math.max(0, (activeMediaEl()?.currentTime ?? 0) - trimStart)
+          : tvIntro
+            ? tvIntroDur * 0.5
+            : 0,
       );
 
       canvas.toBlob(async (blob) => {
@@ -3709,9 +4300,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     if (isCancelledRef.current) return "cancelled";
     if (!raw || raw.byteLength < 256) return "unsupported";
+    // Modo podcast: el medio es un audio puro, no hay pista de vídeo que
+    // demuxear. Los frames salen pintados ranura a ranura (ver feed) y la
+    // pista de sonido viene directamente del archivo.
+    const audioOnly = mediaType === "audio";
+    // En modo podcast la exportación nunca sale muda: el sonido ES el
+    // contenido. `isMuted` sólo goberna la vista previa.
+    const mutedForExport = audioOnly ? false : isMuted;
     // Solo MP4/MOV (primer átomo "ftyp"). WebM y demás → ruta clásica.
     try {
-      if (new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== "ftyp")
+      if (!audioOnly && new TextDecoder().decode(new Uint8Array(raw, 4, 4)) !== "ftyp")
         return "unsupported";
     } catch {
       return "unsupported";
@@ -3743,19 +4341,32 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
       // ── 1. Demux: muestras de vídeo en orden de decodificación ──
-      const clip = await demuxAvcClip(raw);
+      // En modo podcast no hay pista de vídeo: no se demuxea nada y la rejilla
+      // de frames se pinta a mano (bloque «ranura» más abajo).
+      const clip = audioOnly ? null : await demuxAvcClip(raw);
       snap("demux");
-      if (!clip) return "unsupported";
-      const { samples, description, rot, codec } = clip;
+      if (!clip && !audioOnly) return "unsupported";
+      const { samples, description, rot, codec } = clip ?? {
+        samples: [] as DemuxedAvcClip["samples"],
+        ts: 1,
+        srcDur: 0,
+        description: new Uint8Array(0),
+        rot: 0,
+        codec: "avc1.640028",
+      };
 
       // ── 2. Ventana de exportación (mismo criterio que la ruta clásica) ──
-      const ts = clip.ts;
-      const srcDur = clip.srcDur;
+      const ts = clip?.ts ?? 1;
+      const srcDur = clip?.srcDur ?? 0;
       // En MP4 fragmentados (p. ej. los que graba MediaRecorder) el moov
       // inicial sólo declara el primer segmento y la pista "dura" 0,2 s
       // aunque el archivo tenga el clip entero: el <video> sí ve la duración
-      // real, así que nos quedamos con el mayor de los dos.
-      const elemDur = Number(videoRef.current?.duration ?? videoDuration);
+      // real, así que nos quedamos con el mayor de los dos. En modo podcast
+      // la duración la declara el <audio>.
+      const elemDur = Number(
+        (audioOnly ? audioRef.current?.duration : videoRef.current?.duration) ??
+          videoDuration,
+      );
       const duration =
         Number.isFinite(elemDur) && elemDur > srcDur
           ? elemDur
@@ -3783,13 +4394,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // B/N y sin sonido durante tvIntroDur s (dando vueltas si es más corto)
       // y, al terminar, vuelve a empezar en color con sonido — la misma
       // estructura que la ruta clásica. La salida total es introPad + outDur.
-      const introPad = tvIntro ? tvIntroDur : 0;
+      // El post-podcast no es una señal de televisión: nunca suma esa pasada.
+      const introPad =
+        tvIntro && !audioOnly && postDesign !== "podcast" ? tvIntroDur : 0;
 
       const inRange = samples.filter((s) => {
         const t = s.cts / ts;
         return t >= start - 0.05 && t <= end + 0.05;
       });
-      if (inRange.length < 2)
+      // En modo podcast `inRange` queda vacío (no hay pista de vídeo): los
+      // frames se pintan en el bloque «ranura».
+      if (!audioOnly && inRange.length < 2)
         throw new Error("No hay fotogramas en el rango seleccionado.");
       const outUs = (s: (typeof inRange)[number]) =>
         Math.max(0, Math.round((s.cts / ts - start) * (1 / speed) * 1e6));
@@ -3798,7 +4413,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const sortedPts = inRange.map(outUs).sort((a, b) => a - b);
       const syncPts = new Set<number>();
       for (const s of inRange) if (s.is_sync) syncPts.add(outUs(s));
-      syncPts.add(sortedPts[0]);
+      if (sortedPts.length > 0) syncPts.add(sortedPts[0]);
       // Orden de la salida: pasada de intro (vueltas al clip hasta introPad)
       // y después la pasada completa. Cada chunk se sella con su tiempo de
       // SALIDA (µs): el decodificador lo entrega en ese orden y, como sólo se
@@ -3819,7 +4434,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       // ── 3. Audio: decodificación completa + corte/velocidad en modo offline ──
       let renderedAudio: AudioBuffer | null = null;
-      if (!isMuted) {
+      if (!mutedForExport) {
         try {
           const decoderCtx = new OfflineAudioContext(1, 1, 44100);
           const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
@@ -3850,7 +4465,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (outroRaw.byteLength > 256) {
             outroClip = await demuxAvcClip(outroRaw);
             if (outroClip && outroClip.samples.length < 2) outroClip = null;
-            if (outroClip && !isMuted) {
+            if (outroClip && !mutedForExport) {
               try {
                 const probe = new OfflineAudioContext(1, 1, 44100);
                 const full = await probe.decodeAudioData(outroRaw.slice(0));
@@ -3885,7 +4500,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // El audio de la salida cubre todo el cierre: su propio audio o silencio.
       // En silencio (isMuted) no se genera pista de audio: mudo es mudo.
       const outroAudioLen =
-        isMuted || !outroClip
+        mutedForExport || !outroClip
           ? 0
           : outroAudio
             ? outroAudio.length
@@ -4179,43 +4794,75 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       };
 
-      decoder = new VideoDecoder({
-        output: (frame) => {
-          decodedQueue.push({ frame, outro: false });
-          void processQueue();
-          notify();
-        },
-        error: failWith,
-      });
-      decoder.configure({ codec, description });
+      if (audioOnly) {
+        // Sin pista de vídeo que decodificar: cada ranura de la rejilla se
+        // pinta a mano con drawPodcastFrame (fondo, onda y reloj en su
+        // instante) y se emite. Sólo este bucle escribe en el codificador,
+        // así que el orden de las ranuras es estricto y el audio calza.
+        const bgEl = podcastBgRef.current ?? undefined;
+        for (let slot = 0; slot < outroBaseSlot; slot++) {
+          if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
+          if (fail) throw fail;
+          await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 6);
+          await renderToCanvas(
+            canvas,
+            bgEl,
+            cachedFlags,
+            false,
+            undefined,
+            slot / targetFps,
+          );
+          paintedOnce = true;
+          // Huecos previos: se rellenan antes de emitir este fotograma para
+          // que los huecos muestren el cuadro anterior (sin adelantar el
+          // cambio) y el reloj no se despegue del audio.
+          await padUntil(slot);
+          emitSlot(slot);
+        }
+        snap("feed");
+        await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 0);
+        snap("encode");
+        // Borde exacto clip → cierre (sin cierre, no pinta nada).
+        await padUntil(outroBaseSlot);
+      } else {
+        decoder = new VideoDecoder({
+          output: (frame) => {
+            decodedQueue.push({ frame, outro: false });
+            void processQueue();
+            notify();
+          },
+          error: failWith,
+        });
+        decoder.configure({ codec, description });
 
-      for (const item of feed) {
-        await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
-        (decoder as VideoDecoder).decode(
-          new EncodedVideoChunk({
-            type: item.s.is_sync ? "key" : "delta",
-            timestamp: item.outUs,
-            duration: Math.max(
-              1,
-              Math.round((item.s.duration / ts) * (1 / speed) * 1e6),
-            ),
-            data: item.s.data,
-          }),
+        for (const item of feed) {
+          await waitWhile(() => (decoder as VideoDecoder).decodeQueueSize > 32);
+          (decoder as VideoDecoder).decode(
+            new EncodedVideoChunk({
+              type: item.s.is_sync ? "key" : "delta",
+              timestamp: item.outUs,
+              duration: Math.max(
+                1,
+                Math.round((item.s.duration / ts) * (1 / speed) * 1e6),
+              ),
+              data: item.s.data,
+            }),
+          );
+        }
+        await (decoder as VideoDecoder).flush();
+        snap("feed");
+        await waitWhile(
+          () =>
+            decodedQueue.length > 0 ||
+            draining ||
+            (encoder as VideoEncoder).encodeQueueSize > 0,
         );
+        snap("encode");
+        // Borde exacto clip → cierre: si a la fuente le sobraron o le faltaron
+        // fotogramas respecto a la rejilla, el tramo principal se iguala para
+        // que el audio del cierre arranque justo cuando aparece el sello.
+        await padUntil(outroBaseSlot);
       }
-      await (decoder as VideoDecoder).flush();
-      snap("feed");
-      await waitWhile(
-        () =>
-          decodedQueue.length > 0 ||
-          draining ||
-          (encoder as VideoEncoder).encodeQueueSize > 0,
-      );
-      snap("encode");
-      // Borde exacto clip → cierre: si a la fuente le sobraron o le faltaron
-      // fotogramas respecto a la rejilla, el tramo principal se iguala para
-      // que el audio del cierre arranque justo cuando aparece el sello.
-      await padUntil(outroBaseSlot);
 
       // ── 6b. Cierre opcional: se decodifica DESPUÉS de drenar el clip
       //      principal, para que sus fotogramas entren en orden al mismo
@@ -4382,13 +5029,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   const handleExportVideo = async () => {
-    if (mediaType !== "video") return;
-    const video = videoRef.current;
+    // La imagen exporta PNG; el vídeo y el audio (modo podcast) exportan vídeo:
+    // las redes no admiten audio suelto.
+    if (mediaType !== "video" && mediaType !== "audio") return;
+    const video = activeMediaEl();
     const canvas = hiddenCanvasRef.current;
     if (!video || !canvas) {
-      showToast("Carga un video antes de exportar.");
+      showToast("Carga un video o un audio antes de exportar.");
       return;
     }
+    // En modo podcast la exportación nunca sale muda: el sonido ES el
+    // contenido. `isMuted` sólo goberna la vista previa.
+    const mutedForExport = mediaType === "audio" ? false : isMuted;
+    // Elemento que aporta el FONDO al lienzo: el vídeo, la imagen plana del
+    // podcast o nada (audio puro → negro absoluto).
+    const bgEl:
+      | HTMLImageElement
+      | HTMLVideoElement
+      | HTMLAudioElement
+      | undefined =
+      mediaType === "audio" ? podcastBgRef.current ?? undefined : video;
 
     isCancelledRef.current = false;
 
@@ -4490,7 +5150,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
-      await renderToCanvas(canvas, video, cachedFlags, false, undefined, 0);
+      await renderToCanvas(canvas, bgEl, cachedFlags, false, undefined, 0);
       setRecordingProgress(10);
 
       video.pause();
@@ -4498,7 +5158,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       video.playbackRate = videoSpeed;
       // Con intro, la salida arranca en silencio; `step()` abre el audio al
       // terminar la intro, cuando el vídeo reinicia en color con sonido.
-      video.muted = isMuted || tvIntro;
+      video.muted = mutedForExport || tvIntro;
 
       const seekTo = (t: number) =>
         new Promise<void>((resolve) => {
@@ -4523,9 +5183,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
 
       let audioTrack: MediaStreamTrack | null = null;
-      if (!isMuted) {
+      if (!mutedForExport) {
         try {
-          let graph = audioGraphRef.current;
+          // Un MediaElementSource por elemento (sólo se puede crear uno): el
+          // <video> y el <audio> del podcast tienen cada uno su grafo cacheado.
+          const graphRef =
+            mediaType === "audio" ? audioOnlyGraphRef : audioGraphRef;
+          let graph = graphRef.current;
           if (!graph) {
             const audioCtx = new AudioContext();
             const source = audioCtx.createMediaElementSource(video);
@@ -4533,7 +5197,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             source.connect(dest);
             source.connect(audioCtx.destination);
             graph = { ctx: audioCtx, dest };
-            audioGraphRef.current = graph;
+            graphRef.current = graph;
           }
           if (graph.ctx.state === "suspended") await graph.ctx.resume();
           audioTrack = graph.dest.stream.getAudioTracks()[0] ?? null;
@@ -4768,14 +5432,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           try {
             video.pause();
           } catch {}
-          el.muted = isMuted;
+          el.muted = mutedForExport;
           rewindOutro(el);
           // El sello entra en la misma pista de audio que el clip: el nodo
           // MediaElementSource de un elemento sólo se crea una vez, por eso
           // queda cacheado en outroAudioNodeRef.
-          if (!isMuted && audioGraphRef.current) {
+          const outroGraph = (
+            mediaType === "audio" ? audioOnlyGraphRef : audioGraphRef
+          ).current;
+          if (!mutedForExport && outroGraph) {
             try {
-              const graph = audioGraphRef.current;
+              const graph = outroGraph;
               if (
                 !outroAudioNodeRef.current ||
                 outroAudioNodeRef.current.el !== el
@@ -4935,13 +5602,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           // Segundo de salida (intro TV16:9): manda el render y el audio.
           const outT = outTNow();
           if (tvIntro) {
-            const wantMuted = isMuted || outT < tvIntroDur;
+            const wantMuted = mutedForExport || outT < tvIntroDur;
             if (video.muted !== wantMuted) video.muted = wantMuted;
           }
           const tRender = performance.now();
           await renderToCanvas(
             canvas,
-            video,
+            bgEl,
             cachedFlags,
             false,
             undefined,
@@ -5286,7 +5953,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // al apagarlo (o al cambiar a imagen) se corta de inmediato, por si estaba
   // reproduciéndose en la vista previa.
   useEffect(() => {
-    if (videoOutro && mediaType === "video") return;
+    if (videoOutro && exportsVideo) return;
     const el = outroRef.current;
     if (el) {
       try {
@@ -5297,7 +5964,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (outroActiveRef.current) {
       outroActiveRef.current = false;
       setOutroActive(false);
-      const main = videoRef.current;
+      const main = activeMediaEl();
       if (main && !isRecordingRef.current) main.play().catch(() => {});
     }
   }, [videoOutro, mediaType]);
@@ -5313,7 +5980,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (!outroActiveRef.current) return;
     outroActiveRef.current = false;
     setOutroActive(false);
-    const main = videoRef.current;
+    const main = activeMediaEl();
     if (main) {
       if (trimEnd > trimStart) main.currentTime = trimStart;
       main.play().catch(() => {});
@@ -5331,7 +5998,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       el.currentTime = 0;
     } catch {}
     el.play().catch(() => {});
-    videoRef.current?.pause();
+    activeMediaEl()?.pause();
     setIsVideoPlaying(true);
     return true;
   };
@@ -5353,7 +6020,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const writePreviewPos = (raw: number, setInput: boolean) => {
     const label = previewTimeRef.current;
     const input = previewPosRef.current;
-    const v = videoRef.current;
+    const v = activeMediaEl();
     const dur = videoDuration || (v ? v.duration : 0) || 0;
     const t = Math.min(Math.max(raw, 0), dur);
     if (input) {
@@ -5370,14 +6037,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // ventana oculta y así barra y contador siguen al vídeo igualmente.
   const syncPreviewPos = () => {
     if (scrubbingRef.current || isRecordingRef.current) return;
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (!v) return;
     if (Math.abs(v.currentTime - previewPosLastRef.current) < 0.02) return;
     writePreviewPos(v.currentTime, true);
   };
 
   const seekPreview = (target: number) => {
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (!v || isRecordingRef.current) return;
     const dur = videoDuration || v.duration || 0;
     if (!(dur > 0)) return;
@@ -5415,7 +6082,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   const nudgePreview = (delta: number) => {
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (v) seekPreview(v.currentTime + delta);
   };
 
@@ -5423,7 +6090,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // posición no se escapa de las manos) y, al soltar, sólo se retoma si el
   // destino cae dentro del recorte.
   const startScrub = () => {
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (!v || isRecordingRef.current) return;
     scrubbingRef.current = true;
     scrubResumeRef.current = outroActiveRef.current || !v.paused;
@@ -5437,7 +6104,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     scrubbingRef.current = false;
     // Sin movimiento (la barra no emitió input): el sello sigue mandando.
     if (outroActiveRef.current) return;
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (!v || isRecordingRef.current) return;
     const dur = videoDuration || v.duration || 0;
     const lo = trimEnd > trimStart ? trimStart : 0;
@@ -5469,7 +6136,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
       return;
     }
-    const v = videoRef.current;
+    const v = activeMediaEl();
     if (!v) return;
     if (v.paused) {
       v.play().catch(() => {});
@@ -5568,6 +6235,99 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // El hueco inferior deja sitio a la barra flotante del asistente y a su
   // panel de contexto: crece con la altura real del panel (que el usuario
   // puede estirar), para que nada quede tapado ni inalcanzable detrás.
+  // ── Vista previa del post-podcast ──
+  // Se pinta con el MISMO drawPodcastFrame del archivo exportado, en un lienzo
+  // real escalado a tamaño de tarjeta: lo que se ve es literalmente el frame
+  // que saldrá, onda y reloj incluidos. El rAF sólo repinta cuando avanza el
+  // reloj del medio, así que en pausa la tarjeta no gasta.
+  const podcastCanvasRef = useRef<HTMLCanvasElement>(null);
+  const podcastRenderRef = useRef<() => void>(() => {});
+  // Banderas del pie, cargadas con el mismo pipeline que el resto de formatos.
+  const [podcastFlags, setPodcastFlags] = useState<
+    Array<{ code: string; img: HTMLImageElement | null; text: string }>
+  >([]);
+  useEffect(() => {
+    if (postDesign !== "podcast") return;
+    let dead = false;
+    void (async () => {
+      const data = await Promise.all(
+        selectedCountries.map(async (c) => ({
+          code: c.code,
+          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          text:
+            countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        })),
+      );
+      if (!dead) setPodcastFlags(data);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [postDesign, countryFormat, selectedCountries]);
+
+  const paintPodcastPreview = () => {
+    const canvas = podcastCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const el = activeMediaEl();
+    const cur = el ? Math.max(0, el.currentTime - trimStart) : 0;
+    // Fondo: el vídeo a sangre, o la imagen plana (en audio puro, la <audio>
+    // no aporta píxeles y el pintor se queda en negro absoluto).
+    const bgEl: HTMLImageElement | HTMLVideoElement | HTMLAudioElement | null =
+      mediaType === "audio" ? podcastBgRef.current : videoRef.current;
+    drawPodcastFrame(ctx, {
+      mediaElement: bgEl ?? undefined,
+      outTime: cur,
+      playing: !!el && !el.paused,
+      flagsData: podcastFlags,
+    });
+  };
+  podcastRenderRef.current = paintPodcastPreview;
+
+  // Reloj de la vista previa: repinta sólo cuando cambia el tiempo de
+  // reproducción (en pausa la tarjeta se queda en su fotograma).
+  useEffect(() => {
+    if (postDesign !== "podcast") return;
+    let raf = 0;
+    let last = -1;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const el = activeMediaEl();
+      const t = el ? el.currentTime : 0;
+      if (Math.abs(t - last) < 0.02) return;
+      last = t;
+      podcastRenderRef.current();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [postDesign, mediaType]);
+
+  // Cambios estáticos (titular, onda, fondo, banderas, formato…): repintado
+  // inmediato, sin esperar a que se mueva el reloj.
+  useEffect(() => {
+    if (postDesign !== "podcast") return;
+    podcastRenderRef.current();
+  }, [
+    postDesign,
+    mediaType,
+    podcastFlags,
+    audioPeaks,
+    title,
+    description,
+    category,
+    podcastSeries,
+    podcastEpisode,
+    podcastBgSrc,
+    trimStart,
+    trimEnd,
+    videoDuration,
+    postFormat,
+    filter,
+    brightness,
+    contrast,
+  ]);
+
   return (
     <div
       className="font-['Lexend',sans-serif] space-y-8"
@@ -5594,6 +6354,60 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }}
         aria-hidden="true"
       />
+
+      {/* Medio del modo podcast: el <audio> (fuente de sonido y reloj de la
+          vista previa) y la imagen de fondo opcional. Fuera de pantalla pero
+          montados: la exportación clásica lee el elemento y la ruta rápida
+          sus bytes. */}
+      <audio
+        ref={audioRef}
+        src={mediaType === "audio" ? mediaSrc : undefined}
+        preload="auto"
+        muted={isMuted}
+        loop
+        className="hidden"
+        onLoadedMetadata={(e) => {
+          const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
+          if (dur > 0) {
+            setVideoDuration(dur);
+            if (trimEnd === 0 || trimEnd > dur) setTrimEnd(dur);
+          }
+        }}
+        onPlay={() => setIsVideoPlaying(true)}
+        onPause={() => setIsVideoPlaying(false)}
+        onTimeUpdate={(e) => {
+          // Durante la exportación no se recorta: el límite lo marca el grabador
+          if (isRecordingRef.current) return;
+          const a = e.currentTarget;
+          if (!a.paused && trimEnd > trimStart && a.currentTime >= trimEnd) {
+            const main = activeMediaEl();
+            if (videoOutro && startPreviewOutro()) return;
+            if (main) main.currentTime = trimStart;
+          }
+          syncPreviewPos();
+        }}
+      />
+      {mediaType === "audio" && podcastBgSrc && (
+        <img
+          ref={podcastBgRef}
+          src={podcastBgSrc}
+          alt=""
+          crossOrigin={
+            podcastBgSrc.startsWith("blob:") ||
+            podcastBgSrc.startsWith("data:")
+              ? undefined
+              : "anonymous"
+          }
+          className="hidden"
+          aria-hidden="true"
+          onLoad={() => {
+            // Repinta al cargar: mientras la imagen no tiene píxeles el
+            // pintor se queda en negro absoluto y no vuelve a tocar el lienzo.
+            podcastRenderRef.current();
+          }}
+          onError={() => podcastRenderRef.current()}
+        />
+      )}
 
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-6 border-b border-white/10 gap-4">
@@ -6752,15 +7566,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
           </div>
 
-          {/* Card 3: Media Upload (Image or Video) */}
+          {/* Card 3: Media Upload (Image, Video or Audio) */}
           <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
                 <Upload className="w-4 h-4 text-white" />
-                <span>3. Imagen o Video (Arrastra o Selecciona)</span>
+                <span>3. Imagen, Video o Audio (Arrastra o Selecciona)</span>
               </h3>
               <span className="text-[11px] text-neutral-400 font-mono">
-                {mediaType === "video" ? "🎬 Modo Video" : "🖼️ Modo Imagen"}
+                {mediaType === "audio"
+                  ? postDesign === "podcast"
+                    ? "🎙️ Modo Podcast"
+                    : "🎙️ Audio · estilo noticia"
+                  : mediaType === "video"
+                    ? "🎬 Modo Video"
+                    : "🖼️ Modo Imagen"}
               </span>
             </div>
 
@@ -6782,7 +7602,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,video/*"
+                accept="image/*,video/*,audio/*"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     handleFile(e.target.files[0]);
@@ -6793,18 +7613,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
               <div className="flex flex-col items-center justify-center gap-2">
                 <div className="p-3 bg-white/5 rounded-2xl text-white">
-                  {mediaType === "video" ? (
+                  {mediaType === "audio" ? (
+                    <Volume2 className="w-6 h-6" />
+                  ) : mediaType === "video" ? (
                     <VideoIcon className="w-6 h-6" />
                   ) : (
                     <ImageIcon className="w-6 h-6" />
                   )}
                 </div>
                 <p className="text-xs sm:text-sm font-semibold text-white">
-                  Arrastra aquí tu imagen o video, o haz clic para explorar
+                  Arrastra aquí tu imagen, video o audio, o haz clic para
+                  explorar
                 </p>
                 <p className="text-[11px] text-neutral-400 font-light">
-                  Soporta PNG, JPG, WebP, AVIF, MP4 y WebM · También puedes
-                  pegar con Ctrl+V
+                  Soporta PNG, JPG, WebP, AVIF, MP4, WebM, MP3, M4A y WAV · El
+                  audio abre el modo podcast · También puedes pegar con Ctrl+V
                 </p>
               </div>
             </div>
@@ -6824,6 +7647,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       "https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=1200&q=80",
                     );
                     setMediaName("Imagen de muestra");
+                    // Salida del modo podcast: vuelve a la estética clásica y
+                    // se queda sin fondo propio (la onda se apaga sola al no
+                    // haber audio).
+                    setPostDesign("news");
+                    setPodcastBgSrc("");
+                    setPodcastBgName("");
+                    peaksSrcRef.current = "";
+                    setAudioPeaks([]);
                   }}
                   className="text-neutral-400 hover:text-white transition-colors cursor-pointer text-[11px] underline"
                 >
@@ -6862,6 +7693,148 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
               />
             </div>
+          </div>
+
+          {/* Card 3b: Post podcast — variante AMOLED para notas en audio */}
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-white" />
+                <span>3b. Diseño del post</span>
+              </h3>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                {postDesign === "podcast" ? "🎙️ Podcast" : "📰 Noticias"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  { key: "news", label: "📰 Estilo noticia" },
+                  { key: "podcast", label: "🎙️ Estilo podcast" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => {
+                    setPostDesign(opt.key);
+                    if (opt.key === "podcast") setIsMuted(false);
+                  }}
+                  className={`py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
+                    postDesign === opt.key
+                      ? "bg-white text-black border-white"
+                      : "bg-neutral-900 text-neutral-400 border-white/10 hover:text-white"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {postDesign === "podcast" && (
+              <div className="space-y-4 pt-3 border-t border-white/5">
+                <p className="text-[11px] text-neutral-400 font-light">
+                  Variante minimalista para las notas habladas: fondo negro
+                  absoluto, onda de audio con reloj y la serie arriba. El
+                  archivo se exporta siempre como VÍDEO, porque las redes no
+                  aceptan audio suelto.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px] gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                      Serie
+                    </label>
+                    <input
+                      type="text"
+                      value={podcastSeries}
+                      onChange={(e) => setPodcastSeries(e.target.value)}
+                      placeholder="Noticias en 1 minuto"
+                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                      Episodio
+                    </label>
+                    <input
+                      type="text"
+                      value={podcastEpisode}
+                      onChange={(e) => setPodcastEpisode(e.target.value)}
+                      placeholder="01"
+                      maxLength={6}
+                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                      Fondo (opcional · negro puro por defecto)
+                    </label>
+                    {podcastBgSrc && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPodcastBgSrc("");
+                          setPodcastBgName("");
+                        }}
+                        className="text-[11px] text-neutral-500 hover:text-white underline cursor-pointer"
+                      >
+                        Quitar fondo
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => podcastBgInputRef.current?.click()}
+                    className="w-full py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border bg-neutral-900 text-neutral-300 border-white/10 hover:border-white/30 hover:text-white"
+                  >
+                    {podcastBgName
+                      ? `🖼️ ${podcastBgName}`
+                      : "Elegir imagen de fondo"}
+                  </button>
+                  <input
+                    ref={podcastBgInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handlePodcastBgFile(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <p className="text-[11px] text-neutral-400 font-light">
+                    Se atenúa sola para que el titular y la onda se lean
+                    siempre. Sin imagen, el fondo es negro puro.
+                  </p>
+                </div>
+
+                <p className="text-[11px] font-light flex items-center gap-1.5">
+                  {audioAnalyzing ? (
+                    <span className="text-neutral-400">
+                      ⏳ Analizando el audio para dibujar la onda…
+                    </span>
+                  ) : audioPeaks.length > 0 ? (
+                    <span className="text-emerald-400">
+                      ✓ Onda lista · {audioPeaks.length} barras
+                    </span>
+                  ) : mediaType === "audio" ? (
+                    <span className="text-amber-400/90">
+                      ⚠️ No se pudo decodificar este audio: la onda saldrá
+                      plana (el vídeo y el sonido salen igual).
+                    </span>
+                  ) : (
+                    <span className="text-neutral-500">
+                      Sube un audio (o un vídeo) para que la onda cobre vida.
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Card 4: Filtros & Ajustes */}
@@ -6941,7 +7914,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             {/* Video Audio Control & Social Networks Optimization */}
-            {mediaType === "video" && (
+            {exportsVideo && (
               <div className="space-y-3.5 p-4 bg-neutral-900/90 border border-white/15 rounded-xl">
                 {/* Audio row */}
                 <div className="flex items-center justify-between pb-3 border-b border-white/5">
@@ -6969,9 +7942,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     type="button"
                     onClick={() => {
                       setIsMuted(!isMuted);
-                      if (videoRef.current) {
-                        videoRef.current.muted = !isMuted;
-                      }
+                      const el = activeMediaEl();
+                      if (el) el.muted = !isMuted;
                     }}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
                       isMuted
@@ -7124,9 +8096,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         type="button"
                         onClick={() => {
                           setVideoSpeed(speed);
-                          if (videoRef.current) {
-                            videoRef.current.playbackRate = speed;
-                          }
+                          const el = activeMediaEl();
+                          if (el) el.playbackRate = speed;
                           showToast(`Velocidad ajustada a ${speed}x`);
                         }}
                         className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border text-center ${
@@ -7180,19 +8151,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setTrimStart(val);
-                          if (videoRef.current) {
-                            videoRef.current.currentTime = val;
-                          }
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = val;
                         }}
                         className="w-full accent-amber-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          if (videoRef.current) {
-                            const cur =
-                              Math.round(videoRef.current.currentTime * 10) /
-                              10;
+                          const el = activeMediaEl();
+                          if (el) {
+                            const cur = Math.round(el.currentTime * 10) / 10;
                             if (cur < (trimEnd > 0 ? trimEnd : 999)) {
                               setTrimStart(cur);
                               showToast(`Inicio fijado en ${cur}s`);
@@ -7225,19 +8194,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           setTrimEnd(val);
-                          if (videoRef.current) {
-                            videoRef.current.currentTime = val;
-                          }
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = val;
                         }}
                         className="w-full accent-amber-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                       />
                       <button
                         type="button"
                         onClick={() => {
-                          if (videoRef.current) {
-                            const cur =
-                              Math.round(videoRef.current.currentTime * 10) /
-                              10;
+                          const el = activeMediaEl();
+                          if (el) {
+                            const cur = Math.round(el.currentTime * 10) / 10;
                             if (cur > trimStart) {
                               setTrimEnd(cur);
                               showToast(`Fin fijado en ${cur}s`);
@@ -7293,8 +8260,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 10, 5));
-                          if (videoRef.current)
-                            videoRef.current.currentTime = 0;
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -7305,8 +8272,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 10, 10));
-                          if (videoRef.current)
-                            videoRef.current.currentTime = 0;
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -7317,8 +8284,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(Math.min(videoDuration || 30, 30));
-                          if (videoRef.current)
-                            videoRef.current.currentTime = 0;
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -7329,8 +8296,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => {
                           setTrimStart(0);
                           setTrimEnd(videoDuration || 15);
-                          if (videoRef.current)
-                            videoRef.current.currentTime = 0;
+                          const el = activeMediaEl();
+                          if (el) el.currentTime = 0;
                         }}
                         className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
                       >
@@ -7518,7 +8485,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Atajo del cierre de marca: el mismo interruptor de la tarjeta 4,
                 aquí junto a la intro para poder probarlo sin salir de la
                 preview. Aplica en todos los formatos, no sólo en TV. */}
-            {mediaType === "video" && (
+            {exportsVideo && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
                 title={`Cierre BlackNews: añade ${outroDuration.toFixed(1)} s de sello de marca al final del vídeo exportado y de la vista previa, con su audio (salvo que exportes en silencio)`}
@@ -7610,7 +8577,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             } bg-black rounded-2xl overflow-hidden relative border border-white/20 shadow-2xl flex flex-col justify-between select-none`}
             style={{ backgroundColor: "#000000", maxWidth: previewCardWidth }}
           >
-            {postFormat === "16:9" ? (
+            {postDesign === "podcast" ? (
+              /* Vista previa podcast: el lienzo real (formato activo) escalado
+                 a tamaño de tarjeta y pintado por drawPodcastFrame — el mismo
+                 dibujo que sale en el archivo, onda y reloj incluidos. */
+              <div className="absolute inset-0 overflow-hidden">
+                <canvas
+                  ref={podcastCanvasRef}
+                  width={POST_W}
+                  height={POST_H}
+                  style={{
+                    width: POST_W,
+                    height: POST_H,
+                    transform: `scale(${previewCardElW / POST_W})`,
+                    transformOrigin: "top left",
+                  }}
+                  className="block select-none"
+                  aria-label="Vista previa del post podcast"
+                />
+              </div>
+            ) : postFormat === "16:9" ? (
               <>
                 {/* Vista previa TV: el lienzo real de 1920×1080 escalado a
                     tamaño de tarjeta, así todas las medidas de elementos son
@@ -8187,7 +9173,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 `display:none`): si no, el navegador deja de decodificar
                 fotogramas y rVFC deja de disparar. Encuadre «contain» sobre
                 negro, igual que paintOutroFrame en la exportación. */}
-            {mediaType === "video" && videoOutro && (
+            {exportsVideo && videoOutro && (
               <video
                 ref={outroRef}
                 src={outroVideoSrc}
@@ -8217,7 +9203,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               sobre ese fotograma para inspeccionarlo, y play vuelve al rango
               exportado— y los botones saltan 1 s o 10 s. Sólo en vídeo y
               desactivado mientras exporta (allí manda el grabador). */}
-          {mediaType === "video" && (
+          {exportsVideo && (
             <div className="flex items-center gap-1.5 sm:gap-2 pt-0.5">
               <button
                 type="button"
@@ -8339,7 +9325,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           {/* Export Action Buttons */}
           <div className="space-y-2.5 pt-2">
             {/* Primary: Export Video or Export PNG depending on mediaType */}
-            {mediaType === "video" ? (
+            {exportsVideo ? (
               // La exportación se compone íntegramente en el navegador (MediaRecorder
               // sobre el canvas compositor): sin servidor, sin subir el archivo.
               <button
@@ -8374,7 +9360,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             {/* Secondary actions */}
             <div className="grid grid-cols-2 gap-2">
-              {mediaType === "video" ? (
+              {exportsVideo ? (
                 <>
                   <button
                     type="button"
@@ -8443,7 +9429,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
 
             <p className="text-[11px] text-neutral-400 text-center font-light pt-1">
-              {mediaType === "video" && exportClipSeconds !== null && (
+              {exportsVideo && exportClipSeconds !== null && (
                 <>
                   Se exportarán{" "}
                   <strong className="text-white font-semibold">
@@ -8465,7 +9451,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 : postFormat === "9:16"
                   ? "Formato óptimo para TikTok, YouTube Shorts, Reels y estados verticales (9:16)."
                   : "Formato óptimo para Instagram (4:5 vertical), LinkedIn, Twitter / X y estados de WhatsApp."}
-              {mediaType === "video" &&
+              {exportsVideo &&
                 " El video se compone en tu navegador: no se sube a ningún servidor."}
             </p>
           </div>
