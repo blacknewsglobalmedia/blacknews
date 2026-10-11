@@ -191,6 +191,8 @@ const OUTRO_DUR_FALLBACK = 11.3;
  *  previa) y, si el archivo se cierra en ese primer compás, el MP4 sale con la
  *  longitud exacta del clip pero SIN el sello. */
 const OUTRO_START_GRACE_MS = 2000;
+/** Altura por defecto del panel de contexto del asistente flotante. */
+const AI_COMPOSER_H_DEFAULT = 170;
 
 /** Pinta un fotograma del cierre de marca a sangre del lienzo SIN overlays
  *  (sin chyron, sin ticker, sin velos): es un sello de cierre, no una toma del
@@ -674,6 +676,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   /** La barra flotante del asistente: cerrada sólo se ve el botón de
    *  redactar; abierta despliega el cuadro de contexto. */
   const [aiComposerOpen, setAiComposerOpen] = useState(false);
+  /** Alto del panel de contexto: se estira con el tirador y se recuerda. */
+  const [aiComposerH, setAiComposerH] = useState<number>(() => {
+    try {
+      const saved = parseInt(
+        localStorage.getItem("blacknews_ai_composer_h") || "",
+        10,
+      );
+      if (Number.isFinite(saved)) return Math.min(420, Math.max(120, saved));
+    } catch {}
+    return AI_COMPOSER_H_DEFAULT;
+  });
   /** Tarjeta de resultados del asistente: a la que se sube al abrir la
    *  configuración de claves desde la barra, que está abajo del todo. */
   const aiCardRef = useRef<HTMLDivElement | null>(null);
@@ -707,6 +720,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const next = !showAdvancedJson;
     setShowAdvancedJson(next);
     if (next) scrollAiCardIntoView();
+  };
+
+  /** Tirador del panel de contexto: arrastrando en vertical se agranda o se
+   *  achica, y al soltar se guarda la medida para la próxima vez. */
+  const handleComposerResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startH = aiComposerH;
+    const onMove = (moveEvent: PointerEvent) => {
+      setAiComposerH(
+        Math.min(420, Math.max(120, startH + (startY - moveEvent.clientY))),
+      );
+    };
+    const onEnd = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      setAiComposerH((current) => {
+        try {
+          localStorage.setItem("blacknews_ai_composer_h", String(current));
+        } catch {}
+        return current;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
   };
   /** Qué acordeones de la columna de controles están desplegados. Arranca
    *  sólo con el formato de entrega abierto, que es lo único que suele
@@ -5527,16 +5565,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       />
     );
 
-  // El hueco inferior deja sitio a la barra flotante del asistente: con el
-  // compositor abierto mide el doble, para que ni tape el final de la página
-  // ni deje contenido inalcanzable detrás del cuadro.
+  // El hueco inferior deja sitio a la barra flotante del asistente y a su
+  // panel de contexto: crece con la altura real del panel (que el usuario
+  // puede estirar), para que nada quede tapado ni inalcanzable detrás.
   return (
     <div
-      className={`font-['Lexend',sans-serif] space-y-8 ${
-        aiComposerOpen
-          ? "pb-[calc(var(--bn-nav-h)_+_12rem)] lg:pb-48"
-          : "pb-[calc(var(--bn-nav-h)_+_7rem)] lg:pb-32"
-      }`}
+      className="font-['Lexend',sans-serif] space-y-8"
+      style={{
+        paddingBottom: aiComposerOpen
+          ? `calc(var(--bn-nav-h) + ${aiComposerH + 76}px)`
+          : "calc(var(--bn-nav-h) + 4.5rem)",
+      }}
     >
       {/* High-res processing canvas (positioned offscreen to maintain active compositor pipeline for captureStream) */}
       <canvas
@@ -5633,15 +5672,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         </div>
       </div>
 
-      {/* Toast Notification. Con el compositor abierto sube por encima de la
-          barra flotante, que entonces mide cuatro veces más. */}
+      {/* Toast Notification. Se sitúa sobre la altura real de la barra: con
+          el panel abierto sube lo que mide él. */}
       {toastMessage && (
         <div
-          className={`fixed left-4 sm:left-auto right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in ${
-            aiComposerOpen
-              ? "bottom-[calc(var(--bn-nav-h)_+_13rem)] lg:bottom-52"
-              : "bottom-[calc(var(--bn-nav-h)_+_2.75rem)] lg:bottom-6"
-          }`}
+          style={{
+            bottom: `calc(var(--bn-nav-h) + ${
+              aiComposerOpen ? aiComposerH + 84 : 76
+            }px)`,
+          }}
+          className="fixed left-4 sm:left-auto right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in"
         >
           <span className="w-2 h-2 rounded-full bg-black inline-block"></span>
           <span>{toastMessage}</span>
@@ -5649,20 +5689,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       )}
 
       {/* Barra flotante del asistente IA.
-          Cerrada es una sola fila: acceso a redactar y estado de las claves.
-          Abierta baja el cuadro de contexto. Mismo offset que la barra de
-          acciones del estudio, así que los toasts salen por encima. */}
+          Dos piezas negras flotantes y despegadas: una píldora con la acción
+          principal, y encima (con un hueco de 12 px) el panel del contexto,
+          que se estira con el tirador y guarda su medida. Baja del todo para
+          no estorbar; los toasts se sitúan sobre la altura real de la barra. */}
       <aside
         aria-label="Asistente IA de redacción"
-        className="fixed left-1/2 -translate-x-1/2 z-40 w-[94vw] max-w-xl bottom-[calc(var(--bn-nav-h)_+_2.25rem)] sm:bottom-[calc(var(--bn-nav-h)_+_1.5rem)] lg:bottom-9 animate-in slide-in-from-bottom-5 duration-300"
+        className="fixed left-1/2 -translate-x-1/2 z-40 w-[94vw] max-w-xl flex flex-col items-center gap-3 bottom-[calc(var(--bn-nav-h)_+_1.25rem)] sm:bottom-[calc(var(--bn-nav-h)_+_1rem)] lg:bottom-4 animate-in slide-in-from-bottom-4 duration-300"
       >
-        <div className="bg-neutral-950/92 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl shadow-black space-y-2">
-          {/* Compositor: el cuadro de contexto, sólo cuando está abierto */}
-          {aiComposerOpen && (
-            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+        {/* Panel del contexto: suelto respecto de la píldora */}
+        {aiComposerOpen && (
+          <div
+            style={{ height: aiComposerH }}
+            className="w-full min-h-0 shrink-0 rounded-2xl bg-black/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/80 overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-150"
+          >
+            {/* Tirador: arrastra para agrandar o achicar. Doble clic vuelve
+                al tamaño inicial. */}
+            <div
+              onPointerDown={handleComposerResizeStart}
+              onDoubleClick={() => setAiComposerH(AI_COMPOSER_H_DEFAULT)}
+              title="Arrastra para agrandar o achicar el cuadro (doble clic: tamaño inicial)"
+              className="shrink-0 h-4 flex items-center justify-center cursor-ns-resize bg-white/[0.03] border-b border-white/5 touch-none select-none"
+            >
+              <span className="w-8 h-1 rounded-full bg-white/20"></span>
+            </div>
+
+            <div className="flex-1 min-h-0 p-2.5 flex flex-col gap-2">
               {aiNotice && (
                 <div
-                  className={`p-2.5 rounded-xl text-[11px] font-medium leading-relaxed border ${
+                  className={`shrink-0 p-2 rounded-lg text-[11px] font-medium leading-snug border ${
                     aiNotice.kind === "error"
                       ? "bg-red-500/10 border-red-500/30 text-red-400"
                       : aiNotice.kind === "warn"
@@ -5679,40 +5734,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               </label>
               <textarea
                 id="ai-topic-input"
-                rows={3}
                 value={aiTopic}
                 onChange={(e) => {
                   setAiTopic(e.target.value);
                   setAiNotice(null);
                 }}
-                placeholder="Pega el tema, borrador de titular o contexto (ej: Bombardeos de precisión en instalaciones nucleares en Isfahán provocan alerta máxima en el Golfo Pérsico...)"
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 text-sm text-neutral-100 leading-relaxed placeholder-neutral-500 focus:outline-none focus:border-emerald-400 resize-y min-h-18"
+                placeholder="Tema, titular de partida o contexto (ej: Bombardeos de precisión en instalaciones nucleares en Isfahán provocan alerta máxima en el Golfo Pérsico...)"
+                className="flex-1 min-h-0 w-full resize-none bg-neutral-950 border border-white/10 rounded-xl p-2.5 text-[13px] text-neutral-100 leading-relaxed placeholder-neutral-600 focus:outline-none focus:border-white/25 font-['Lexend']"
               />
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleGenerateAi}
-                  disabled={aiBusy}
-                  title={aiBusy ? "Redactando con IA…" : "Redactar y autocompletar el post"}
-                  className="flex-1 min-w-0 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 disabled:text-emerald-100/60 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait shadow-lg shadow-emerald-500/10"
-                >
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span className="truncate">
-                    {aiBusy ? "Redactando con IA…" : "Redactar y autocompletar"}
-                  </span>
-                </button>
-
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleToggleAiJson}
                   title={showAdvancedJson ? "Ocultar el JSON" : "Ver el JSON del post"}
-                  aria-label="JSON del post"
-                  className="shrink-0 p-2.5 rounded-xl text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  className={`px-2.5 h-7 rounded-full text-[11px] font-semibold transition-colors cursor-pointer border ${
+                    showAdvancedJson
+                      ? "bg-white/10 border-white/20 text-white"
+                      : "bg-transparent border-white/10 text-neutral-400 hover:text-white hover:bg-white/5"
+                  }`}
                 >
-                  <FileCode
-                    className={`w-4 h-4 ${showAdvancedJson ? "text-cyan-400" : ""}`}
-                  />
+                  JSON
                 </button>
 
                 {aiTopic && (
@@ -5723,78 +5765,73 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       setAiNotice(null);
                     }}
                     title="Borrar el texto"
-                    aria-label="Borrar el texto"
-                    className="shrink-0 p-2.5 rounded-xl text-neutral-500 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    className="px-2.5 h-7 rounded-full text-[11px] font-semibold bg-transparent border border-white/10 text-neutral-500 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    Borrar
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleToggleAiSettings}
-                  title={
-                    groqKey.trim()
-                      ? "Groq Llama 3.3 · cambiar clave"
-                      : geminiKey.trim()
-                        ? "Gemini Flash · cambiar clave"
-                        : "Configurar clave de Groq o Gemini"
-                  }
-                  aria-label="Claves del asistente IA"
-                  className={`shrink-0 p-2.5 rounded-xl transition-colors cursor-pointer ${
-                    groqKey.trim() || geminiKey.trim()
-                      ? "text-emerald-400 hover:bg-emerald-500/15"
-                      : "text-amber-400 hover:bg-amber-500/15"
-                  }`}
-                >
-                  <Zap className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAiComposerOpen(false)}
-                  title="Cerrar"
-                  aria-label="Cerrar el asistente IA"
-                  className="shrink-0 p-2.5 rounded-xl text-neutral-500 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <span className="ml-auto text-[10px] font-mono text-neutral-600 tabular-nums">
+                  {aiTopic.trim().length} car.
+                </span>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Fila principal, con el compositor cerrado */}
-          {!aiComposerOpen && (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setAiComposerOpen(true)}
-                className="flex-1 min-w-0 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/10"
-              >
-                <Sparkles className="w-4 h-4 shrink-0" />
-                <span className="truncate">Redactar con IA</span>
-              </button>
+        {/* Píldora: acción principal, claves y cierre */}
+        <div className="rounded-full bg-black/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/80 p-1 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() =>
+              aiComposerOpen ? handleGenerateAi() : setAiComposerOpen(true)
+            }
+            disabled={aiBusy}
+            title={
+              aiBusy
+                ? "Redactando con IA…"
+                : aiComposerOpen
+                  ? "Redactar y autocompletar el post"
+                  : "Abrir el asistente de redacción"
+            }
+            className="h-8 shrink-0 pl-3 pr-4 rounded-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/25 disabled:text-emerald-100/60 text-black text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer disabled:cursor-wait"
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
+              {aiBusy ? "Redactando…" : aiComposerOpen ? "Redactar" : "Redactar con IA"}
+            </span>
+          </button>
 
-              <button
-                type="button"
-                onClick={handleToggleAiSettings}
-                title={
-                  groqKey.trim()
-                    ? "Groq Llama 3.3 · cambiar clave"
-                    : geminiKey.trim()
-                      ? "Gemini Flash · cambiar clave"
-                      : "Configurar clave de Groq o Gemini"
-                }
-                aria-label="Claves del asistente IA"
-                className={`shrink-0 p-2.5 rounded-xl transition-colors cursor-pointer ${
-                  groqKey.trim() || geminiKey.trim()
-                    ? "text-emerald-400 hover:bg-emerald-500/15"
-                    : "text-amber-400 hover:bg-amber-500/15"
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-              </button>
-            </div>
+          <button
+            type="button"
+            onClick={handleToggleAiSettings}
+            title={
+              groqKey.trim()
+                ? "Groq Llama 3.3 · cambiar clave"
+                : geminiKey.trim()
+                  ? "Gemini Flash · cambiar clave"
+                  : "Configurar clave de Groq o Gemini"
+            }
+            aria-label="Claves del asistente IA"
+            className={`w-8 h-8 shrink-0 rounded-full grid place-items-center transition-colors cursor-pointer ${
+              groqKey.trim() || geminiKey.trim()
+                ? "text-emerald-400 hover:bg-emerald-500/15"
+                : "text-amber-400 hover:bg-amber-500/15"
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+          </button>
+
+          {aiComposerOpen && (
+            <button
+              type="button"
+              onClick={() => setAiComposerOpen(false)}
+              title="Cerrar"
+              aria-label="Cerrar el asistente IA"
+              className="w-8 h-8 shrink-0 rounded-full grid place-items-center text-neutral-500 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       </aside>
