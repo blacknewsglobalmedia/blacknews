@@ -54,6 +54,9 @@ import { CountryFlag, loadFlagImage, isRegionalFlagEmoji } from "./CountryFlag";
 // Cierre de marca (opcional, apagado por defecto): se añade al final de los
 // vídeos exportados y de la vista previa. Vite lo sirve como asset estático.
 import outroVideoSrc from "../assets/videos/Blacknews.mp4";
+// Cama musical del podcast: se mezcla por debajo de la voz a volumen muy bajo.
+// Sólo entra al bundle el MP3 (2,2 MB); el WAV maestro vive fuera de git.
+import podcastSoundtrack from "../assets/audio/BlackNews_Soundtrack.mp3";
 
 // Las banderas viven en CountryFlag.tsx (compartido con la barra de relojes):
 // se reexportan aquí por compatibilidad con los importers existentes.
@@ -650,9 +653,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [audioPeaks, setAudioPeaks] = useState<number[]>([]);
   // true mientras se decodifica el archivo para dibujar la onda.
   const [audioAnalyzing, setAudioAnalyzing] = useState(false);
-  // Cabecera del podcast: serie y episodio.
-  const [podcastSeries, setPodcastSeries] = useState("Noticias en 1 minuto");
-  const [podcastEpisode, setPodcastEpisode] = useState("01");
+  // Cabecera del podcast: serie y episodio, ambos OPCIONALES y vacíos por
+  // defecto (sin serie no se pinta nada en la cabecera, sin EP no hay píldora).
+  const [podcastSeries, setPodcastSeries] = useState("");
+  const [podcastEpisode, setPodcastEpisode] = useState("");
+  // Titular automático con la fecha: sin serie sale "Noticias del 11 oct 2026"
+  // y con serie "Serie · 11 oct 2026". Apagado = manda el titular escrito.
+  const [podcastAutoTitle, setPodcastAutoTitle] = useState(true);
+  // Cama musical de BlackNews: sonido de fondo MUY por debajo de la voz.
+  // Se mezcla igual en la vista previa y en el archivo exportado.
+  const [podcastMusicOn, setPodcastMusicOn] = useState(true);
+  const [podcastMusicVol, setPodcastMusicVol] = useState(0.12);
 
   // Formato de salida: el mismo post se genera en 4:5 (1080×1350), 9:16
   // (1080×1920, el vertical de TikTok / Shorts / Reels) o 16:9 (1920×1080) con
@@ -942,6 +953,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     mediaType === "audio" ? audioRef.current : videoRef.current;
   // Selector de archivo de la imagen de fondo del podcast (opcional).
   const podcastBgInputRef = useRef<HTMLInputElement>(null);
+  // Cama musical: un <audio> aparte en bucle que acompaña a la vista previa.
+  // Las exportaciones no leen este elemento (se mezcla desde el archivo para
+  // que el MP4 salga igual en cualquier navegador).
+  const podcastMusicRef = useRef<HTMLAudioElement>(null);
+  // Cama ya decodificada, cacheada para las dos rutas de exportación.
+  const soundtrackBufRef = useRef<AudioBuffer | null>(null);
+  const soundtrackBuffer = async (): Promise<AudioBuffer> => {
+    if (soundtrackBufRef.current) return soundtrackBufRef.current;
+    const raw = await (await fetch(podcastSoundtrack)).arrayBuffer();
+    const probe = new OfflineAudioContext(1, 1, 44100);
+    const buf = await probe.decodeAudioData(raw);
+    soundtrackBufRef.current = buf;
+    return buf;
+  };
   // Modo «sale vídeo»: el vídeo de siempre y el audio del podcast (las redes
   // no aceptan audio suelto, así que la nota se exporta como vídeo con su
   // onda dentro). Comparten recorte, calidad y cierre de marca.
@@ -1089,6 +1114,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return;
     }
 
+    // El medio ya es un audio (modo podcast): una imagen que llegue por aquí es
+    // el FONDO de la nota, no un reemplazo. Si se cambiara el medio sólo
+    // quedaría exportar PNG y se perdería la nota hablada.
+    if (isImage && mediaType === "audio") {
+      setPostDesign("podcast");
+      handlePodcastBgFile(file);
+      return;
+    }
+    // Al revés: si el medio es una imagen y llega el audio, la imagen pasa a
+    // ser el fondo y la nota manda (así se conserva todo junto).
+    if (isAudio && mediaType === "image") {
+      const prevSrc = mediaSrc;
+      if (prevSrc && prevSrc !== DEFAULT_MEDIA_SRC && !podcastBgSrc) {
+        setPodcastBgSrc(prevSrc);
+        setPodcastBgName(mediaName);
+      }
+    }
+
     const objectUrl = URL.createObjectURL(file);
     setMediaSrc(objectUrl);
     setMediaType(isVideo ? "video" : isAudio ? "audio" : "image");
@@ -1164,6 +1207,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     };
   }, [postDesign, mediaType, mediaSrc]);
 
+  // La cama suena en la vista previa exactamente mientras suena la nota, se
+  // apaga con el cierre de marca y se calla mientras graba (allí la mezcla la
+  // hace la exportación y, si no, se escucharía dos veces).
+  useEffect(() => {
+    const m = podcastMusicRef.current;
+    if (!m) return;
+    m.volume = podcastMusicVol;
+    const shouldPlay =
+      podcastMusicOn && isVideoPlaying && !outroActive && !isRecordingVideo;
+    if (shouldPlay) {
+      if (m.paused) void m.play().catch(() => {});
+    } else if (!m.paused) {
+      m.pause();
+    }
+  }, [
+    podcastMusicOn,
+    podcastMusicVol,
+    isVideoPlaying,
+    outroActive,
+    isRecordingVideo,
+    postDesign,
+  ]);
+
   /** Imagen de fondo del podcast: una imagen plana (blob/data/https). */
   const handlePodcastBgFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -1172,7 +1238,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     setPodcastBgSrc(URL.createObjectURL(file));
     setPodcastBgName(file.name);
-    showToast(`Fondo "${file.name}" cargado`);
+    showToast(`Fondo "${file.name}" cargado · el audio sigue activo`);
   };
 
   const LOCAL_STORAGE_KEY = "blacknews_post_generator_draft";
@@ -1232,6 +1298,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         postDesign,
         podcastSeries,
         podcastEpisode,
+        podcastAutoTitle,
+        podcastMusicOn,
+        podcastMusicVol,
         podcastBg: podcastBgSrc.startsWith("blob:") ? null : podcastBgSrc,
         podcastBgName: podcastBgSrc.startsWith("blob:") ? "" : podcastBgName,
       },
@@ -1424,6 +1493,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (typeof data.mediaSettings.podcastBgName === "string")
             setPodcastBgName(data.mediaSettings.podcastBgName);
         }
+        if (typeof data.mediaSettings.podcastAutoTitle === "boolean")
+          setPodcastAutoTitle(data.mediaSettings.podcastAutoTitle);
+        if (typeof data.mediaSettings.podcastMusicOn === "boolean")
+          setPodcastMusicOn(data.mediaSettings.podcastMusicOn);
+        if (typeof data.mediaSettings.podcastMusicVol === "number")
+          setPodcastMusicVol(
+            Math.min(0.4, Math.max(0, data.mediaSettings.podcastMusicVol)),
+          );
         if (mediaUrl && !staleBlobMedia) setMediaSrc(mediaUrl);
         else if (videoFallback || staleBlobMedia)
           setMediaSrc(DEFAULT_MEDIA_SRC);
@@ -2151,6 +2228,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     postDesign,
     podcastSeries,
     podcastEpisode,
+    podcastAutoTitle,
+    podcastMusicOn,
+    podcastMusicVol,
     podcastBgSrc,
     tvShowLive,
     tvShowClock,
@@ -2867,6 +2947,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // vídeo/imagen de fondo oscurecido), cabecera de serie, titular corto, onda
   // con reloj y el pie de siempre. Todo lo que se ve depende de `outTime`, así
   // que la vista previa y el archivo exportado coinciden fotograma a fotograma.
+  // ── Titular del podcast ──
+  // Con el automático no hay que escribir nada cada día: la fecha se calcula en
+  // cada pintado, así que un export hecho mañana sale con su fecha.
+  const podcastFecha = (() => {
+    const d = new Date();
+    const meses = [
+      "ene",
+      "feb",
+      "mar",
+      "abr",
+      "may",
+      "jun",
+      "jul",
+      "ago",
+      "sep",
+      "oct",
+      "nov",
+      "dic",
+    ];
+    return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`;
+  })();
+  const podcastTitulo = podcastAutoTitle
+    ? podcastSeries.trim()
+      ? `${podcastSeries.trim()} · ${podcastFecha}`
+      : `Noticias del ${podcastFecha}`
+    : title;
+
   const drawPodcastFrame = (
     ctx: CanvasRenderingContext2D,
     opts: {
@@ -2967,45 +3074,56 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillStyle = "#ffffff";
     ctx.font = `600 ${Math.round(23 * u)}px 'Lexend', sans-serif`;
     ctx.letterSpacing = `${Math.round(0.8 * u)}px`;
-    ctx.fillText("BlackNews", padX + markSize + Math.round(11 * u), y);
-    ctx.font = `500 ${Math.round(14 * u)}px 'Lexend', sans-serif`;
-    ctx.letterSpacing = `${Math.round(3.4 * u)}px`;
-    ctx.fillStyle = "#737373";
-    ctx.textAlign = "right";
-    ctx.fillText(
-      (podcastSeries || "Noticias en 1 minuto").toUpperCase(),
-      W - padX,
-      y + Math.round(6 * u),
-    );
-    ctx.textAlign = "left";
+    const bnX = padX + markSize + Math.round(11 * u);
+    ctx.fillText("BlackNews", bnX, y);
+    const bnW = ctx.measureText("BlackNews").width;
+
+    // EP pegado a la marca: la píldora sale justo detrás del wordmark.
+    const epText = podcastEpisode.trim() ? `EP. ${podcastEpisode.trim()}` : "";
+    let epRight = bnX + bnW;
+    if (epText) {
+      ctx.font = `600 ${Math.round(13 * u)}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${Math.round(2 * u)}px`;
+      const epW = ctx.measureText(epText).width + Math.round(26 * u);
+      const epH = Math.round(30 * u);
+      const epX = epRight + Math.round(14 * u);
+      const epY = y + Math.round(5 * u);
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.lineWidth = Math.max(1, Math.round(1.5 * u));
+      ctx.beginPath();
+      if (typeof ctx.roundRect === "function") {
+        ctx.roundRect(epX, epY, epW, epH, epH / 2);
+      } else {
+        ctx.rect(epX, epY, epW, epH);
+      }
+      ctx.stroke();
+      ctx.fillStyle = "#d4d4d4";
+      ctx.fillText(epText, epX + Math.round(13 * u), epY + Math.round(7 * u));
+      epRight = epX + epW;
+    }
+
+    // Serie a la derecha: opcional y sólo si cabe sin pisar la marca/EP.
+    const serieText = podcastSeries.trim();
+    if (serieText) {
+      ctx.font = `500 ${Math.round(14 * u)}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${Math.round(3.4 * u)}px`;
+      ctx.fillStyle = "#737373";
+      const serieW = ctx.measureText(serieText.toUpperCase()).width;
+      if (serieW <= W - padX * 2 - (epRight - padX) - Math.round(24 * u)) {
+        ctx.textAlign = "right";
+        ctx.fillText(serieText.toUpperCase(), W - padX, y + Math.round(6 * u));
+        ctx.textAlign = "left";
+      }
+    }
     ctx.letterSpacing = "0px";
 
-    // ── Píldora de episodio ──
     y += Math.round(46 * u);
-    const epText = `EP. ${(podcastEpisode || "01").trim()}`;
-    ctx.font = `600 ${Math.round(15 * u)}px 'Lexend', sans-serif`;
-    ctx.letterSpacing = `${Math.round(2 * u)}px`;
-    const epW = ctx.measureText(epText).width + Math.round(30 * u);
-    const epH = Math.round(38 * u);
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
-    ctx.lineWidth = Math.max(1, Math.round(1.5 * u));
-    ctx.beginPath();
-    if (typeof ctx.roundRect === "function") {
-      ctx.roundRect(padX, y, epW, epH, epH / 2);
-    } else {
-      ctx.rect(padX, y, epW, epH);
-    }
-    ctx.stroke();
-    ctx.fillStyle = "#d4d4d4";
-    ctx.fillText(epText, padX + Math.round(15 * u), y + Math.round(9 * u));
-    ctx.letterSpacing = "0px";
-    y += epH;
 
     // ── Titular (corto: es el gancho de la nota, no el cuerpo) ──
     const titleFs = Math.round((isWide ? 62 : 64) * u);
     ctx.font = `700 ${titleFs}px 'Lexend', sans-serif`;
     const titleLines = capLines(
-      wrapText(ctx, title || "Titular de la nota…", contentW),
+      wrapText(ctx, podcastTitulo || "Titular de la nota…", contentW),
       4,
     );
     const titleLH = Math.round(titleFs * 1.16);
@@ -4433,23 +4551,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
 
       // ── 3. Audio: decodificación completa + corte/velocidad en modo offline ──
+      // La cama musical se mezcla aquí mismo, por debajo de la voz: arranca en
+      // el segundo 0 de la salida y buclea sola, así que tapa los silencios sin
+      // descolocar el reloj ni depender de la duración de la pista.
       let renderedAudio: AudioBuffer | null = null;
       if (!mutedForExport) {
         try {
           const decoderCtx = new OfflineAudioContext(1, 1, 44100);
-          const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
           const outRate = 48000;
           const oac = new OfflineAudioContext(
             2,
             Math.max(1, Math.ceil(outDur * outRate)),
             outRate,
           );
-          const srcNode = oac.createBufferSource();
-          srcNode.buffer = fullAudio;
-          srcNode.playbackRate.value = speed;
-          srcNode.connect(oac.destination);
-          srcNode.start(0, start);
-          renderedAudio = await oac.startRendering();
+          let hasVoice = false;
+          try {
+            const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
+            const srcNode = oac.createBufferSource();
+            srcNode.buffer = fullAudio;
+            srcNode.playbackRate.value = speed;
+            srcNode.connect(oac.destination);
+            srcNode.start(0, start);
+            hasVoice = true;
+          } catch {
+            // Voz no decodificable: si hay cama, el archivo sigue sonando.
+          }
+          let hasMusic = false;
+          if (
+            postDesign === "podcast" &&
+            podcastMusicOn &&
+            podcastMusicVol > 0
+          ) {
+            try {
+              const musicBuf = await soundtrackBuffer();
+              const mNode = oac.createBufferSource();
+              mNode.buffer = musicBuf;
+              mNode.loop = true;
+              const mGain = oac.createGain();
+              mGain.gain.value = podcastMusicVol;
+              mNode.connect(mGain);
+              mGain.connect(oac.destination);
+              mNode.start(0);
+              hasMusic = true;
+            } catch {
+              // Cama no disponible: se exporta sin ella (nunca aborta).
+            }
+          }
+          if (hasVoice || hasMusic)
+            renderedAudio = await oac.startRendering();
         } catch {
           renderedAudio = null; // sin audio exportable → el MP4 sale mudo
         }
@@ -5183,6 +5332,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
 
       let audioTrack: MediaStreamTrack | null = null;
+      // Cama de la ruta clásica: BufferSource en bucle dentro del mismo grafo
+      // que la voz. Se corta en `finish` y justo cuando entra el cierre.
+      let musicNode: AudioBufferSourceNode | null = null;
       if (!mutedForExport) {
         try {
           // Un MediaElementSource por elemento (sólo se puede crear uno): el
@@ -5201,6 +5353,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           }
           if (graph.ctx.state === "suspended") await graph.ctx.resume();
           audioTrack = graph.dest.stream.getAudioTracks()[0] ?? null;
+          if (
+            audioTrack &&
+            postDesign === "podcast" &&
+            podcastMusicOn &&
+            podcastMusicVol > 0
+          ) {
+            try {
+              const musicBuf = await soundtrackBuffer();
+              const mNode = graph.ctx.createBufferSource();
+              mNode.buffer = musicBuf;
+              mNode.loop = true;
+              const mGain = graph.ctx.createGain();
+              mGain.gain.value = podcastMusicVol;
+              mNode.connect(mGain);
+              mGain.connect(graph.dest);
+              mGain.connect(graph.ctx.destination);
+              mNode.start();
+              musicNode = mNode;
+            } catch (musicErr) {
+              console.warn("Cama musical no disponible:", musicErr);
+            }
+          }
         } catch (audioErr) {
           console.warn("Audio no disponible en la grabación:", audioErr);
         }
@@ -5396,6 +5570,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           try {
             if (outroEl) outroEl.pause();
           } catch {}
+          try {
+            if (musicNode) musicNode.stop();
+          } catch {}
+          musicNode = null;
           outroPhase = false;
           outroActiveRef.current = false;
           setOutroActive(false);
@@ -5432,6 +5610,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           try {
             video.pause();
           } catch {}
+          // La cama se corta al entrar el sello: el cierre tiene su sonido.
+          try {
+            if (musicNode) musicNode.stop();
+          } catch {}
+          musicNode = null;
           el.muted = mutedForExport;
           rewindOutro(el);
           // El sello entra en la misma pista de audio que el clip: el nodo
@@ -6406,6 +6589,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             podcastRenderRef.current();
           }}
           onError={() => podcastRenderRef.current()}
+        />
+      )}
+
+      {/* Cama musical del podcast: bucle continuo a volumen muy bajo. La
+          exportación la vuelve a mezclar desde el MP3 para que el archivo
+          suene igual que la vista previa. */}
+      {postDesign === "podcast" && (
+        <audio
+          ref={podcastMusicRef}
+          src={podcastSoundtrack}
+          loop
+          preload="auto"
+          className="hidden"
+          aria-hidden="true"
         />
       )}
 
@@ -7744,29 +7941,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px] gap-2">
                   <div className="space-y-1">
                     <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
-                      Serie
+                      Serie (opcional)
                     </label>
                     <input
                       type="text"
                       value={podcastSeries}
                       onChange={(e) => setPodcastSeries(e.target.value)}
-                      placeholder="Noticias en 1 minuto"
+                      placeholder="Vacía = sin serie arriba"
                       className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
-                      Episodio
+                      EP (opcional)
                     </label>
                     <input
                       type="text"
                       value={podcastEpisode}
                       onChange={(e) => setPodcastEpisode(e.target.value)}
-                      placeholder="01"
+                      placeholder="Vacío"
                       maxLength={6}
                       className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-mono"
                     />
                   </div>
+                </div>
+
+                {/* Titular automático con la fecha */}
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPodcastAutoTitle(!podcastAutoTitle)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      podcastAutoTitle
+                        ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                        : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    <span>📅 Titular automático con la fecha</span>
+                    <span className="font-mono">
+                      {podcastAutoTitle ? "ON" : "OFF"}
+                    </span>
+                  </button>
+                  <p className="text-[11px] text-neutral-400 font-light">
+                    {podcastAutoTitle ? (
+                      <>
+                        Ahora se pinta{" "}
+                        <strong className="text-white">{podcastTitulo}</strong>.
+                        La fecha se calcula el día que exportas: nada que
+                        cambiar a mano.
+                      </>
+                    ) : (
+                      <>
+                        Manda el titular que escribas en la tarjeta 1 (útil si
+                        ya tienes un gancho o usas la barra de IA).
+                      </>
+                    )}
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -7810,6 +8040,45 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <p className="text-[11px] text-neutral-400 font-light">
                     Se atenúa sola para que el titular y la onda se lean
                     siempre. Sin imagen, el fondo es negro puro.
+                  </p>
+                </div>
+
+                {/* Cama musical de BlackNews */}
+                <div className="space-y-1.5 pt-3 border-t border-white/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPodcastMusicOn(!podcastMusicOn)}
+                      className={`px-3 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
+                        podcastMusicOn
+                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                          : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      🎵 Música de fondo
+                    </button>
+                    <span className="text-[11px] text-neutral-500 font-mono">
+                      {podcastMusicOn
+                        ? `${Math.round(podcastMusicVol * 100)} %`
+                        : "OFF"}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={40}
+                    step={1}
+                    disabled={!podcastMusicOn}
+                    value={Math.round(podcastMusicVol * 100)}
+                    onChange={(e) =>
+                      setPodcastMusicVol(Number(e.target.value) / 100)
+                    }
+                    className="w-full accent-emerald-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
+                  />
+                  <p className="text-[11px] text-neutral-400 font-light">
+                    Cama de BlackNews siempre por debajo de la voz (12 % por
+                    defecto, tope 40 %). Se mezcla igual en la vista previa que
+                    en el vídeo exportado.
                   </p>
                 </div>
 

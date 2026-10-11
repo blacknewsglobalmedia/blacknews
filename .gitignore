@@ -12,3 +12,5 @@ server/cloudinaryConfig.json
 bun.lock
 bun.lockb
 package-lock.json
+# Maestro de la cama musical (32 MB): en el repo sólo entra el MP3 comprimido.
+src/assets/audio/*.wav
