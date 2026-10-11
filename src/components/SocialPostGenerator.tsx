@@ -404,6 +404,9 @@ const tvIntroExit = (t: number, dur: number) =>
  *  pierde nada — que es la condición para poder aligerar la columna de
  *  controles sin tocar funciones.
  *
+ *  Va **controlada** desde el componente padre (`open` + `onToggle`) para
+ *  que la cabecera de la columna pueda abrirlo o plegarlo todo de una vez.
+ *
  *  Visual: mismo lenguaje que el resto del panel (etiqueta en versalitas,
  *  filete `border-white/5`, nada de bordes duros). Cerrada, la cabecera es
  *  una sola línea; abierta aparece el valor actual en mono a la derecha. */
@@ -412,15 +415,15 @@ const CollapseSection: React.FC<{
   icon?: React.ReactNode;
   /** Valor actual en mono junto al chevron; sólo se muestra abierta. */
   value?: string;
-  defaultOpen?: boolean;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
-}> = ({ title, icon, value, defaultOpen = false, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
+}> = ({ title, icon, value, open, onToggle, children }) => {
   return (
     <div className={open ? "pt-3 border-t border-white/5 space-y-3" : "pt-0.5"}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggle}
         aria-expanded={open}
         className="group flex w-full cursor-pointer items-center justify-between gap-2 text-left"
       >
@@ -445,6 +448,20 @@ const CollapseSection: React.FC<{
     </div>
   );
 };
+
+/** Secciones plegables de la columna de controles. La lista es explícita
+ *  (y no se deduce del DOM) para que «abrir todo / plegar todo» sepa
+ *  siempre cuáles son. Sólo el formato de entrega arranca abierto: es lo
+ *  único que suele cambiarse en cada export. */
+const COLLAPSE_SECTION_KEYS = [
+  "espaciado",
+  "secciones-rapidas",
+  "estilo-linea",
+  "formato",
+  "recortes",
+  "duracion",
+  "exposicion",
+] as const;
 
 type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
@@ -654,6 +671,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   });
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  /** Qué acordeones de la columna de controles están desplegados. Arranca
+   *  sólo con el formato de entrega abierto, que es lo único que suele
+   *  cambiarse en cada export; el resto se despliega bajo demanda. */
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    formato: true,
+  });
+  const toggleSection = (key: string) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  const allSectionsOpen = COLLAPSE_SECTION_KEYS.every(
+    (key) => openSections[key],
+  );
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
   const [groqKeySaved, setGroqKeySaved] = useState(false);
 
@@ -5565,6 +5593,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             En móvil va DESPUÉS de la vista previa (order-2) para que el
             resultado sea lo primero que se ve al abrir la pestaña. */}
         <div className="lg:col-span-7 space-y-6 order-2 lg:order-1">
+          {/* Abrir o plegar todas las secciones de la columna de una vez.
+              Discreto a propósito: no debe competir con el asistente IA. */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() =>
+                setOpenSections(
+                  Object.fromEntries(
+                    COLLAPSE_SECTION_KEYS.map((key) => [key, !allSectionsOpen]),
+                  ),
+                )
+              }
+              className="text-[11px] font-medium text-neutral-500 hover:text-white transition-colors cursor-pointer"
+            >
+              {allSectionsOpen ? "Plegar todo" : "Abrir todo"}
+            </button>
+          </div>
+
           {/* Card 0: Asistente IA Editorial · Redacción Automática y Gratuita */}
           <div className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
@@ -6077,6 +6123,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 más densa de la tarjeta y sólo hace falta al ajustar maquetación. */}
             <CollapseSection
               title="Espaciado e interlineado"
+              open={openSections.espaciado}
+              onToggle={() => toggleSection("espaciado")}
               icon={<Sliders className="h-3.5 w-3.5 text-neutral-400" />}
               value={`Sep ${gapTitleToDesc}px · Interl ${titleLineHeightRatio}x`}
             >
@@ -6264,6 +6312,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   catálogo de arriba ofrece las mismas secciones en una línea. */}
               <CollapseSection
                 title="Secciones rápidas"
+                open={openSections["secciones-rapidas"]}
+                onToggle={() => toggleSection("secciones-rapidas")}
                 icon={<Layers className="h-3.5 w-3.5 text-neutral-400" />}
                 value={category}
               >
@@ -6347,6 +6397,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {countryPlacement === "line" && selectedCountries.length > 0 && (
                 <CollapseSection
                   title="Estilo y auto-ajuste de la línea"
+                  open={openSections["estilo-linea"]}
+                  onToggle={() => toggleSection("estilo-linea")}
                   icon={<Globe className="h-3.5 w-3.5 text-neutral-400" />}
                   value={
                     countryFormat === "names"
@@ -6775,6 +6827,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     de salida que se ajustan una vez y rara vez se tocan. */}
                 <CollapseSection
                   title="Formato, peso y velocidad"
+                  open={openSections.formato}
+                  onToggle={() => toggleSection("formato")}
                   icon={<Film className="h-3.5 w-3.5 text-cyan-400" />}
                   value={`${videoFormat.toUpperCase()} · ${videoSpeed}x · ${
                     videoQuality === "social"
@@ -7069,6 +7123,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       sliders, no una función aparte. */}
                   <CollapseSection
                     title="Recortes rápidos"
+                    open={openSections.recortes}
+                    onToggle={() => toggleSection("recortes")}
                     icon={<Scissors className="h-3.5 w-3.5 text-neutral-400" />}
                   >
                     <div className="flex flex-wrap items-center gap-1">
@@ -7128,6 +7184,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     rara vez se vuelve a tocar. */}
                 <CollapseSection
                   title="Duración máxima del clip"
+                  open={openSections.duracion}
+                  onToggle={() => toggleSection("duracion")}
                   icon={<Gauge className="h-3.5 w-3.5 text-neutral-400" />}
                   value={
                     maxVideoDuration > 0 ? `${maxVideoDuration}s` : "Completo"
@@ -7193,6 +7251,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 siempre se deja en los valores por defecto. */}
             <CollapseSection
               title="Exposición y fundido"
+              open={openSections.exposicion}
+              onToggle={() => toggleSection("exposicion")}
               icon={<Palette className="h-3.5 w-3.5 text-neutral-400" />}
               value={`${contrast}% · ${brightness}%`}
             >
