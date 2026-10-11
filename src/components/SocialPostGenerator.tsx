@@ -3201,36 +3201,67 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     curY += curHeaderSize + Math.round(gapCategoryToTitle * u);
 
     // Fila de insignias de países (si countryPlacement === "badge")
+    // ≤4: bandera + nombre | 5-8: solo banderas en 1 fila | >8: 2 filas de banderas
     if (countryPlacement === "badge" && flagsData.length > 0) {
       ctx.save();
-      const badgeFontSize = Math.round(18 * u);
-      ctx.font = `600 ${badgeFontSize}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = "1.5px";
       ctx.textBaseline = "top";
+      const n = flagsData.length;
+      const showNames = n <= 4;
+      const twoRows = n > 8;
 
-      const bFlagW = Math.round(badgeFontSize * 1.3);
+      const bFontSize = Math.round(18 * u);
+      const bFlagW = Math.round(bFontSize * 1.3);
       const bFlagH = Math.round(bFlagW * 0.68);
-      const bFlagOffsetY = Math.round((badgeFontSize - bFlagH) / 2);
-      let bX = padX;
+      const bFlagOffsetY = Math.round((bFontSize - bFlagH) / 2);
 
-      for (let i = 0; i < flagsData.length; i++) {
-        const item = flagsData[i];
-        if (item.img) {
-          ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
-          bX += bFlagW + 7;
+      if (showNames) {
+        // Modo clásico: bandera + nombre + separador
+        ctx.font = `600 ${bFontSize}px 'Lexend', sans-serif`;
+        ctx.letterSpacing = "1.5px";
+        let bX = padX;
+        for (let i = 0; i < n; i++) {
+          const item = flagsData[i];
+          if (item.img) {
+            ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
+            bX += bFlagW + 7;
+          }
+          ctx.fillStyle = "#CBD5E1";
+          ctx.fillText(item.text, bX, curY);
+          bX += ctx.measureText(item.text).width;
+          if (i < n - 1) {
+            ctx.fillStyle = "#64748B";
+            const sep = "   ·   ";
+            ctx.fillText(sep, bX, curY);
+            bX += ctx.measureText(sep).width;
+          }
         }
-        ctx.fillStyle = "#CBD5E1";
-        ctx.fillText(item.text, bX, curY);
-        bX += ctx.measureText(item.text).width;
-        if (i < flagsData.length - 1) {
-          ctx.fillStyle = "#64748B";
-          const sep = "   ·   ";
-          ctx.fillText(sep, bX, curY);
-          bX += ctx.measureText(sep).width;
+        curY += bFontSize + Math.round(gapCategoryToTitle * u);
+      } else {
+        // Modo compacto: solo banderas, con gap uniforme
+        const gap = Math.round(10 * u);
+        const perRow = twoRows ? Math.min(10, Math.ceil(n / 2)) : n;
+        const rows = twoRows ? 2 : 1;
+        const rowH = bFlagH + Math.round(6 * u);
+        for (let row = 0; row < rows; row++) {
+          const start = row * perRow;
+          const end = Math.min(start + perRow, n);
+          let bX = padX;
+          for (let i = start; i < end; i++) {
+            const item = flagsData[i];
+            const rowY = curY + row * rowH;
+            if (item.img) {
+              ctx.drawImage(item.img, bX, rowY, bFlagW, bFlagH);
+            } else {
+              // Sin imagen: pequeño cuadrado gris
+              ctx.fillStyle = "#475569";
+              ctx.fillRect(bX, rowY, bFlagW, bFlagH);
+            }
+            bX += bFlagW + gap;
+          }
         }
+        curY += rows * rowH + Math.round(gapCategoryToTitle * u);
       }
       ctx.restore();
-      curY += badgeFontSize + Math.round(gapCategoryToTitle * u);
     }
 
     // ── Titular del podcast: serie y fecha en dos líneas separadas ──
@@ -3669,36 +3700,64 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     curY += curHeaderSize + gapCategoryToTitle;
 
     // 2.1 Country Badge (if placement is 'badge')
+    // ≤4: bandera + nombre | 5-8: solo banderas en 1 fila | >8: 2 filas de banderas
     if (countryPlacement === "badge" && flagsData.length > 0) {
       ctx.save();
-      const badgeFontSize = 18;
-      ctx.font = `600 ${badgeFontSize}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = "1.5px";
       ctx.textBaseline = "top";
+      const n = flagsData.length;
+      const showNames = n <= 4;
+      const twoRows = n > 8;
 
+      const badgeFontSize = 18;
       const bFlagW = Math.round(badgeFontSize * 1.3);
       const bFlagH = Math.round(bFlagW * 0.68);
       const bFlagOffsetY = Math.round((badgeFontSize - bFlagH) / 2);
-      let bX = padX;
 
-      for (let i = 0; i < flagsData.length; i++) {
-        const item = flagsData[i];
-        if (item.img) {
-          ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
-          bX += bFlagW + 7;
+      if (showNames) {
+        ctx.font = `600 ${badgeFontSize}px 'Lexend', sans-serif`;
+        ctx.letterSpacing = "1.5px";
+        let bX = padX;
+        for (let i = 0; i < n; i++) {
+          const item = flagsData[i];
+          if (item.img) {
+            ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
+            bX += bFlagW + 7;
+          }
+          ctx.fillStyle = "#CBD5E1";
+          ctx.fillText(item.text, bX, curY);
+          bX += ctx.measureText(item.text).width;
+          if (i < n - 1) {
+            ctx.fillStyle = "#64748B";
+            const sep = "   ·   ";
+            ctx.fillText(sep, bX, curY);
+            bX += ctx.measureText(sep).width;
+          }
         }
-        ctx.fillStyle = "#CBD5E1";
-        ctx.fillText(item.text, bX, curY);
-        bX += ctx.measureText(item.text).width;
-        if (i < flagsData.length - 1) {
-          ctx.fillStyle = "#64748B";
-          const sep = "   ·   ";
-          ctx.fillText(sep, bX, curY);
-          bX += ctx.measureText(sep).width;
+        curY += badgeFontSize + gapCategoryToTitle;
+      } else {
+        const gap = 10;
+        const perRow = twoRows ? Math.min(10, Math.ceil(n / 2)) : n;
+        const rows = twoRows ? 2 : 1;
+        const rowH = bFlagH + 6;
+        for (let row = 0; row < rows; row++) {
+          const start = row * perRow;
+          const end = Math.min(start + perRow, n);
+          let bX = padX;
+          for (let i = start; i < end; i++) {
+            const item = flagsData[i];
+            const rowY = curY + row * rowH;
+            if (item.img) {
+              ctx.drawImage(item.img, bX, rowY, bFlagW, bFlagH);
+            } else {
+              ctx.fillStyle = "#475569";
+              ctx.fillRect(bX, rowY, bFlagW, bFlagH);
+            }
+            bX += bFlagW + gap;
+          }
         }
+        curY += rows * rowH + gapCategoryToTitle;
       }
       ctx.restore();
-      curY += badgeFontSize + gapCategoryToTitle;
     }
 
     // 3. Title (Lexend Bold)
@@ -9549,28 +9608,68 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </div>
 
                   {/* Country Badge (if badge placement is selected) */}
+                  {/* ≤4: bandera + nombre | 5-8: solo banderas 1 fila | >8: 2 filas */}
                   {countryPlacement === "badge" &&
-                    selectedCountries.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: `${Math.round(14 * previewScale)}px`,
-                        }}
-                        className="flex flex-wrap items-center gap-1.5"
-                      >
-                        {selectedCountries.map((c) => (
-                          <span
-                            key={c.name}
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
-                          >
-                            <CountryFlag
-                              code={c.code}
-                              className="w-3.5 h-2.5 object-cover rounded-[1px]"
-                            />
-                            <span>{c.name.toUpperCase()}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    selectedCountries.length > 0 &&
+                    (() => {
+                      const n = selectedCountries.length;
+                      const showNames = n <= 4;
+                      const twoRows = n > 8;
+                      const perRow = twoRows
+                        ? Math.min(10, Math.ceil(n / 2))
+                        : n;
+                      const rows = twoRows
+                        ? [
+                            selectedCountries.slice(0, perRow),
+                            selectedCountries.slice(perRow),
+                          ]
+                        : [selectedCountries];
+                      return (
+                        <div
+                          style={{
+                            marginTop: `${Math.round(14 * previewScale)}px`,
+                          }}
+                          className="flex flex-col gap-1"
+                        >
+                          {showNames ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {selectedCountries.map((c) => (
+                                <span
+                                  key={c.name}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
+                                >
+                                  <CountryFlag
+                                    code={c.code}
+                                    className="w-3.5 h-2.5 object-cover rounded-[1px]"
+                                  />
+                                  <span>{c.name.toUpperCase()}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            rows.map((rowItems, ri) => (
+                              <div
+                                key={ri}
+                                className="flex items-center gap-1.5"
+                              >
+                                {rowItems.map((c) => (
+                                  <span
+                                    key={c.name}
+                                    title={c.name}
+                                    className="inline-block"
+                                  >
+                                    <CountryFlag
+                                      code={c.code}
+                                      className="w-5 h-3.5 object-cover rounded-xs shadow-sm"
+                                    />
+                                  </span>
+                                ))}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      );
+                    })()}
 
                   {/* Title with dynamic Real-time Font Size and Spacing */}
                   <h1
