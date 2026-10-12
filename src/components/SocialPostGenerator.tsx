@@ -241,6 +241,47 @@ const fmtPodcastClock = (t: number): string => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
+/** Cómo se muestrean las banderas (países) en la tarjeta del podcast.
+ *  «auto» elige variante según cuántos países haya; el resto son estilos
+ *  fijos para probar en cada caso desde el panel. */
+type PodcastFlagStyle =
+  | "auto"
+  | "flags-names"
+  | "flags-codes"
+  | "flags-only"
+  | "names"
+  | "ocultar";
+
+/** Lo que acaba pintando la tarjeta una vez resuelto el estilo «auto». */
+type PodcastFlagMode = Exclude<PodcastFlagStyle, "auto">;
+
+/** Umbral del muestreo automático: 1-3 bandera+nombre · 4-6 bandera+código
+ *  (más compacto) · 7 o más solo bandera (que es cuando los nombres alargan
+ *  demasiado la línea y la estructura se ve rara). */
+const autoFlagMode = (count: number): PodcastFlagMode => {
+  if (count <= 0) return "ocultar";
+  if (count <= 3) return "flags-names";
+  if (count <= 6) return "flags-codes";
+  return "flags-only";
+};
+
+const PODCAST_FLAG_STYLES: Array<{ value: PodcastFlagStyle; label: string }> = [
+  { value: "auto", label: "Auto" },
+  { value: "flags-names", label: "Bandera + Nombre" },
+  { value: "flags-codes", label: "Bandera + Código" },
+  { value: "flags-only", label: "Solo banderas" },
+  { value: "names", label: "Solo nombres" },
+  { value: "ocultar", label: "Ocultar" },
+];
+
+const PODCAST_FLAG_MODE_LABEL: Record<PodcastFlagMode, string> = {
+  "flags-names": "bandera + nombre",
+  "flags-codes": "bandera + código ISO",
+  "flags-only": "solo banderas",
+  names: "solo nombres",
+  ocultar: "sin países",
+};
+
 /** Encuadre «cover» de un medio sobre el lienzo (recorta por el centro, con
  *  rotación ISO 14496). Lo comparten el fondo del post-podcast y el 16:9. */
 const drawCoverFrame = (
@@ -653,6 +694,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Se mezcla igual en la vista previa y en el archivo exportado.
   const [podcastMusicOn, setPodcastMusicOn] = useState(true);
   const [podcastMusicVol, setPodcastMusicVol] = useState(0.12);
+  // Estilo de banderas/países de la tarjeta (ver PODCAST_FLAG_STYLES).
+  const [podcastFlagStyle, setPodcastFlagStyle] =
+    useState<PodcastFlagStyle>("auto");
+  // Variante que se pinta de verdad: «auto» muestrea según cuántos países
+  // haya en el post; el resto es el estilo fijo elegido en el panel.
+  const podcastFlagMode: PodcastFlagMode =
+    podcastFlagStyle === "auto"
+      ? autoFlagMode(selectedCountries.length)
+      : podcastFlagStyle;
 
   // Formato de salida: el mismo post se genera en 4:5 (1080×1350), 9:16
   // (1080×1920, el vertical de TikTok / Shorts / Reels) o 16:9 (1920×1080) con
@@ -1305,6 +1355,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         podcastAutoTitle,
         podcastMusicOn,
         podcastMusicVol,
+        podcastFlagStyle,
         podcastBg: podcastBgSrc.startsWith("blob:") ? null : podcastBgSrc,
         podcastBgName: podcastBgSrc.startsWith("blob:") ? "" : podcastBgName,
       },
@@ -1505,6 +1556,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setPodcastMusicVol(
             Math.min(0.4, Math.max(0, data.mediaSettings.podcastMusicVol)),
           );
+        if (
+          typeof data.mediaSettings.podcastFlagStyle === "string" &&
+          PODCAST_FLAG_STYLES.some(
+            (s) => s.value === data.mediaSettings.podcastFlagStyle,
+          )
+        )
+          setPodcastFlagStyle(data.mediaSettings.podcastFlagStyle);
         if (mediaUrl && !staleBlobMedia) setMediaSrc(mediaUrl);
         else if (videoFallback || staleBlobMedia)
           setMediaSrc(DEFAULT_MEDIA_SRC);
@@ -2235,6 +2293,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     podcastAutoTitle,
     podcastMusicOn,
     podcastMusicVol,
+    podcastFlagStyle,
     podcastBgSrc,
     tvShowLive,
     tvShowClock,
@@ -3074,21 +3133,52 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       : Math.round(headerSize * u);
     let curLetterSpacing = 2.0;
 
+    // ── Muestreo de banderas del podcast ──
+    // `podcastFlagMode` resuelve el estilo activo («auto» elige variante según
+    // cuántos países haya; el resto son estilos fijos). De aquí sale todo:
+    // si se pinta bandera (imagen), si se pinta texto (nombre o código ISO)
+    // y cuánto ocupa cada país en la línea.
+    const flagMode = podcastFlagMode;
+    const wantImgs =
+      flagMode === "flags-names" ||
+      flagMode === "flags-codes" ||
+      flagMode === "flags-only";
+    const wantText =
+      flagMode === "flags-names" ||
+      flagMode === "flags-codes" ||
+      flagMode === "names";
+    const showCountries = flagMode !== "ocultar" && flagsData.length > 0;
+    // Con «solo banderas» los países van sin puntos: hueco fijo en su lugar.
+    const itemSep = wantText ? " · " : "   ";
+    const itemTextOf = (it: { code: string; text: string }) =>
+      flagMode === "flags-codes"
+        ? it.code
+        : (
+            selectedCountries.find((c) => c.code === it.code)?.name || it.text
+          ).toUpperCase();
+    /** Ancho de un país con la fuente ya puesta: bandera + 6 + texto. */
+    const itemWOf = (
+      it: { code: string; text: string; img: HTMLImageElement | null },
+      fs: number,
+    ) => {
+      // Con estilo de bandera, el país ocupa su bloque aunque no tenga imagen
+      // (entonces se pinta el cuadrito gris, que mide lo mismo).
+      let w = wantImgs ? Math.round(fs * 1.3) + 6 : 0;
+      if (wantText) w += ctx.measureText(itemTextOf(it)).width;
+      return w;
+    };
+
     // Medida de la línea completa: se encoge hasta que cabe en una sola línea
     const computeTotalWidth = (fSize: number, lSpacing: number) => {
       ctx.font = `600 ${fSize}px 'Lexend', sans-serif`;
       ctx.letterSpacing = `${lSpacing}px`;
       let totalW = ctx.measureText(catUpper).width;
-      if (countryPlacement === "line" && flagsData.length > 0) {
+      if (countryPlacement === "line" && showCountries) {
         totalW += ctx.measureText("  ·  ").width;
-        const flagW = Math.round(fSize * 1.3);
         for (let i = 0; i < flagsData.length; i++) {
-          if (countryFormat !== "names" && flagsData[i].img) {
-            totalW += flagW + 6;
-          }
-          totalW += ctx.measureText(flagsData[i].text).width;
+          totalW += itemWOf(flagsData[i], fSize);
           if (i < flagsData.length - 1) {
-            totalW += ctx.measureText(" · ").width;
+            totalW += ctx.measureText(itemSep).width;
           }
         }
       }
@@ -3112,20 +3202,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     let podcastHiddenCount = 0;
     if (
       countryPlacement === "line" &&
+      showCountries &&
       computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth
     ) {
       ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
       ctx.letterSpacing = `${curLetterSpacing}px`;
-      const fFlagW = Math.round(curHeaderSize * 1.3);
       for (let limit = flagsData.length - 1; limit >= 0; limit--) {
         const hidden = flagsData.length - limit;
         let w = ctx.measureText(catUpper).width;
         if (limit > 0) {
           w += ctx.measureText("  ·  ").width;
           for (let i = 0; i < limit; i++) {
-            if (countryFormat !== "names" && flagsData[i].img) w += fFlagW + 6;
-            w += ctx.measureText(flagsData[i].text).width;
-            if (i < limit - 1) w += ctx.measureText(" · ").width;
+            w += itemWOf(flagsData[i], curHeaderSize);
+            if (i < limit - 1) w += ctx.measureText(itemSep).width;
           }
         }
         if (hidden > 0) w += ctx.measureText(` +${hidden}`).width;
@@ -3147,7 +3236,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillText(catUpper, curX, curY);
     curX += ctx.measureText(catUpper).width;
 
-    if (countryPlacement === "line" && podcastVisibleFlags.length > 0) {
+    if (countryPlacement === "line" && showCountries && podcastVisibleFlags.length > 0) {
       ctx.fillStyle = "#64748B";
       const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
@@ -3159,19 +3248,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       for (let i = 0; i < podcastVisibleFlags.length; i++) {
         const item = podcastVisibleFlags[i];
-        if (countryFormat !== "names" && item.img) {
-          ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
+        if (wantImgs) {
+          if (item.img) {
+            ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
+          } else {
+            // Sin imagen (país sin código ISO): cuadrito gris, como en insignia.
+            ctx.fillStyle = "#475569";
+            ctx.fillRect(curX, curY + flagOffsetY, flagW, flagH);
+          }
           curX += flagW + 6;
         }
-        ctx.fillStyle = "#E2E8F0";
-        ctx.fillText(item.text, curX, curY);
-        curX += ctx.measureText(item.text).width;
+        if (wantText) {
+          ctx.fillStyle = "#E2E8F0";
+          const label = itemTextOf(item);
+          ctx.fillText(label, curX, curY);
+          curX += ctx.measureText(label).width;
+        }
 
         if (i < podcastVisibleFlags.length - 1) {
           ctx.fillStyle = "#64748B";
-          const midSep = " · ";
-          ctx.fillText(midSep, curX, curY);
-          curX += ctx.measureText(midSep).width;
+          ctx.fillText(itemSep, curX, curY);
+          curX += ctx.measureText(itemSep).width;
         }
       }
 
@@ -3200,67 +3297,99 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     curY += curHeaderSize + Math.round(gapCategoryToTitle * u);
 
-    // Fila de insignias de países (si countryPlacement === "badge")
-    // ≤4: bandera + nombre | 5-8: solo banderas en 1 fila | >8: 2 filas de banderas
-    if (countryPlacement === "badge" && flagsData.length > 0) {
+    // Fila de insignias de países (si countryPlacement === "badge"): se
+    // rellena midiendo el ancho real con el estilo activo, hasta 2 filas, y lo
+    // que no cabe se recorta con un indicador +N en lugar de descolocar la
+    // estructura de la tarjeta.
+    if (countryPlacement === "badge" && showCountries) {
       ctx.save();
       ctx.textBaseline = "top";
-      const n = flagsData.length;
-      const showNames = n <= 4;
-      const twoRows = n > 8;
-
       const bFontSize = Math.round(18 * u);
+      ctx.font = `600 ${bFontSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "1.5px";
       const bFlagW = Math.round(bFontSize * 1.3);
       const bFlagH = Math.round(bFlagW * 0.68);
       const bFlagOffsetY = Math.round((bFontSize - bFlagH) / 2);
+      const bSep = wantText ? "   ·   " : "";
+      const bGap = wantText ? ctx.measureText(bSep).width : Math.round(10 * u);
+      const maxRowW = W - padX * 2;
+      const widths = flagsData.map((it) => itemWOf(it, bFontSize));
+      const used = (rs: number[][]) => rs.reduce((s, r) => s + r.length, 0);
 
-      if (showNames) {
-        // Modo clásico: bandera + nombre + separador
-        ctx.font = `600 ${bFontSize}px 'Lexend', sans-serif`;
-        ctx.letterSpacing = "1.5px";
-        let bX = padX;
-        for (let i = 0; i < n; i++) {
-          const item = flagsData[i];
-          if (item.img) {
-            ctx.drawImage(item.img, bX, curY + bFlagOffsetY, bFlagW, bFlagH);
-            bX += bFlagW + 7;
-          }
-          ctx.fillStyle = "#CBD5E1";
-          ctx.fillText(item.text, bX, curY);
-          bX += ctx.measureText(item.text).width;
-          if (i < n - 1) {
-            ctx.fillStyle = "#64748B";
-            const sep = "   ·   ";
-            ctx.fillText(sep, bX, curY);
-            bX += ctx.measureText(sep).width;
-          }
+      // Cuánto cabe por fila (máximo 2), dejando sitio para el +N final.
+      const rowsIdx: number[][] = [];
+      let cur: number[] = [];
+      let curW = 0;
+      for (let i = 0; i < flagsData.length; i++) {
+        const add = (cur.length ? bGap : 0) + widths[i];
+        if (cur.length > 0 && curW + add > maxRowW) {
+          rowsIdx.push(cur);
+          cur = [];
+          curW = 0;
+          if (rowsIdx.length >= 2) break;
         }
-        curY += bFontSize + Math.round(gapCategoryToTitle * u);
-      } else {
-        // Modo compacto: solo banderas, con gap uniforme
-        const gap = Math.round(10 * u);
-        const perRow = twoRows ? Math.min(10, Math.ceil(n / 2)) : n;
-        const rows = twoRows ? 2 : 1;
-        const rowH = bFlagH + Math.round(6 * u);
-        for (let row = 0; row < rows; row++) {
-          const start = row * perRow;
-          const end = Math.min(start + perRow, n);
-          let bX = padX;
-          for (let i = start; i < end; i++) {
-            const item = flagsData[i];
-            const rowY = curY + row * rowH;
-            if (item.img) {
-              ctx.drawImage(item.img, bX, rowY, bFlagW, bFlagH);
+        cur.push(i);
+        curW += (cur.length > 1 ? bGap : 0) + widths[i];
+      }
+      if (rowsIdx.length < 2 && cur.length) rowsIdx.push(cur);
+      let hidden = flagsData.length - used(rowsIdx);
+      // Si queda alguno fuera, el +N tiene que caber en la última fila.
+      while (hidden > 0 && rowsIdx.length > 0) {
+        const last = rowsIdx[rowsIdx.length - 1];
+        const extra =
+          bGap + ctx.measureText(` +${hidden}`).width + Math.round(6 * u);
+        const lastW = last.reduce(
+          (s, idx, j) => s + (j ? bGap : 0) + widths[idx],
+          0,
+        );
+        if (lastW + extra <= maxRowW) break;
+        last.pop();
+        if (last.length === 0) rowsIdx.pop();
+        hidden = flagsData.length - used(rowsIdx);
+      }
+
+      const rowH = Math.max(bFontSize, bFlagH) + Math.round(8 * u);
+      let bY = curY;
+      rowsIdx.forEach((rowIdxs, ri) => {
+        let bX = padX;
+        rowIdxs.forEach((idx, j) => {
+          if (j > 0) {
+            if (wantText) {
+              ctx.fillStyle = "#64748B";
+              ctx.fillText(bSep, bX, bY);
+            }
+            bX += bGap;
+          }
+          const it = flagsData[idx];
+          if (wantImgs) {
+            if (it.img) {
+              ctx.drawImage(it.img, bX, bY + bFlagOffsetY, bFlagW, bFlagH);
             } else {
               // Sin imagen: pequeño cuadrado gris
               ctx.fillStyle = "#475569";
-              ctx.fillRect(bX, rowY, bFlagW, bFlagH);
+              ctx.fillRect(bX, bY + bFlagOffsetY, bFlagW, bFlagH);
             }
-            bX += bFlagW + gap;
+            bX += bFlagW + 6;
           }
+          if (wantText) {
+            ctx.fillStyle = "#CBD5E1";
+            const label = itemTextOf(it);
+            ctx.fillText(label, bX, bY);
+            bX += ctx.measureText(label).width;
+          }
+        });
+        if (hidden > 0 && ri === rowsIdx.length - 1) {
+          if (wantText) {
+            ctx.fillStyle = "#64748B";
+            ctx.fillText(bSep, bX, bY);
+          }
+          bX += bGap;
+          ctx.fillStyle = "#94a3b8";
+          ctx.fillText(` +${hidden}`, bX, bY);
         }
-        curY += rows * rowH + Math.round(gapCategoryToTitle * u);
-      }
+        bY += rowH;
+      });
+      curY = bY + Math.round(gapCategoryToTitle * u);
       ctx.restore();
     }
 
@@ -3492,7 +3621,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       (await Promise.all(
         selectedCountries.map(async (c) => {
           const img =
-            countryFormat !== "names" ? await loadFlagImage(c.code) : null;
+            (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null;
           const text =
             countryFormat === "flags-codes" ? c.code : c.name.toUpperCase();
           return { code: c.code, img, text };
@@ -4376,7 +4507,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const flagsData = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+          img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
@@ -4491,7 +4624,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const flagsData = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+          img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
@@ -4552,7 +4687,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const flagsData = await Promise.all(
       selectedCountries.map(async (c) => ({
         code: c.code,
-        img: countryFormat === "names" ? null : await loadFlagImage(c.code),
+        img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
         text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
       })),
     );
@@ -5027,7 +5164,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const cachedFlags = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
@@ -5537,7 +5676,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const cachedFlags = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
@@ -6678,7 +6819,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const data = await Promise.all(
         selectedCountries.map(async (c) => ({
           code: c.code,
-          img: countryFormat !== "names" ? await loadFlagImage(c.code) : null,
+          img: (countryFormat !== "names" || postDesign === "podcast")
+            ? await loadFlagImage(c.code)
+            : null,
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
@@ -6747,6 +6890,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     countryPlacement,
     countryFormat,
     selectedCountries,
+    podcastFlagStyle,
     gapCategoryToTitle,
     trimStart,
     trimEnd,
@@ -8219,6 +8363,51 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-mono"
                     />
                   </div>
+                </div>
+
+                {/* Cómo se muestrean las banderas (países) en la tarjeta */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                    Banderas (países)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PODCAST_FLAG_STYLES.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setPodcastFlagStyle(opt.value)}
+                        className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer ${
+                          podcastFlagStyle === opt.value
+                            ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                            : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-neutral-400 font-light">
+                    {podcastFlagStyle === "auto" ? (
+                      <>
+                        Con {selectedCountries.length}{" "}
+                        {selectedCountries.length === 1 ? "país" : "países"}{" "}
+                        pinta{" "}
+                        <strong className="text-white">
+                          {PODCAST_FLAG_MODE_LABEL[podcastFlagMode]}
+                        </strong>
+                        : hasta 3 bandera y nombre, de 4 a 6 bandera y código,
+                        7 o más solo banderas (máx. 2 filas y +N si no caben).
+                      </>
+                    ) : (
+                      <>
+                        Estilo fijo:{" "}
+                        <strong className="text-white">
+                          {PODCAST_FLAG_MODE_LABEL[podcastFlagMode]}
+                        </strong>
+                        . Con «Auto» se adapta solo al número de países.
+                      </>
+                    )}
+                  </p>
                 </div>
 
                 {/* Titular automático con la fecha */}
