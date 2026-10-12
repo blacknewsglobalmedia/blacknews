@@ -1434,8 +1434,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Aviso de políticas a todos los visitantes (si hay versión nueva) */}
-      <PoliciesNoticeBanner onOpenPolicies={() => handleOpenPolicies()} />
+      {/* Aviso de políticas a todos los visitantes (si hay versión nueva).
+          No aparece en el panel: en /dashboard el estudio ocupa la pantalla
+          completa y este banner flotante sólo tapa controles. */}
+      {!isStudioView && (
+        <PoliciesNoticeBanner onOpenPolicies={() => handleOpenPolicies()} />
+      )}
 
       {/* Hay un despliegue más nuevo que esta sesión: aviso discreto para refrescar */}
       <VersionNotice />
