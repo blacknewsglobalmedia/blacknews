@@ -710,7 +710,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [countryPlacement, setCountryPlacement] =
     useState<CountryPlacement>("line");
   const [countryFormat, setCountryFormat] = useState<
-    "names" | "flags-names" | "flags-codes"
+    "names" | "flags-names" | "flags-codes" | "flags-only"
   >("names");
   const [countrySearch, setCountrySearch] = useState("");
   // Catálogo reactivo (destacados + personalizados + resto + Internacional)
@@ -2461,7 +2461,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // Formatted countries string for display and canvas
   const getFormattedCountries = (
-    fmt: "names" | "flags-names" | "flags-codes" = countryFormat,
+    fmt: "names" | "flags-names" | "flags-codes" | "flags-only" = countryFormat,
   ) => {
     if (selectedCountries.length === 0) return "";
     switch (fmt) {
@@ -2471,6 +2471,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         return selectedCountries
           .map((c) => `${c.flag} ${c.name.toUpperCase()}`)
           .join(" · ");
+      case "flags-only":
+        // Sin texto: para medir la línea sólo cuenta el ancho de cada bandera.
+        return selectedCountries.map((c) => `${c.flag} `).join("");
       case "names":
       default:
         return selectedCountries.map((c) => c.name.toUpperCase()).join(" · ");
@@ -2581,12 +2584,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // bandera (flagcdn) igual que ya hace el chyron.
   const tvTickerCountries: TickerSeg[] = [];
   if (countryFormat !== "names") {
+    // Con «solo banderas» cada país va sin texto y el hueco es aire, no punto.
+    const flagsOnly = countryFormat === "flags-only";
     selectedCountries.forEach((c, i) => {
-      if (i > 0) tvTickerCountries.push({ text: " · " });
+      if (i > 0)
+        tvTickerCountries.push({ text: flagsOnly ? "   " : " · " });
       tvTickerCountries.push({
         code: c.code,
         emoji: c.flag,
-        text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
+        text:
+          countryFormat === "flags-codes"
+            ? c.code
+            : flagsOnly
+              ? ""
+              : c.name.toUpperCase(),
       });
     });
   } else {
@@ -2876,13 +2887,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             );
             cx += TV_FLAG_DX;
           }
-          ctx.fillStyle = "#94A3B8";
-          ctx.fillText(item.text, cx, rowMidY - TV_CTRY_DY);
-          cx += ctx.measureText(item.text).width;
+          if (countryFormat !== "flags-only") {
+            ctx.fillStyle = "#94A3B8";
+            ctx.fillText(item.text, cx, rowMidY - TV_CTRY_DY);
+            cx += ctx.measureText(item.text).width;
+          }
           if (i < flagsData.length - 1) {
+            const cSep = countryFormat === "flags-only" ? "   " : "  ·  ";
             ctx.fillStyle = "#64748B";
-            ctx.fillText("  ·  ", cx, rowMidY - TV_CTRY_DY);
-            cx += ctx.measureText("  ·  ").width;
+            ctx.fillText(cSep, cx, rowMidY - TV_CTRY_DY);
+            cx += ctx.measureText(cSep).width;
           }
         }
       }
@@ -3882,15 +3896,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.letterSpacing = `${lSpacing}px`;
       let totalW = ctx.measureText(catUpper).width;
       if (newsPlacement === "line" && flagsData.length > 0) {
+        const flagsOnly = countryFormat === "flags-only";
         totalW += ctx.measureText("  ·  ").width;
         const flagW = Math.round(fSize * 1.3);
         for (let i = 0; i < flagsData.length; i++) {
           if (countryFormat !== "names" && flagsData[i].img) {
             totalW += flagW + 6;
           }
-          totalW += ctx.measureText(flagsData[i].text).width;
+          if (!flagsOnly) totalW += ctx.measureText(flagsData[i].text).width;
           if (i < flagsData.length - 1) {
-            totalW += ctx.measureText(" · ").width;
+            totalW += ctx.measureText(flagsOnly ? "   " : " · ").width;
           }
         }
       }
@@ -3919,6 +3934,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
       ctx.letterSpacing = `${curLetterSpacing}px`;
       const nFlagW = Math.round(curHeaderSize * 1.3);
+      const cutFlagsOnly = countryFormat === "flags-only";
       for (let limit = flagsData.length - 1; limit >= 0; limit--) {
         const hidden = flagsData.length - limit;
         let w = ctx.measureText(catUpper).width;
@@ -3926,8 +3942,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           w += ctx.measureText("  ·  ").width;
           for (let i = 0; i < limit; i++) {
             if (countryFormat !== "names" && flagsData[i].img) w += nFlagW + 6;
-            w += ctx.measureText(flagsData[i].text).width;
-            if (i < limit - 1) w += ctx.measureText(" · ").width;
+            if (!cutFlagsOnly) w += ctx.measureText(flagsData[i].text).width;
+            if (i < limit - 1)
+              w += ctx.measureText(cutFlagsOnly ? "   " : " · ").width;
           }
         }
         if (hidden > 0) w += ctx.measureText(` +${hidden}`).width;
@@ -3948,6 +3965,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     curX += ctx.measureText(catUpper).width;
 
     if (newsPlacement === "line" && normalVisibleFlags.length > 0) {
+      const flagsOnly = countryFormat === "flags-only";
       ctx.fillStyle = "#64748B";
       const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
@@ -3963,13 +3981,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           ctx.drawImage(item.img, curX, curY + flagOffsetY, flagW, flagH);
           curX += flagW + 6;
         }
-        ctx.fillStyle = "#E2E8F0";
-        ctx.fillText(item.text, curX, curY);
-        curX += ctx.measureText(item.text).width;
+        if (!flagsOnly) {
+          ctx.fillStyle = "#E2E8F0";
+          ctx.fillText(item.text, curX, curY);
+          curX += ctx.measureText(item.text).width;
+        }
 
         if (i < normalVisibleFlags.length - 1) {
           ctx.fillStyle = "#64748B";
-          const midSep = " · ";
+          const midSep = flagsOnly ? "   " : " · ";
           ctx.fillText(midSep, curX, curY);
           curX += ctx.measureText(midSep).width;
         }
@@ -4006,7 +4026,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.save();
       ctx.textBaseline = "top";
       const n = flagsData.length;
-      const showNames = n <= 4;
+      // Con «solo banderas» la insignia nunca muestra nombres: pinta las
+      // banderas sueltas (1 fila hasta 8, 2 filas a partir de ahí).
+      const showNames = n <= 4 && countryFormat !== "flags-only";
       const twoRows = n > 8;
 
       const badgeFontSize = 18;
@@ -4625,29 +4647,41 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         drawnSomething = true;
       }
 
-      for (const f of flagsData || []) {
+      // Con «solo banderas» sólo viajan los PNG: el hueco entre banderas es
+      // aire, no punto (el «·» sólo separa la categoría de la primera).
+      const badgeFlagsOnly = countryFormat === "flags-only";
+      (flagsData || []).forEach((f, i) => {
         // Corta antes del margen derecho: con muchos países el badge no
         // puede pasar del ancho de contenido.
-        if (x > W - PORTADA_PAD_X) break;
+        if (x > W - PORTADA_PAD_X) return;
         // Separador «·» entre bloques, con el mismo tracking del resto.
         if (drawnSomething) {
-          ctx.font = "700 27px 'Lexend', sans-serif";
-          ctx.letterSpacing = "3.5px";
-          ctx.fillStyle = "rgba(255,255,255,0.7)";
-          ctx.fillText("·", x, badgeY);
-          x += ctx.measureText("·").width + 22;
+          if (badgeFlagsOnly && i > 0) {
+            x += 22;
+          } else {
+            ctx.font = "700 27px 'Lexend', sans-serif";
+            ctx.letterSpacing = "3.5px";
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.fillText("·", x, badgeY);
+            x += ctx.measureText("·").width + 22;
+          }
         }
-        if (f.img && f.img.naturalWidth > 0) {
+        const hasFlagImg = Boolean(f.img && f.img.naturalWidth > 0);
+        if (hasFlagImg && f.img) {
           ctx.drawImage(f.img, x, badgeY - 14, 40, 28);
           x += 40 + 12;
         }
-        ctx.font = "600 27px 'Lexend', sans-serif";
-        ctx.letterSpacing = "3px";
-        ctx.fillStyle = "rgba(255,255,255,0.88)";
-        ctx.fillText(f.text, x, badgeY);
-        x += ctx.measureText(f.text).width + 24;
+        if (!badgeFlagsOnly) {
+          ctx.font = "600 27px 'Lexend', sans-serif";
+          ctx.letterSpacing = "3px";
+          ctx.fillStyle = "rgba(255,255,255,0.88)";
+          ctx.fillText(f.text, x, badgeY);
+          x += ctx.measureText(f.text).width + 24;
+        } else if (!hasFlagImg) {
+          x += 24;
+        }
         drawnSomething = true;
-      }
+      });
       ctx.restore();
     }
 
@@ -8135,55 +8169,82 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   onToggle={() => toggleSection("estilo-linea")}
                   icon={<Globe className="h-3.5 w-3.5 text-neutral-400" />}
                   value={
-                    countryFormat === "names"
-                      ? "Nombres"
-                      : countryFormat === "flags-names"
-                        ? "Banderas"
-                        : "Códigos"
+                    postDesign === "podcast"
+                      ? PODCAST_FLAG_MODE_LABEL[podcastFlagMode]
+                      : countryFormat === "names"
+                        ? "Nombres"
+                        : countryFormat === "flags-only"
+                          ? "Solo banderas"
+                          : countryFormat === "flags-names"
+                            ? "Banderas"
+                            : "Códigos"
                   }
                 >
                   <div className="p-3 bg-neutral-900/90 rounded-xl border border-white/10 space-y-2.5">
-                    <div className="flex items-center justify-end gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
-                      <button
-                        type="button"
-                        onClick={() => setCountryFormat("names")}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === "names"
-                            ? "bg-white text-black font-bold"
-                            : "text-neutral-400 hover:text-white"
-                        }`}
-                        title="Solo nombres: ISRAEL · IRÁN"
-                      >
-                        Nombres
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCountryFormat("flags-names")}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === "flags-names"
-                            ? "bg-white text-black font-bold"
-                            : "text-neutral-400 hover:text-white"
-                        }`}
-                        title="Banderas y nombres: 🇮🇱 ISRAEL · 🇮🇷 IRÁN"
-                      >
-                        Banderas + Nombres
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCountryFormat("flags-codes")}
-                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                          countryFormat === "flags-codes"
-                            ? "bg-white text-black font-bold"
-                            : "text-neutral-400 hover:text-white"
-                        }`}
-                        title="Ultra compacto para muchos países: 🇮🇱 IL · 🇮🇷 IR"
-                      >
-                        Códigos (Compacto)
-                      </button>
-                    </div>
+                    {/* En podcast el formato de países lo manda el selector
+                        «Banderas (países)» de más abajo: estos botones no
+                        pintan nada en esa tarjeta, así que no se ofrecen. */}
+                    {postDesign !== "podcast" && (
+                      <div className="flex flex-wrap items-center justify-end gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                        <button
+                          type="button"
+                          onClick={() => setCountryFormat("names")}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            countryFormat === "names"
+                              ? "bg-white text-black font-bold"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                          title="Solo nombres: ISRAEL · IRÁN"
+                        >
+                          Nombres
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCountryFormat("flags-names")}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            countryFormat === "flags-names"
+                              ? "bg-white text-black font-bold"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                          title="Banderas y nombres: 🇮🇱 ISRAEL · 🇮🇷 IRÁN"
+                        >
+                          Banderas + Nombres
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCountryFormat("flags-codes")}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            countryFormat === "flags-codes"
+                              ? "bg-white text-black font-bold"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                          title="Ultra compacto para muchos países: 🇮🇱 IL · 🇮🇷 IR"
+                        >
+                          Códigos (Compacto)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCountryFormat("flags-only")}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            countryFormat === "flags-only"
+                              ? "bg-white text-black font-bold"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                          title="Solo banderas: 🇮🇱 🇮🇷"
+                        >
+                          Solo banderas
+                        </button>
+                      </div>
+                    )}
 
                     {/* Header Auto-Fit vs Manual Size */}
-                    <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[11px]">
+                    <div
+                      className={`flex items-center justify-between text-[11px] ${
+                        postDesign !== "podcast"
+                          ? "pt-1 border-t border-white/5"
+                          : ""
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -9628,11 +9689,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                     className="flex shrink-0 items-center"
                                     style={{ gap: TV_CTRY_SEP_GAP }}
                                   >
-                                    {i > 0 && (
-                                      <span style={{ color: "#64748B" }}>
-                                        ·
-                                      </span>
-                                    )}
+                                    {i > 0 &&
+                                      countryFormat !== "flags-only" && (
+                                        <span style={{ color: "#64748B" }}>
+                                          ·
+                                        </span>
+                                      )}
                                     {countryFormat !== "names" && (
                                       <CountryFlag
                                         code={c.code}
@@ -9643,11 +9705,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                         }}
                                       />
                                     )}
-                                    <span>
-                                      {countryFormat === "flags-codes"
-                                        ? c.code
-                                        : c.name.toUpperCase()}
-                                    </span>
+                                    {countryFormat !== "flags-only" && (
+                                      <span>
+                                        {countryFormat === "flags-codes"
+                                          ? c.code
+                                          : c.name.toUpperCase()}
+                                      </span>
+                                    )}
                                   </span>
                                 ))}
                               </span>
@@ -9928,11 +9992,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                             >
                               {visible.map((c, idx) => (
                                 <React.Fragment key={c.name}>
-                                  {idx > 0 && (
-                                    <span className="text-neutral-500 text-[10px] mx-0.5">
-                                      ·
-                                    </span>
-                                  )}
+                                  {idx > 0 &&
+                                    countryFormat !== "flags-only" && (
+                                      <span className="text-neutral-500 text-[10px] mx-0.5">
+                                        ·
+                                      </span>
+                                    )}
                                   <span className="inline-flex items-center gap-0.5">
                                     {countryFormat !== "names" && (
                                       <CountryFlag
@@ -9940,11 +10005,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                                         className="w-3.5 h-2.5 object-cover rounded-[1px] inline-block shadow-xs"
                                       />
                                     )}
-                                    <span>
-                                      {countryFormat === "flags-codes"
-                                        ? c.code
-                                        : c.name.toUpperCase()}
-                                    </span>
+                                    {countryFormat !== "flags-only" && (
+                                      <span>
+                                        {countryFormat === "flags-codes"
+                                          ? c.code
+                                          : c.name.toUpperCase()}
+                                      </span>
+                                    )}
                                   </span>
                                 </React.Fragment>
                               ))}
@@ -9967,7 +10034,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     selectedCountries.length > 0 &&
                     (() => {
                       const n = selectedCountries.length;
-                      const showNames = n <= 4;
+                      const showNames =
+                        n <= 4 && countryFormat !== "flags-only";
                       const twoRows = n > 8;
                       const perRow = twoRows
                         ? Math.min(10, Math.ceil(n / 2))
