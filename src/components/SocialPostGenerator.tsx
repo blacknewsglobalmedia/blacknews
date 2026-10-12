@@ -282,6 +282,64 @@ const PODCAST_FLAG_MODE_LABEL: Record<PodcastFlagMode, string> = {
   ocultar: "sin países",
 };
 
+/** Dónde se pintan los países en la tarjeta. «top-right», «under-title» y
+ *  «bottom» son formas extra del podcast: en el modo noticia se pintan en la
+ *  barra superior (y el panel no las ofrece). */
+type CountryPlacement =
+  | "line"
+  | "badge"
+  | "top-right"
+  | "under-title"
+  | "bottom"
+  | "none";
+
+const PODCAST_ONLY_PLACEMENTS: CountryPlacement[] = [
+  "top-right",
+  "under-title",
+  "bottom",
+];
+
+const COUNTRY_PLACEMENTS: Array<{
+  value: CountryPlacement;
+  label: string;
+  hint: string;
+  podcastOnly?: boolean;
+}> = [
+  {
+    value: "line",
+    label: "En Línea",
+    hint: "Mostrar en la barra superior junto a la categoría",
+  },
+  {
+    value: "badge",
+    label: "Insignia",
+    hint: "Mostrar como fila de países bajo la categoría",
+  },
+  {
+    value: "top-right",
+    label: "Arriba dcha.",
+    hint: "Países a la derecha, en la fila de la categoría",
+    podcastOnly: true,
+  },
+  {
+    value: "under-title",
+    label: "Bajo titular",
+    hint: "Países entre el titular y la bajada",
+    podcastOnly: true,
+  },
+  {
+    value: "bottom",
+    label: "Pie",
+    hint: "Países abajo, a la derecha en la línea de la marca",
+    podcastOnly: true,
+  },
+  {
+    value: "none",
+    label: "Ocultar",
+    hint: "Ocultar mención de países",
+  },
+];
+
 /** Encuadre «cover» de un medio sobre el lienzo (recorta por el centro, con
  *  rotación ISO 14496). Lo comparten el fondo del post-podcast y el 16:9. */
 const drawCoverFrame = (
@@ -649,9 +707,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     { name: "Irán", code: "IR", flag: "🇮🇷" },
   ]);
   const [customCountryName, setCustomCountryName] = useState("");
-  const [countryPlacement, setCountryPlacement] = useState<
-    "line" | "badge" | "none"
-  >("line");
+  const [countryPlacement, setCountryPlacement] =
+    useState<CountryPlacement>("line");
   const [countryFormat, setCountryFormat] = useState<
     "names" | "flags-names" | "flags-codes"
   >("names");
@@ -3168,6 +3225,133 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return w;
     };
 
+    /**
+     * Empaqueta los países en filas por ancho real (máx. 2 filas) con el estilo
+     * activo. Devuelve las filas de índices, el hueco usado y cuántos quedan
+     * fuera (se pintarán como +N). Compone con `drawFlagRows`.
+     */
+    const packFlagRows = (
+      fs: number,
+      maxRowW: number,
+    ): { rows: number[][]; hidden: number; gap: number } => {
+      ctx.font = `600 ${fs}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "1.5px";
+      const gap = wantText
+        ? ctx.measureText("   ·   ").width
+        : Math.round(10 * u);
+      const widths = flagsData.map((it) => itemWOf(it, fs));
+      const rows: number[][] = [];
+      let cur: number[] = [];
+      let curW = 0;
+      for (let i = 0; i < flagsData.length; i++) {
+        const add = (cur.length ? gap : 0) + widths[i];
+        if (cur.length > 0 && curW + add > maxRowW) {
+          rows.push(cur);
+          cur = [];
+          curW = 0;
+          if (rows.length >= 2) break;
+        }
+        cur.push(i);
+        curW += (cur.length > 1 ? gap : 0) + widths[i];
+      }
+      if (rows.length < 2 && cur.length) rows.push(cur);
+      const used = () => rows.reduce((s, r) => s + r.length, 0);
+      let hidden = flagsData.length - used();
+      // Si queda alguno fuera, el +N tiene que caber en la última fila.
+      while (hidden > 0 && rows.length > 0) {
+        const last = rows[rows.length - 1];
+        const extra =
+          gap + ctx.measureText(` +${hidden}`).width + Math.round(6 * u);
+        const lastW = last.reduce(
+          (s, idx, j) => s + (j ? gap : 0) + widths[idx],
+          0,
+        );
+        if (lastW + extra <= maxRowW) break;
+        last.pop();
+        if (last.length === 0) rows.pop();
+        hidden = flagsData.length - used();
+      }
+      return { rows, hidden, gap };
+    };
+
+    /** Altura de una fila de países (la bandera mide algo más que el texto). */
+    const flagRowH = (fs: number) =>
+      Math.max(fs, Math.round(fs * 1.3 * 0.68)) + Math.round(8 * u);
+
+    /**
+     * Pinta las filas empaquetadas desde `y0` y devuelve la Y final.
+     * `alignRight` alinea cada fila al margen derecho (formas «Arriba dcha.»
+     * y «Pie»); el resto arranca en el margen izquierdo.
+     */
+    const drawFlagRows = (
+      rows: number[][],
+      hidden: number,
+      y0: number,
+      fs: number,
+      gap: number,
+      alignRight: boolean,
+    ): number => {
+      if (!rows.length) return y0;
+      ctx.save();
+      ctx.textBaseline = "top";
+      ctx.font = `600 ${fs}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "1.5px";
+      const flagW = Math.round(fs * 1.3);
+      const flagH = Math.round(flagW * 0.68);
+      const flagOffsetY = Math.round((fs - flagH) / 2);
+      const rowW = (r: number[]) =>
+        r.reduce(
+          (s, idx, j) => s + (j ? gap : 0) + itemWOf(flagsData[idx], fs),
+          0,
+        );
+      let ry = y0;
+      rows.forEach((rowIdxs, ri) => {
+        const isLast = ri === rows.length - 1 && hidden > 0;
+        const suffixW = isLast
+          ? gap + ctx.measureText(` +${hidden}`).width + Math.round(6 * u)
+          : 0;
+        let bX = alignRight ? W - padRight - rowW(rowIdxs) - suffixW : padX;
+        rowIdxs.forEach((idx, j) => {
+          if (j > 0) {
+            if (wantText) {
+              ctx.fillStyle = "#64748B";
+              ctx.fillText("   ·   ", bX, ry);
+            }
+            bX += gap;
+          }
+          const it = flagsData[idx];
+          if (wantImgs) {
+            if (it.img) {
+              ctx.drawImage(it.img, bX, ry + flagOffsetY, flagW, flagH);
+            } else {
+              // Sin imagen: pequeño cuadrado gris
+              ctx.fillStyle = "#475569";
+              ctx.fillRect(bX, ry + flagOffsetY, flagW, flagH);
+            }
+            bX += flagW + 6;
+          }
+          if (wantText) {
+            ctx.fillStyle = "#CBD5E1";
+            const label = itemTextOf(it);
+            ctx.fillText(label, bX, ry);
+            bX += ctx.measureText(label).width;
+          }
+        });
+        if (isLast) {
+          if (wantText) {
+            ctx.fillStyle = "#64748B";
+            ctx.fillText("   ·   ", bX, ry);
+          }
+          bX += gap;
+          ctx.fillStyle = "#94a3b8";
+          ctx.fillText(` +${hidden}`, bX, ry);
+        }
+        ry += flagRowH(fs);
+      });
+      ctx.restore();
+      return ry;
+    };
+
     // Medida de la línea completa: se encoge hasta que cabe en una sola línea
     const computeTotalWidth = (fSize: number, lSpacing: number) => {
       ctx.font = `600 ${fSize}px 'Lexend', sans-serif`;
@@ -3295,102 +3479,46 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     ctx.restore();
 
-    curY += curHeaderSize + Math.round(gapCategoryToTitle * u);
+    // ── Países arriba a la derecha: misma fila que la categoría ──
+    // Ocupan lo que deja libre la categoría + el filete; si no caben en una
+    // fila bajan a una segunda (también a la derecha) y la cabecera crece para
+    // no pisar el titular.
+    let topRightEndY = curY + curHeaderSize;
+    if (countryPlacement === "top-right" && showCountries) {
+      ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${curLetterSpacing}px`;
+      const catW = ctx.measureText(catUpper).width;
+      const ruleW = lineEndX > lineStartX + 8 ? lineEndX - lineStartX : 0;
+      const trMaxW = Math.max(
+        Math.round(150 * u),
+        contentW - catW - ruleW - Math.round(28 * u),
+      );
+      const trFs = Math.round(18 * u);
+      const tr = packFlagRows(trFs, trMaxW);
+      topRightEndY = drawFlagRows(
+        tr.rows,
+        tr.hidden,
+        curY,
+        trFs,
+        tr.gap,
+        true,
+      );
+    }
+
+    curY =
+      Math.max(topRightEndY, curY + curHeaderSize) +
+      Math.round(gapCategoryToTitle * u);
 
     // Fila de insignias de países (si countryPlacement === "badge"): se
     // rellena midiendo el ancho real con el estilo activo, hasta 2 filas, y lo
     // que no cabe se recorta con un indicador +N en lugar de descolocar la
     // estructura de la tarjeta.
     if (countryPlacement === "badge" && showCountries) {
-      ctx.save();
-      ctx.textBaseline = "top";
       const bFontSize = Math.round(18 * u);
-      ctx.font = `600 ${bFontSize}px 'Lexend', sans-serif`;
-      ctx.letterSpacing = "1.5px";
-      const bFlagW = Math.round(bFontSize * 1.3);
-      const bFlagH = Math.round(bFlagW * 0.68);
-      const bFlagOffsetY = Math.round((bFontSize - bFlagH) / 2);
-      const bSep = wantText ? "   ·   " : "";
-      const bGap = wantText ? ctx.measureText(bSep).width : Math.round(10 * u);
-      const maxRowW = W - padX * 2;
-      const widths = flagsData.map((it) => itemWOf(it, bFontSize));
-      const used = (rs: number[][]) => rs.reduce((s, r) => s + r.length, 0);
-
-      // Cuánto cabe por fila (máximo 2), dejando sitio para el +N final.
-      const rowsIdx: number[][] = [];
-      let cur: number[] = [];
-      let curW = 0;
-      for (let i = 0; i < flagsData.length; i++) {
-        const add = (cur.length ? bGap : 0) + widths[i];
-        if (cur.length > 0 && curW + add > maxRowW) {
-          rowsIdx.push(cur);
-          cur = [];
-          curW = 0;
-          if (rowsIdx.length >= 2) break;
-        }
-        cur.push(i);
-        curW += (cur.length > 1 ? bGap : 0) + widths[i];
-      }
-      if (rowsIdx.length < 2 && cur.length) rowsIdx.push(cur);
-      let hidden = flagsData.length - used(rowsIdx);
-      // Si queda alguno fuera, el +N tiene que caber en la última fila.
-      while (hidden > 0 && rowsIdx.length > 0) {
-        const last = rowsIdx[rowsIdx.length - 1];
-        const extra =
-          bGap + ctx.measureText(` +${hidden}`).width + Math.round(6 * u);
-        const lastW = last.reduce(
-          (s, idx, j) => s + (j ? bGap : 0) + widths[idx],
-          0,
-        );
-        if (lastW + extra <= maxRowW) break;
-        last.pop();
-        if (last.length === 0) rowsIdx.pop();
-        hidden = flagsData.length - used(rowsIdx);
-      }
-
-      const rowH = Math.max(bFontSize, bFlagH) + Math.round(8 * u);
-      let bY = curY;
-      rowsIdx.forEach((rowIdxs, ri) => {
-        let bX = padX;
-        rowIdxs.forEach((idx, j) => {
-          if (j > 0) {
-            if (wantText) {
-              ctx.fillStyle = "#64748B";
-              ctx.fillText(bSep, bX, bY);
-            }
-            bX += bGap;
-          }
-          const it = flagsData[idx];
-          if (wantImgs) {
-            if (it.img) {
-              ctx.drawImage(it.img, bX, bY + bFlagOffsetY, bFlagW, bFlagH);
-            } else {
-              // Sin imagen: pequeño cuadrado gris
-              ctx.fillStyle = "#475569";
-              ctx.fillRect(bX, bY + bFlagOffsetY, bFlagW, bFlagH);
-            }
-            bX += bFlagW + 6;
-          }
-          if (wantText) {
-            ctx.fillStyle = "#CBD5E1";
-            const label = itemTextOf(it);
-            ctx.fillText(label, bX, bY);
-            bX += ctx.measureText(label).width;
-          }
-        });
-        if (hidden > 0 && ri === rowsIdx.length - 1) {
-          if (wantText) {
-            ctx.fillStyle = "#64748B";
-            ctx.fillText(bSep, bX, bY);
-          }
-          bX += bGap;
-          ctx.fillStyle = "#94a3b8";
-          ctx.fillText(` +${hidden}`, bX, bY);
-        }
-        bY += rowH;
-      });
-      curY = bY + Math.round(gapCategoryToTitle * u);
-      ctx.restore();
+      const pack = packFlagRows(bFontSize, contentW);
+      curY =
+        drawFlagRows(pack.rows, pack.hidden, curY, bFontSize, pack.gap, false) +
+        Math.round(gapCategoryToTitle * u);
     }
 
     // ── Titular del podcast: serie y fecha en dos líneas separadas ──
@@ -3445,6 +3573,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ctx.letterSpacing = "0px";
         curY += dateFs;
       }
+    }
+
+    // ── Países bajo el titular: fila propia entre titular y bajada ──
+    if (countryPlacement === "under-title" && showCountries) {
+      const utFs = Math.round(20 * u);
+      const ut = packFlagRows(utFs, contentW);
+      curY += Math.round(18 * u);
+      curY =
+        drawFlagRows(ut.rows, ut.hidden, curY, utFs, ut.gap, false) +
+        Math.round(12 * u);
     }
 
     // ── Bajada: el guion resumido, breve ──
@@ -3575,6 +3713,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     ctx.letterSpacing = "0px";
 
+    // ── Países en el pie: a la derecha, en la línea de la marca ──
+    if (countryPlacement === "bottom" && showCountries) {
+      const btFs = Math.round(18 * u);
+      // Hueco real de la marca (cuadro + wordmark + episodio si lo hay).
+      ctx.font = `700 ${Math.round(34 * u)}px 'Lexend', sans-serif`;
+      ctx.letterSpacing = `${Math.round(0.4 * u)}px`;
+      let brandW =
+        brandSize + Math.round(12 * u) + ctx.measureText("BlackNews").width;
+      if (epText) {
+        ctx.font = `500 ${Math.round(19 * u)}px 'Lexend', sans-serif`;
+        ctx.letterSpacing = `${Math.round(2 * u)}px`;
+        brandW += ctx.measureText(`  ·  ${epText}`).width;
+      }
+      const bt = packFlagRows(
+        btFs,
+        Math.max(Math.round(150 * u), contentW - brandW - Math.round(32 * u)),
+      );
+      const btY =
+        brandY +
+        Math.round((brandSize - flagRowH(btFs) * bt.rows.length) / 2);
+      drawFlagRows(bt.rows, bt.hidden, btY, btFs, bt.gap, true);
+      ctx.letterSpacing = "0px";
+    }
+
     // ── Barra de progreso a sangre ──
     const barY = H - Math.round(6 * u);
     ctx.fillStyle = "rgba(255,255,255,0.10)";
@@ -3697,6 +3859,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const contentWidth = W - padX - padRight;
     let curY = padTop;
 
+    // En noticias sólo hay tres formas de mostrar países: barra superior,
+    // insignia y ocultar. Las formas extra (arriba dcha., bajo titular y pie)
+    // son del podcast y aquí se pintan en la barra superior.
+    const newsPlacement: "line" | "badge" | "none" =
+      countryPlacement === "badge" || countryPlacement === "none"
+        ? countryPlacement
+        : "line";
+
     // 2. Category & Country Header Line (Guaranteed Single Line with Vector Flags)
     ctx.save();
     ctx.textBaseline = "top";
@@ -3711,7 +3881,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.font = `600 ${fSize}px 'Lexend', sans-serif`;
       ctx.letterSpacing = `${lSpacing}px`;
       let totalW = ctx.measureText(catUpper).width;
-      if (countryPlacement === "line" && flagsData.length > 0) {
+      if (newsPlacement === "line" && flagsData.length > 0) {
         totalW += ctx.measureText("  ·  ").width;
         const flagW = Math.round(fSize * 1.3);
         for (let i = 0; i < flagsData.length; i++) {
@@ -3743,7 +3913,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     let normalVisibleFlags = flagsData;
     let normalHiddenCount = 0;
     if (
-      countryPlacement === "line" &&
+      newsPlacement === "line" &&
       computeTotalWidth(curHeaderSize, curLetterSpacing) > maxTextWidth
     ) {
       ctx.font = `600 ${curHeaderSize}px 'Lexend', sans-serif`;
@@ -3777,7 +3947,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillText(catUpper, curX, curY);
     curX += ctx.measureText(catUpper).width;
 
-    if (countryPlacement === "line" && normalVisibleFlags.length > 0) {
+    if (newsPlacement === "line" && normalVisibleFlags.length > 0) {
       ctx.fillStyle = "#64748B";
       const sepStr = "  ·  ";
       ctx.fillText(sepStr, curX, curY);
@@ -3832,7 +4002,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 2.1 Country Badge (if placement is 'badge')
     // ≤4: bandera + nombre | 5-8: solo banderas en 1 fila | >8: 2 filas de banderas
-    if (countryPlacement === "badge" && flagsData.length > 0) {
+    if (newsPlacement === "badge" && flagsData.length > 0) {
       ctx.save();
       ctx.textBaseline = "top";
       const n = flagsData.length;
@@ -6832,6 +7002,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     };
   }, [postDesign, countryFormat, selectedCountries]);
 
+  // Las formas de ubicación extra (arriba dcha., bajo titular y pie) sólo
+  // existen en el podcast: al volver a noticias se restaura la barra
+  // superior, que es una de las tres formas que el modo noticia pinta.
+  useEffect(() => {
+    if (
+      postDesign !== "podcast" &&
+      PODCAST_ONLY_PLACEMENTS.includes(countryPlacement)
+    ) {
+      setCountryPlacement("line");
+    }
+  }, [postDesign, countryPlacement]);
+
   const paintPodcastPreview = () => {
     const canvas = podcastCanvasRef.current;
     if (!canvas) return;
@@ -7919,44 +8101,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </p>
                 </div>
 
-                {/* Country Display Placement */}
-                <div className="flex items-center gap-1.5 bg-neutral-900 p-1 rounded-xl border border-white/10 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => setCountryPlacement("line")}
-                    className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === "line"
-                        ? "bg-white text-black font-bold"
-                        : "text-neutral-400 hover:text-white"
-                    }`}
-                    title="Mostrar en la barra superior junto a la categoría"
-                  >
-                    En Línea
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCountryPlacement("badge")}
-                    className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === "badge"
-                        ? "bg-white text-black font-bold"
-                        : "text-neutral-400 hover:text-white"
-                    }`}
-                    title="Mostrar como etiqueta destacada sobre el titular"
-                  >
-                    Insignia
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCountryPlacement("none")}
-                    className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                      countryPlacement === "none"
-                        ? "bg-white text-black font-bold"
-                        : "text-neutral-400 hover:text-white"
-                    }`}
-                    title="Ocultar mención de países"
-                  >
-                    Ocultar
-                  </button>
+                {/* Country Display Placement: tres formas base (línea,
+                    insignia, ocultar) y tres extra del podcast (arriba dcha.,
+                    bajo titular, pie) que sólo se ofrecen en ese diseño. */}
+                <div className="flex flex-wrap items-center gap-1.5 bg-neutral-900 p-1 rounded-xl border border-white/10 text-[11px]">
+                  {COUNTRY_PLACEMENTS.filter(
+                    (p) => !p.podcastOnly || postDesign === "podcast",
+                  ).map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setCountryPlacement(p.value)}
+                      className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                        countryPlacement === p.value
+                          ? "bg-white text-black font-bold"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                      title={p.hint}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -9825,7 +9990,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                               {selectedCountries.map((c) => (
                                 <span
                                   key={c.name}
-                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white/10 text-neutral-200 rounded text-[10px] font-semibold tracking-wide border border-white/15"
+                                  className="inline-flex items-center gap-1.5 text-neutral-200 text-[10px] font-semibold tracking-wide"
                                 >
                                   <CountryFlag
                                     code={c.code}
