@@ -25,6 +25,8 @@ import { MobileTabBar } from "./components/MobileTabBar";
 import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
+import { OpenFrontsStrip } from "./components/OpenFrontsStrip";
+import { QuoteOfTheDay } from "./components/QuoteOfTheDay";
 import { InstallPromo } from "./components/InstallPromo";
 import { VersionNotice } from "./components/VersionNotice";
 import { TrustSection } from "./components/TrustSection";
@@ -1558,6 +1560,9 @@ export default function App() {
               </>
             )}
 
+            {/* Sala de situación: focos geopolíticos con semáforo editorial */}
+            <OpenFrontsStrip />
+
             <GeoMapSection
               reports={reportsList}
               categories={categoriesList}
@@ -1565,6 +1570,9 @@ export default function App() {
               onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
               meter={readMeter}
             />
+
+            {/* Respiro tipográfica entre el mapa y la parrilla de posts */}
+            <QuoteOfTheDay />
 
             {/* Visual Posts Section: News cards in 4:5 post format */}
             <VisualPostsSection
