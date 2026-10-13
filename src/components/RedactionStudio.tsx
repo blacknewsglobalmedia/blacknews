@@ -40,6 +40,7 @@ import {
   RefreshCw,
   Tag,
   Smartphone,
+  Mic,
   LayoutDashboard,
   Newspaper,
   ArrowRight,
@@ -66,6 +67,7 @@ import {
 } from '../types/studio';
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
+import type { PodcastEpisode } from '../types/podcast';
 import { AdCampaign, AdStatus } from '../types/ads';
 import {
   HistoryEntry,
@@ -74,6 +76,7 @@ import {
 } from '../utils/readerPanel';
 import { FrontPageManager } from './FrontPageManager';
 import { ImageOptimizationStudio } from './ImageOptimizationStudio';
+import { PodcastManager } from './PodcastManager';
 import { CategoryManager } from './CategoryManager';
 import { SocialPostGenerator, CountryFlag } from './SocialPostGenerator';
 import { EditorialCalendar } from './EditorialCalendar';
@@ -111,6 +114,9 @@ interface RedactionStudioProps {
   onUpdateLayoutConfig: (config: FrontPageLayoutConfig) => void;
   flashNews: FlashNews[];
   onUpdateFlashNews: (news: FlashNews[]) => void;
+  /** Episodios de podcast publicados en portada (gestor en Multimedia). */
+  podcasts?: PodcastEpisode[];
+  onUpdatePodcasts?: (items: PodcastEpisode[]) => void;
   onAutomationApply: (preset: AutomationPreset) => void;
   onOpenGoogleAuth: () => void;
   categories?: string[];
@@ -203,6 +209,8 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onUpdateLayoutConfig,
   flashNews,
   onUpdateFlashNews,
+  podcasts = [],
+  onUpdatePodcasts,
   onAutomationApply,
   onOpenGoogleAuth,
   categories: propCategories,
@@ -1213,6 +1221,30 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                   <span>Optimizador .AVIF</span>
                 </div>
               </button>
+
+              {/* Podcast */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('podcasts');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                  activeTab === 'podcasts'
+                    ? 'bg-white text-black font-bold'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-neutral-400" />
+                  <span>Podcast</span>
+                </div>
+                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                  activeTab === 'podcasts' ? 'bg-black/10 text-black' : 'text-neutral-500'
+                }`}>
+                  {podcasts.length} EP
+                </span>
+              </button>
             </div>
             )}
 
@@ -1389,6 +1421,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'images' && 'OPTIMIZADOR .AVIF'}
               {activeTab === 'calendar' && 'CALENDARIO EDITORIAL'}
               {activeTab === 'layout' && 'GESTIÓN DE PORTADA'}
+              {activeTab === 'podcasts' && 'PODCAST'}
               {activeTab === 'categories' && 'GESTIÓN DE CATEGORÍAS'}
               {activeTab === 'users' && 'EQUIPO & ROLES'}
               {activeTab === 'policies' && 'POLÍTICAS Y NORMATIVA'}
@@ -2096,6 +2129,18 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               />
             )
           )}
+        </div>
+      )}
+
+      {/* TAB CONTENT: PODCAST (subida y publicación de episodios) */}
+      {activeTab === 'podcasts' && permissions.canWritePosts && onUpdatePodcasts && (
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-8 pb-16">
+          <PodcastManager
+            episodes={podcasts}
+            onUpdateEpisodes={onUpdatePodcasts}
+            categories={categories}
+            authorName={currentUser.name}
+          />
         </div>
       )}
 

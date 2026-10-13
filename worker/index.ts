@@ -2,6 +2,7 @@
  * BLACKNEWS — Cloudflare Worker entry point.
  *
  * - /api/images/*  → API de optimización de imágenes (Cloudinary + transformaciones por CDN)
+ * - /api/podcasts/* → subida de episodios de podcast (audio alojado en Cloudinary)
  * - /api/video/*   → retirada (el material audiovisual se publica en YouTube)
  * - /api/ai/*      → redacción asistida: OpenRouter + búsqueda web Tavily
  * - cualquier otra ruta → assets estáticos del frontend (dist/)
@@ -56,6 +57,19 @@ async function handleApi(request: Request, env: Env, pathname: string): Promise<
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error al procesar la imagen';
       console.error('[BLACKNEWS WORKER] optimize:', message);
+      return json({ success: false, error: message }, 502);
+    }
+  }
+
+  // Episodios de podcast: subida de audio a Cloudinary (resource_type video)
+  if (pathname === '/api/podcasts/upload' && request.method === 'POST') {
+    const { handlePodcastUpload } = await import('./podcasts');
+    try {
+      const data = await handlePodcastUpload(request, env);
+      return json({ success: true, data });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al subir el audio';
+      console.error('[BLACKNEWS WORKER] podcasts:', message);
       return json({ success: false, error: message }, 502);
     }
   }

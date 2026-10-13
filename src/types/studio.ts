@@ -10,6 +10,7 @@ export type StudioTab =
   | 'layout'
   | 'builder'
   | 'images'
+  | 'podcasts'
   | 'categories'
   | 'post-generator'
   | 'calendar'
@@ -64,6 +65,7 @@ export const canOpenStudioTab = (
     case 'my-articles':
     case 'post-generator':
     case 'images':
+    case 'podcasts':
       return p.canWritePosts;
     case 'layout':
       return p.canManageLayout;

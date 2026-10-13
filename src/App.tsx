@@ -29,6 +29,7 @@ import { OpenFrontsStrip } from "./components/OpenFrontsStrip";
 import { QuoteOfTheDay } from "./components/QuoteOfTheDay";
 import { IntelligenceSection } from "./components/IntelligenceSection";
 import { PersonalBriefing } from "./components/PersonalBriefing";
+import { PodcastSection } from "./components/PodcastSection";
 import { InstallPromo } from "./components/InstallPromo";
 import { VersionNotice } from "./components/VersionNotice";
 import { TrustSection } from "./components/TrustSection";
@@ -39,6 +40,7 @@ import { Report, CategoryId, FlashNews } from "./types/news";
 import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
 import type { StudioTab } from "./types/studio";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
+import { PodcastEpisode } from "./types/podcast";
 import { AdCampaign, INITIAL_AD_CAMPAIGNS, MOCK_AD_IDS } from "./types/ads";
 import {
   DEFAULT_LAYOUT_CONFIG,
@@ -257,6 +259,18 @@ export default function App() {
       }
     } catch {}
     return FLASH_NEWS;
+  });
+
+  // Episodios de podcast (sección de portada)
+  const [podcastsList, setPodcastsList] = useState<PodcastEpisode[]>(() => {
+    try {
+      const saved = localStorage.getItem("blacknews_podcasts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
   });
 
   // Front page layout configuration
@@ -628,6 +642,19 @@ export default function App() {
       } catch {}
     };
 
+    const pullPodcasts = async () => {
+      try {
+        const snap = await getDoc(doc(db, "settings", "podcasts"));
+        if (!alive || !snap.exists()) return;
+        const items = (snap.data() as { items?: PodcastEpisode[] }).items;
+        if (!Array.isArray(items)) return;
+        setPodcastsList(items);
+        try {
+          localStorage.setItem("blacknews_podcasts", JSON.stringify(items));
+        } catch {}
+      } catch {}
+    };
+
     const pullCategories = async () => {
       try {
         const snap = await getDoc(doc(db, "settings", "categories"));
@@ -683,6 +710,7 @@ export default function App() {
     void Promise.all([
       pullReports(),
       pullFlashNews(),
+      pullPodcasts(),
       pullCategories(),
       pullFrontLayout(),
       pullAds(),
@@ -895,6 +923,18 @@ export default function App() {
       console.warn("[BLACKNEWS] Local storage backup saved for flash news");
     }
     showToast("Teletipo de última hora actualizado");
+  };
+
+  // Publica/borra episodios de podcast (portada + Firestore `settings/podcasts`)
+  const handleUpdatePodcasts = async (updated: PodcastEpisode[]) => {
+    setPodcastsList(updated);
+    try {
+      localStorage.setItem("blacknews_podcasts", JSON.stringify(updated));
+      await setDoc(doc(db, "settings", "podcasts"), { items: updated });
+    } catch (err) {
+      console.warn("[BLACKNEWS] Local storage backup saved for podcasts");
+    }
+    showToast("Episodios de podcast actualizados");
   };
 
   // Update categories catalog
@@ -1527,6 +1567,8 @@ export default function App() {
             onUpdateLayoutConfig={handleUpdateLayoutConfig}
             flashNews={flashNewsList}
             onUpdateFlashNews={handleUpdateFlashNews}
+            podcasts={podcastsList}
+            onUpdatePodcasts={handleUpdatePodcasts}
             onAutomationApply={handleAutomationApply}
             onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
             categories={categoriesList}
@@ -1622,6 +1664,9 @@ export default function App() {
               categories={categoriesList}
               onReadReport={handleOpenReport}
             />
+
+            {/* Audio bajo demanda: episodios subidos desde el estudio */}
+            <PodcastSection episodes={podcastsList} />
 
             {/* In-Feed Leaderboard Horizontal Banner (los suscriptores no ven publicidad) */}
             {!isSubscribed && (
