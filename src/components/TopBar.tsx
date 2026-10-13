@@ -133,6 +133,28 @@ export const TopBar: React.FC<TopBarProps> = ({
     onMobileMenuOpenChange ?? setInternalMobileMenuOpen;
   const stripRef = useRef<HTMLDivElement>(null);
 
+  // Cabecera compacta al bajar el scroll: se pliega la micro-tira, la barra
+  // principal encoge y las categorías bajan de alto — casi la mitad de altura
+  // para no estorbar al leer. Histéresis (comprime >96 px, vuelve a <48 px)
+  // para no parpadear en el límite.
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const y = window.scrollY;
+      setCompact((prev) => (prev ? y > 48 : y > 96));
+    };
+    sync();
+    window.addEventListener("scroll", sync, { passive: true });
+    // Respaldo: algunos entornos (tabs en segundo plano, automatización)
+    // desplazan sin emitir eventos de scroll; el sondeo — barato y sin
+    // re-renders porque setCompact ignora cambios repetidos — lo cubre.
+    const poll = window.setInterval(sync, 300);
+    return () => {
+      window.removeEventListener("scroll", sync);
+      window.clearInterval(poll);
+    };
+  }, []);
+
   // Tira de categorías (móvil/tablet): la sección activa se centra sola
   useEffect(() => {
     const active = stripRef.current?.querySelector<HTMLElement>(
@@ -210,8 +232,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <header className="bn-safe-top w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
-      {/* Top micro-strip: clean & uncrowded */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-sans tracking-wide text-neutral-400 border-b border-white/5 uppercase font-medium">
+      {/* Top micro-strip: clean & uncrowded (se pliega al compactar) */}
+      <div className={`${compact ? "hidden" : ""} max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-sans tracking-wide text-neutral-400 border-b border-white/5 uppercase font-medium`}>
         <div className="flex items-center gap-2.5">
           <span className="flex items-center gap-1.5 text-white font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
@@ -260,12 +282,12 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Main Bar: brand + actions. Both sides are shrink-0 and the row matches
           the content container width, so nothing can spill past the side margins */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3">
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 transition-[height] duration-200 ${compact ? "h-11 sm:h-12" : "h-14 sm:h-16"}`}>
         {/* Left: Brand with Editorial Authority */}
         <div className="flex items-center shrink-0">
           <button
             onClick={() => handleCategoryClick("TODAS")}
-            className="font-headline text-2xl sm:text-[1.85rem] font-semibold tracking-tight text-white hover:text-neutral-200 transition-colors flex items-baseline cursor-pointer"
+            className={`font-headline font-semibold tracking-tight text-white hover:text-neutral-200 transition-all flex items-baseline cursor-pointer ${compact ? "text-lg sm:text-xl" : "text-2xl sm:text-[1.85rem]"}`}
           >
             BLACKNEWS
             <span className="w-1.5 h-1.5 rounded-full bg-white ml-1 inline-block"></span>
@@ -290,7 +312,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               }
             >
               <PenTool className="w-3.5 h-3.5" />
-              <span>
+              <span className={compact ? "hidden" : ""}>
                 {isStudioOpen
                   ? "VER PORTADA"
                   : currentUser?.role === "LECTOR"
@@ -308,7 +330,9 @@ export const TopBar: React.FC<TopBarProps> = ({
               title={accountTitle}
             >
               {googleIconSvg}
-              <span className="text-[11px] font-semibold text-neutral-200">
+              <span
+                className={`text-[11px] font-semibold text-neutral-200 ${compact ? "hidden" : ""}`}
+              >
                 {accountLabel}
               </span>
             </button>
@@ -363,7 +387,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         aria-label="Secciones editoriales"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
-          <div className="flex items-center gap-5 xl:gap-7 h-10 text-xs font-sans font-medium tracking-wide overflow-x-auto no-scrollbar scroll-smooth w-full justify-start xl:justify-center">
+          <div className={`flex items-center gap-5 xl:gap-7 text-xs font-sans font-medium tracking-wide overflow-x-auto no-scrollbar scroll-smooth w-full justify-start xl:justify-center transition-[height] duration-200 ${compact ? "h-8" : "h-10"}`}>
             {categories.map((cat) => {
               const isActive = selectedCategory === cat.id && !isStudioOpen;
               return (
@@ -394,7 +418,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       >
         <div
           ref={stripRef}
-          className="flex items-center gap-4 h-10 px-4 overflow-x-auto no-scrollbar scroll-smooth w-full"
+          className={`flex items-center gap-4 px-4 overflow-x-auto no-scrollbar scroll-smooth w-full transition-[height] duration-200 ${compact ? "h-8" : "h-10"}`}
         >
           {categories.map((cat) => {
             const isActive = selectedCategory === cat.id && !isStudioOpen;
