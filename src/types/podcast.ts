@@ -13,6 +13,8 @@ export interface PodcastEpisode {
   category: string;
   /** URL de entrega del audio en Cloudinary. */
   audioUrl: string;
+  /** Portada opcional del episodio (.AVIF optimizado desde el estudio). */
+  coverUrl?: string;
   /** Duración en segundos (la reporta Cloudinary al subir). */
   durationSec: number;
   /** Fecha en pantalla (p. ej. «12 OCT 2026»). */
