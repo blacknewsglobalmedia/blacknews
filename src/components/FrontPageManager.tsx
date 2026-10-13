@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Info,
+  Lock,
   ChevronDown
 } from 'lucide-react';
 import { Report, FlashNews } from '../types/news';
@@ -66,6 +67,14 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
   // Flash ticker quick form
   const [newFlashTitle, setNewFlashTitle] = useState('');
   const [newFlashCategory, setNewFlashCategory] = useState('ECONOMÍA & MERCADOS');
+
+  // Análisis reservado (Intelligence): borrador del parte de pago en portada
+  const [briefTitle, setBriefTitle] = useState(
+    layoutConfig.intelligence?.title ?? '',
+  );
+  const [briefText, setBriefText] = useState(
+    (layoutConfig.intelligence?.bullets ?? []).join('\n'),
+  );
 
   // Feedback banner
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -114,6 +123,39 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
   const showFeedback = (msg: string) => {
     setFeedbackMessage(msg);
     setTimeout(() => setFeedbackMessage(null), 3500);
+  };
+
+  /** Publica (o actualiza) el parte Intelligence en la portada. */
+  const handlePublishBrief = () => {
+    const bullets = briefText
+      .split('\n')
+      .map((b) => b.replace(/^[-•*\s]+/, '').trim())
+      .filter(Boolean);
+    if (!briefTitle.trim() || bullets.length === 0) {
+      showFeedback('El parte necesita título y al menos una clave.');
+      return;
+    }
+    const now = new Date();
+    const months = [
+      'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+      'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC',
+    ];
+    const publishedAt = `${String(now.getDate()).padStart(2, '0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    onUpdateLayoutConfig({
+      ...layoutConfig,
+      intelligence: { title: briefTitle.trim(), bullets, publishedAt },
+    });
+    showFeedback('Parte Intelligence publicado en portada.');
+  };
+
+  /** Retira el parte de la portada (borra la configuración). */
+  const handleClearBrief = () => {
+    setBriefTitle('');
+    setBriefText('');
+    const next: FrontPageLayoutConfig = { ...layoutConfig };
+    delete next.intelligence;
+    onUpdateLayoutConfig(next);
+    showFeedback('Parte Intelligence retirado de la portada.');
   };
 
   if (!permissions.canManageLayout) {
@@ -1149,6 +1191,70 @@ export const FrontPageManager: React.FC<FrontPageManagerProps> = ({
               </button>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* ANÁLISIS RESERVADO · INTELLIGENCE (contenido de pago) */}
+      <div className="pt-8 border-t border-white/10 font-sans mt-8">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-white">
+              ANÁLISIS RESERVADO · INTELLIGENCE
+            </h3>
+          </div>
+          <span className="text-xs text-neutral-400">
+            {layoutConfig.intelligence
+              ? 'Publicado en portada'
+              : 'Sin publicar'}
+          </span>
+        </div>
+        <p className="text-[11px] text-neutral-500 mb-4">
+          Parte de pago: los no socios lo ven difuminado con una llamada a la
+          acción de suscripción; los socios, completo.
+        </p>
+
+        <div className="bg-neutral-950 rounded-2xl border border-white/10 p-4 space-y-3">
+          <input
+            type="text"
+            value={briefTitle}
+            onChange={(e) => setBriefTitle(e.target.value)}
+            placeholder="Título del parte (p. ej. Claves de la semana en el Estrecho de Taiwán)"
+            className="w-full bg-neutral-900 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/50 font-sans"
+          />
+          <textarea
+            value={briefText}
+            onChange={(e) => setBriefText(e.target.value)}
+            rows={4}
+            placeholder={'Una clave por línea, p. ej.:\nEl corredor humanitario reconfigura la frontera de facto\nLa flota comercial reacciona antes que la diplomacia'}
+            className="w-full bg-neutral-900 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/50 font-sans resize-y leading-relaxed"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-[11px] text-neutral-500">
+              {briefText.split('\n').filter((l) => l.trim()).length} clave(s)
+              · se publica con la fecha de hoy
+            </span>
+            <div className="flex gap-2">
+              {layoutConfig.intelligence && (
+                <button
+                  type="button"
+                  onClick={handleClearBrief}
+                  className="px-4 py-2 text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors cursor-pointer font-medium"
+                >
+                  RETIRAR
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handlePublishBrief}
+                className="px-4 py-2 bg-emerald-500 text-black font-semibold text-xs uppercase tracking-wider hover:bg-emerald-400 transition-colors cursor-pointer rounded-xl shadow-sm"
+              >
+                {layoutConfig.intelligence
+                  ? 'ACTUALIZAR EN PORTADA'
+                  : 'PUBLICAR EN PORTADA'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

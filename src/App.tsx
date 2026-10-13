@@ -27,6 +27,8 @@ import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
 import { OpenFrontsStrip } from "./components/OpenFrontsStrip";
 import { QuoteOfTheDay } from "./components/QuoteOfTheDay";
+import { IntelligenceSection } from "./components/IntelligenceSection";
+import { PersonalBriefing } from "./components/PersonalBriefing";
 import { InstallPromo } from "./components/InstallPromo";
 import { VersionNotice } from "./components/VersionNotice";
 import { TrustSection } from "./components/TrustSection";
@@ -826,7 +828,14 @@ export default function App() {
   // Apply automation preset with 1 click
   const handleAutomationApply = (preset: AutomationPreset) => {
     const computed = computeLayoutPreset(preset, reportsList, layoutConfig);
-    handleUpdateLayoutConfig(computed);
+    // Los presets reconstruyen el objeto desde cero: el parte Intelligence
+    // no es rotación de portada, así que se preserva explícitamente.
+    handleUpdateLayoutConfig({
+      ...computed,
+      ...(layoutConfig.intelligence
+        ? { intelligence: layoutConfig.intelligence }
+        : {}),
+    });
   };
 
   // Auto-expiration & rotation timer check (e.g. 24h cycle)
@@ -854,7 +863,13 @@ export default function App() {
         refreshed.lastUpdated = `${dateStr} · Rotación Automática (${intervalHours}h)`;
         refreshed.lastModifiedTimestamp = Date.now();
         refreshed.automationPreset = policy;
-        handleUpdateLayoutConfig(refreshed);
+        // La rotación reconstruye el objeto: el parte Intelligence no rota.
+        handleUpdateLayoutConfig({
+          ...refreshed,
+          ...(layoutConfig.intelligence
+            ? { intelligence: layoutConfig.intelligence }
+            : {}),
+        });
         showToast(
           `Portada rotada automáticamente con nuevas publicaciones (Ciclo de ${intervalHours}h cumplido)`,
         );
@@ -1574,6 +1589,13 @@ export default function App() {
             {/* Respiro tipográfica entre el mapa y la parrilla de posts */}
             <QuoteOfTheDay />
 
+            {/* Contenido de pago: parte Intelligence (difuminado sin socios) */}
+            <IntelligenceSection
+              brief={layoutConfig.intelligence}
+              isSubscribed={isSubscribed}
+              onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+            />
+
             {/* Visual Posts Section: News cards in 4:5 post format */}
             <VisualPostsSection
               reports={reportsList}
@@ -1592,6 +1614,13 @@ export default function App() {
                     }
                   : undefined
               }
+            />
+
+            {/* Personalización: tira con lo último de los temas del lector */}
+            <PersonalBriefing
+              reports={reportsList}
+              categories={categoriesList}
+              onReadReport={handleOpenReport}
             />
 
             {/* In-Feed Leaderboard Horizontal Banner (los suscriptores no ven publicidad) */}
