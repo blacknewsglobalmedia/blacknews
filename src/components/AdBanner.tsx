@@ -122,39 +122,43 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   }
 
   // Sin campaña activa: invitación patrocinada discreta (solo si hay gestor).
+  // Usa el mismo SLOT_WRAPPER que el estado con anuncio: sin él, la invitación
+  // se iría de borde a borde (ocupa el ancho del márgen, como el resto).
   if (eligibleCampaigns.length === 0) {
     return (
-      <div
-        onClick={() => onOpenInquiry?.(placement)}
-        className={`w-full border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group ${className}`}
-      >
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 max-w-4xl mx-auto">
-          <div className="flex items-center gap-2.5 text-left">
-            <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:border-white/30 transition-colors shrink-0">
-              <Megaphone className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-                  ESPACIO PATROCINADO DISPONIBLE
-                </span>
-                <span className="text-[9px] font-mono text-neutral-500">
-                  [{placementInfo?.name || placement}]
-                </span>
+      <div className={`${SLOT_WRAPPER[placement]} ${className}`}>
+        <div
+          onClick={() => onOpenInquiry?.(placement)}
+          className="w-full border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 max-w-4xl mx-auto">
+            <div className="flex items-center gap-2.5 text-left">
+              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:border-white/30 transition-colors shrink-0">
+                <Megaphone className="w-3.5 h-3.5" />
               </div>
-              <p className="text-xs text-neutral-300 mt-0.5">
-                Posicione su marca frente a una audiencia global de inversores,
-                juristas y líderes de opinión.
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">
+                    ESPACIO PATROCINADO DISPONIBLE
+                  </span>
+                  <span className="text-[9px] font-mono text-neutral-500">
+                    [{placementInfo?.name || placement}]
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-300 mt-0.5">
+                  Posicione su marca frente a una audiencia global de inversores,
+                  juristas y líderes de opinión.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="px-3.5 py-1.5 bg-white/10 group-hover:bg-white group-hover:text-black text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-all shrink-0 border border-white/15"
-          >
-            Anúnciate Aquí
-          </button>
+            <button
+              type="button"
+              className="px-3.5 py-1.5 bg-white/10 group-hover:bg-white group-hover:text-black text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-all shrink-0 border border-white/15"
+            >
+              Anúnciate Aquí
+            </button>
+          </div>
         </div>
       </div>
     );
