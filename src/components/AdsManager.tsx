@@ -37,8 +37,11 @@ import {
   AdPlacement,
   AdStatus,
   AD_PLACEMENTS_INFO,
+  AD_PRICING_PLANS,
+  formatAdViews,
 } from "../types/ads";
 import { CategoryId } from "../types/news";
+import { ORIENTATION_LABEL, PLACEMENT_ICONS } from "../utils/adIcons";
 
 interface AdsManagerProps {
   campaigns: AdCampaign[];
@@ -1144,69 +1147,145 @@ export const AdsManager: React.FC<AdsManagerProps> = ({
       {/* MODAL: RATE CARD & SPECS (Tarifario) */}
       {isRateCardOpen && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-neutral-950 border border-white/15 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-5 my-8">
-            <div className="p-5 border-b border-white/10 flex items-center justify-between">
+          <div className="bg-neutral-950 border border-white/15 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl my-8">
+            {/* Cabecera */}
+            <div className="p-6 border-b border-white/10 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-white font-['Lexend']">
-                  Tarifario Oficial & Especificaciones Técnicas
+                <h3 className="text-xl font-bold text-white font-['Lexend']">
+                  Tarifario Oficial
                 </h3>
-                <p className="text-xs text-neutral-400 font-light mt-0.5">
-                  Espacios de patrocinio institucional disponibles en BlackNews.
+                <p className="text-sm text-neutral-400 mt-1">
+                  Espacios de patrocinio, especificaciones y planes de
+                  contratación en BlackNews.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRateCardOpen(false)}
-                className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10"
+                aria-label="Cerrar tarifario"
+                className="p-2 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 shrink-0"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 pt-0">
-              <div className="divide-y divide-white/10">
-                {Object.values(AD_PLACEMENTS_INFO).map((info) => (
-                  <div
-                    key={info.id}
-                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-2">
-                        <span>{info.name}</span>
-                        <span className="text-[10px] font-mono uppercase text-neutral-500">
-                          [{info.orientation}]
+            <div className="p-6 space-y-8">
+              {/* Espacios publicitarios */}
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-neutral-400 mb-4">
+                  Espacios publicitarios
+                </h4>
+                <div className="space-y-4">
+                  {Object.values(AD_PLACEMENTS_INFO).map((info) => {
+                    const Icon = PLACEMENT_ICONS[info.id];
+                    return (
+                      <div
+                        key={info.id}
+                        className="rounded-2xl border border-white/10 bg-neutral-950/60 p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+                      >
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-neutral-300">
+                          <Icon className="h-6 w-6" />
                         </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-base font-semibold text-white">
+                              {info.name}
+                            </span>
+                            <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-300">
+                              {ORIENTATION_LABEL[info.orientation]}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+                            {info.description}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-neutral-300">
+                            <span>
+                              <span className="text-neutral-500">
+                                Tamaño:{" "}
+                              </span>
+                              <span className="font-mono text-neutral-100">
+                                {info.exportSizes[0]}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <Eye className="h-3.5 w-3.5 text-neutral-500" />
+                              ≈{" "}
+                              <span className="font-mono text-neutral-100">
+                                {formatAdViews(info.estimatedDailyViews)}
+                              </span>{" "}
+                              vistas/día
+                            </span>
+                          </div>
+                        </div>
+                        <div className="sm:text-right shrink-0">
+                          <span className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                            Tarifa de referencia
+                          </span>
+                          <span className="font-mono text-xl font-bold text-emerald-400">
+                            {info.suggestedRate}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-neutral-400 mt-0.5 font-light">
-                        {info.description}
-                      </p>
-                      <div className="text-[10px] font-mono text-neutral-500 mt-1">
-                        Tamaño recomendado:{" "}
-                        <span className="text-neutral-300">
-                          {info.recommendedSize}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-bold text-emerald-400 font-mono">
-                        {info.suggestedRate}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-neutral-900 border border-white/10 text-xs text-neutral-300 space-y-1.5 font-light">
-                <div className="font-bold text-white text-xs uppercase tracking-wider font-mono">
+              {/* Planes de contratación */}
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-neutral-400 mb-4">
+                  Planes de contratación
+                </h4>
+                <div className="space-y-3">
+                  {AD_PRICING_PLANS.map((p) => (
+                    <div
+                      key={p.id}
+                      className="rounded-2xl border border-white/10 bg-neutral-950/60 p-5 flex flex-wrap items-center gap-x-5 gap-y-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-base font-semibold text-white">
+                            {p.name}
+                          </span>
+                          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                            {p.badge}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm leading-relaxed text-neutral-400">
+                          {p.description}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-mono text-xl font-bold text-white">
+                          ${p.priceUsd}
+                          <span className="ml-1 text-sm font-normal text-neutral-400">
+                            USD
+                          </span>
+                        </span>
+                        <span className="block font-mono text-[13px] text-neutral-500">
+                          ≈ ${p.priceUyu} UYU
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[13px] leading-relaxed text-neutral-500">
+                  Las vistas son estimaciones por ubicación; los planes de
+                  impresiones incluyen garantía medida en la plataforma.
+                </p>
+              </div>
+
+              {/* Contacto */}
+              <div className="p-5 rounded-2xl bg-neutral-900 border border-white/10 space-y-2">
+                <div className="text-sm font-bold text-white uppercase tracking-wider">
                   Contacto para Anunciantes Corporativos
                 </div>
-                <p>
+                <p className="text-sm text-neutral-300 leading-relaxed">
                   Para contrataciones personalizadas, patrocinios anuales o
                   convenios institucionales, comuníquese con la gerencia
                   editorial en:
                 </p>
-                <div className="font-mono text-white font-semibold">
+                <div className="font-mono text-base text-emerald-400 font-semibold">
                   blacknewsglobalmedia@gmail.com
                 </div>
               </div>

@@ -9,14 +9,9 @@ import {
   Eye,
   FileImage,
   Landmark,
-  LayoutGrid,
   Link2,
   Loader2,
   MapPin,
-  Monitor,
-  MoveHorizontal,
-  PanelBottom,
-  PanelRight,
   Send,
   ShieldCheck,
   Timer,
@@ -35,6 +30,7 @@ import {
   formatAdViews,
 } from "../types/ads";
 import { RedactorProfile } from "../types/auth";
+import { PLACEMENT_ICONS } from "../utils/adIcons";
 import { createAdOrder } from "../utils/paypalAds";
 
 /**
@@ -62,15 +58,6 @@ const PLACEMENT_ORDER: AdPlacement[] = [
 
 /** Ubicación por defecto: la de más rotación en portada. */
 const DEFAULT_PLACEMENT: AdPlacement = "IN_FEED_LEADERBOARD";
-
-/** Icono por ubicación: dibuja dónde va el anuncio sin necesidad de leer. */
-const PLACEMENT_ICONS: Record<AdPlacement, LucideIcon> = {
-  TOP_BILLBOARD: Monitor,
-  IN_FEED_LEADERBOARD: MoveHorizontal,
-  ARTICLE_SIDEBAR: PanelRight,
-  ARTICLE_FOOTER: PanelBottom,
-  GRID_CARD: LayoutGrid,
-};
 
 const PAYMENT_OPTIONS: Array<{
   id: AdPaymentMethod;
