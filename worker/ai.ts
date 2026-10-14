@@ -346,8 +346,9 @@ function buildSystemPrompt(hasSources: boolean): string {
     '- Los tres textos ("title", "description" y "tweetBody") van juntos en la misma publicación y la persona los lee los tres: son COMPLEMENTARIOS, no tres versiones de la misma noticia.',
     '- Reparto obligatorio: "title" = QUÉ pasa (el hecho nuclear). "description" = DATOS Y CONTEXTO (fecha, cifras, quién, por qué, consecuencia inmediata). "tweetBody" = ÁNGULO COMPLEMENTARIO (reacción, implicación, lo que viene ahora o un dato que no aparece en los otros dos).',
     "- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas puede aparecer en dos campos distintos, ni el mismo dato contado con sinónimos. Si el titular ya lo dijo, la bajada y el tweet no lo vuelven a decir: aportan otro dato. Si algo no cabe, córtalo antes que repetirlo.",
+    "- Las cifras son exclusivas de UN solo campo: un %, un recuento o una cantidad se cita una sola vez y en el campo donde encaje mejor; los otros dos no la repiten ni «para situarla».",
     "- Los tres textos tratan el MISMO hecho: si el titular es del cierre de Ormuz, la bajada y el tweet son también de ese cierre, no de otra noticia del mismo tema.",
-    '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. EXACTAMENTE 3 líneas separadas por \\n (nunca 1, nunca 4), cada una de 4 o 5 palabras y unos 25 caracteres, entre 55 y 75 en total. Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Mal ejemplo: una sola línea o dos de 32 caracteres: la columna es estrecha y el texto se parte y se sale encima de la foto. El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
+    '- "title": titular con su grafía normal: primera letra de cada frase en mayúscula y el resto en minúscula. NUNCA en mayúsculas completas. EXACTAMENTE 3 líneas separadas por \\n (nunca 1, nunca 4), cada una de 5 o 6 palabras y entre 21 y 26 caracteres —nada más cabe en la columna: una línea más larga se parte y añade una cuarta línea que se corta con «…»—, de 65 a 78 caracteres en total. Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Mal ejemplo: una sola línea o una de más de 26 caracteres: la columna es estrecha y el texto se parte y se sale encima de la foto. El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
     '- "description": bajada de 1 o 2 frases EN UNA sola línea, sin \\n, entre 120 y 170 caracteres: vienen a ser 3 líneas pintadas. Datos concretos que NO estén ya en el titular (cifras, fecha, consecuencia) y grafía normal. No la acortes: una sola línea de 60 caracteres desperdicia el sitio.',
     '- "category": EXACTAMENTE una de las secciones de la lista que te doy, copiada carácter a carácter, con sus acentos y su "&". Nunca inventes una sección ni le cambies el formato.',
     '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con su grafía normal, o "" si no procede.',
@@ -356,7 +357,7 @@ function buildSystemPrompt(hasSources: boolean): string {
     'REGLAS DE "tweetBody" (sólo el cuerpo del tweet)',
     '- NO escribas el corchete con las banderas, ni el símbolo "»", ni la firma "#BlackNews": la web los añade alrededor del cuerpo cuando monta el tweet.',
     "- UNA sola línea: ni saltos de línea ni puntos y aparte.",
-    '- El tweet montado no puede pasar de 250 caracteres: la firma "■ #BlackNews" con su línea en blanco ocupa 14 y el corchete "[banderas]" ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 205 caracteres, empezando por lo esencial.',
+    '- El tweet montado puede llegar hasta 250 caracteres: la firma "■ #BlackNews" con su línea en blanco ocupa 14 y el corchete "[banderas]" ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 216 caracteres —con ese tope el tweet cabe siempre en 250, con o sin banderas— y conviene aprovechar el espacio: no recortes el ángulo a la mitad por recelo, empezando por lo esencial.',
     "- Es sobre el MISMO hecho que el titular, no sobre otra noticia del mismo tema. Aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada (reacción, implicación, qué viene ahora): quien lo lee acaba de ver los otros dos, repetirlos desperdicia el tweet.",
     "- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más.",
     '- Sin emojis, sin hashtags, sin comillas, sin enlaces y sin "lee más".',
@@ -569,8 +570,8 @@ function parseModelJson(raw: string): {
 // llamada al modelo, que además no cuenta bien los caracteres).
 const LAYOUT = {
   titleLinesMin: 2,
-  titleMin: 50,
-  titleMax: 75,
+  titleMin: 60,
+  titleMax: 78,
   descMin: 110,
   descMax: 170,
   /** Palabras seguidas que hacen que dos campos estén diciendo lo mismo. */
@@ -622,6 +623,39 @@ function sharedPhrase(a: string, b: string, n = LAYOUT.sharedWords): string {
   return "";
 }
 
+/** Cifras concretas de un texto (%, cantidades, recuentos) normalizadas para
+ *  comparar "42 barcos" con "42" o "1.500" con "1500". Los años 19xx-20xx no
+ *  cuentan: son andamio de varios campos, no un dato que se repita. */
+function figuresOf(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.match(/\d[\d.,]*\s?%?/g) ?? []) {
+    const isPercent = /%\s*$/.test(raw);
+    let token = raw.replace(/\s*%?\s*$/, "").replace(/[.,]+$/, "");
+    if (!/\d/.test(token)) continue;
+    // Un entero suelto de un dígito es ruido («5 de mayo»); con % o con
+    // decimal sí es un dato. Los años 19xx-20xx tampoco cuentan: son
+    // andamio habitual de varios campos, no un dato que se repita.
+    if (
+      !isPercent &&
+      !/[.,]/.test(token) &&
+      token.replace(/\D/g, "").length < 2
+    )
+      continue;
+    if (/^(?:19|20)\d{2}$/.test(token)) continue;
+    if (/^\d{1,3}(?:\.\d{3})+$/.test(token)) token = token.replace(/\./g, "");
+    out.push(token);
+  }
+  return out;
+}
+
+/** Primera cifra que citan DOS campos distintos: el filtro de frases no la
+ *  ve (la sintaxis cambia, la letra no) y el lector sí la nota: dos campos
+ *  contando la misma cifra dejan de ser complementarios. */
+function sharedFigure(a: string, b: string): string {
+  const set = new Set(figuresOf(a));
+  return figuresOf(b).find((figure) => set.has(figure)) ?? "";
+}
+
 /** Todo lo que el modelo tiene que corregir en una segunda pasada: huecos
  *  (texto demasiado corto para el sitio que ocupa en la plantilla) y
  *  repeticiones entre campos. Lista vacía = respuesta válida, se devuelve tal
@@ -649,32 +683,65 @@ function templateIssues(draft: Draft): string[] {
     );
   }
   const tweet = draft.tweetBody;
-  // La frase se quita SIEMPRE de la bajada o del tweet, nunca del titular:
-  // es el campo más ajustado (3 líneas cortas) y conviene dejarlo quieto.
-  const overlaps: Array<[string, string, string, string]> = [
-    [
-      "el titular",
-      "la bajada",
-      sharedPhrase(draft.content.title, draft.content.description),
-      "de la bajada",
-    ],
-    [
-      "la bajada",
-      "el tweet",
-      sharedPhrase(draft.content.description, tweet),
-      "del tweet",
-    ],
-    [
-      "el titular",
-      "el tweet",
-      sharedPhrase(draft.content.title, tweet),
-      "del tweet",
-    ],
+  const title = draft.content.title;
+  // La frase o la cifra se quitan SIEMPRE de la bajada o del tweet, nunca del
+  // titular: es el campo más ajustado (3 líneas cortas) y conviene dejarlo quieto.
+  const overlaps: Array<{
+    a: string;
+    b: string;
+    kind: "frase" | "cifra";
+    value: string;
+    quitar: string;
+  }> = [
+    {
+      a: "el titular",
+      b: "la bajada",
+      kind: "frase",
+      value: sharedPhrase(title, draft.content.description),
+      quitar: "de la bajada",
+    },
+    {
+      a: "la bajada",
+      b: "el tweet",
+      kind: "frase",
+      value: sharedPhrase(draft.content.description, tweet),
+      quitar: "del tweet",
+    },
+    {
+      a: "el titular",
+      b: "el tweet",
+      kind: "frase",
+      value: sharedPhrase(title, tweet),
+      quitar: "del tweet",
+    },
+    {
+      a: "el titular",
+      b: "la bajada",
+      kind: "cifra",
+      value: sharedFigure(title, draft.content.description),
+      quitar: "de la bajada",
+    },
+    {
+      a: "la bajada",
+      b: "el tweet",
+      kind: "cifra",
+      value: sharedFigure(draft.content.description, tweet),
+      quitar: "del tweet",
+    },
+    {
+      a: "el titular",
+      b: "el tweet",
+      kind: "cifra",
+      value: sharedFigure(title, tweet),
+      quitar: "del tweet",
+    },
   ];
-  for (const [a, b, phrase, quitar] of overlaps) {
-    if (!phrase) continue;
+  for (const { a, b, kind, value, quitar } of overlaps) {
+    if (!value) continue;
     issues.push(
-      `la frase «${phrase}» aparece igual en ${a} y en ${b}: quítala ${quitar} y escribe en su lugar otro dato del mismo hecho`,
+      kind === "frase"
+        ? `la frase «${value}» aparece igual en ${a} y en ${b}: quítala ${quitar} y escribe en su lugar otro dato del mismo hecho`
+        : `la cifra «${value}» aparece en ${a} y en ${b}: quítala ${quitar} — una cifra concreta se cita una sola vez y en un solo campo`,
     );
   }
   return issues;
@@ -685,7 +752,7 @@ function buildRevisionPrompt(issues: string[]): string {
     "Tu anterior respuesta tiene los problemas de abajo. Devuelve EXCLUSIVAMENTE el mismo objeto JSON, corregido, sin nada alrededor y sin cambiar lo que ya está bien.",
     "Problemas concretos que tienes que resolver:",
     ...issues.map((issue) => `  - ${issue}`),
-    "Los tres textos siguen tratando el mismo hecho y siendo complementarios: titular = QUÉ pasa (3 líneas de 4 o 5 palabras), bajada = DATOS Y CONTEXTO, cuerpo del tweet = ÁNGULO COMPLEMENTARIO.",
+    "Los tres textos siguen tratando el mismo hecho y siendo complementarios: titular = QUÉ pasa (3 líneas de 5 o 6 palabras, hasta 26 caracteres por línea), bajada = DATOS Y CONTEXTO, cuerpo del tweet = ÁNGULO COMPLEMENTARIO. Cada frase y cada cifra se dicen UNA sola vez y en UN solo campo.",
     "Para corregir sólo tienes dos maneras: AÑADIR información que falte o MOVER un dato de un campo a otro. NUNCA cortes ni resumas: si algo no cabe, quita una idea entera de otro campo en su lugar.",
   ].join("\n");
 }

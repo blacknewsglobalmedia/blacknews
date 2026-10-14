@@ -1989,10 +1989,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       "La forma exacta es:",
       '{"content":{"title":"...","description":"...","category":"...","photoCaption":"","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
       "",
-      "REGLAS DEL TITULAR (title): 3 líneas separadas por \\n, cada una de 4-5 palabras (55-75 caracteres en total). Primera letra de cada frase en mayúscula, resto en minúsculas. Nunca en MAYÚSCULAS COMPLETAS.",
-      "REGLAS DE LA BAJADA (description): 1-2 frases EN UNA sola línea, sin \\n, entre 120-170 caracteres. Datos concretos que NO estén en el titular.",
+      "REGLAS DEL TITULAR (title): 3 líneas separadas por \\n, cada una de 5-6 palabras y 21-26 caracteres —65 a 78 en total; una línea más larga se parte y el titular se corta—. Primera letra de cada frase en mayúscula, resto en minúsculas. Nunca en MAYÚSCULAS COMPLETAS.",
+      "REGLAS DE LA BAJADA (description): 1-2 frases EN UNA sola línea, sin \\n, entre 120-170 caracteres. Datos concretos que NO estén en el titular ni en el tweet.",
       `SECCIONES (elige exactamente una para category): ${enabledCategories.join(", ")}`,
-      "REGLAS DEL TWEET (tweetBody): UNA sola línea, máximo 200 caracteres. Aporta un dato distinto al titular y la bajada. Sin emojis, sin hashtags, sin enlaces.",
+      "REGLAS DEL TWEET (tweetBody): UNA sola línea, hasta 215 caracteres de cuerpo —montado, con corchete de banderas y firma, llega a 250—. Aporta un dato distinto al titular y la bajada. Sin emojis, sin hashtags, sin enlaces.",
+      "Los tres textos son complementarios: ninguna frase ni ninguna cifra se repite entre ellos; cada dato se dice una sola vez y en un solo campo.",
       "selectedCountries: de 0 a 4 países del catálogo, con code (ISO 2 letras) y name en español.",
     ].join("\n");
 
