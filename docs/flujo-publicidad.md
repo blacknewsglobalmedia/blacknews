@@ -32,9 +32,9 @@ PENDIENTE_PAGO ──(pago verificado)──▶ PENDIENTE_APROBACION ──(admi
 |---|------|-----------|
 | 1 | **Descubre** el espacio: botón *Anúnciate aquí* en el pie, o el recuadro *ESPACIO PATROCINADO DISPONIBLE* en la portada (solo aparece cuando no hay campañas activas). Los suscriptores no ven anuncios ni recuadros. | `Footer.tsx`, `AdBanner.tsx` (placeholder + `onOpenInquiry`) |
 | 2 | **Inicia sesión con Google** (obligatorio — sin login, «Anúnciate aquí» muestra el aviso de sesión en vez de abrir la página). | `App.tsx` `openAdSubmission` → `GoogleAuthModal` |
-| 3 | **Elige ubicación y plan** en la página de carga del panel (sección 1): 5 placements con su proporción, tamaños de exportación y vistas diarias estimadas; 5 planes (7d/15d/30d/CPM 10k/CPM 50k) con vistas estimadas por ubicación (sección 3). | `AdSubmissionPage.tsx` · `types/ads.ts` (`AD_PLACEMENTS_INFO`, `AD_PRICING_PLANS`, `estimateCampaignViews`) |
-| 4 | **Carga la creatividad** (sección 2): sube el archivo (va a Cloudinary y se usa el ORIGINAL a máxima calidad) o pega una URL; ve dimensiones reales, aviso de proporción y **vista previa en el contenedor real del slot**. | `AdSubmissionPage.tsx` · `worker/images.ts` (`originalUrl`) |
-| 5 | **Elige el pago** (sección 4): | `AdSubmissionPage.tsx` |
+| 3 | **Elige la ubicación** (pantalla 1 del asistente): 5 opciones con icono, proporción, tamaño de exportación y vistas diarias estimadas. | `AdSubmissionPage.tsx` · `types/ads.ts` (`AD_PLACEMENTS_INFO`, `estimateCampaignViews`) |
+| 4 | **Sube la creatividad** (pantalla 2): sube el archivo (va a Cloudinary y se usa el ORIGINAL a máxima calidad) o pega una URL; ves dimensiones reales, aviso de proporción y **vista previa en el contenedor real del slot**. El paso no avanza sin imagen. | `AdSubmissionPage.tsx` · `worker/images.ts` (`originalUrl`) |
+| 5 | **Elige el plan y el pago** (pantallas 3 y 4): 5 planes (7d/15d/30d/CPM 10k/CPM 50k) con vistas estimadas por ubicación; luego datos y forma de pago: | `AdSubmissionPage.tsx` |
 | | **PayPal** (principal): se cobra en **USD** con el precio del servidor. Botón *CONTINUAR A PAYPAL*. | `utils/paypalAds.ts` → `POST /api/paypal/ad-order` |
 | | **Mercado Pago**: tarjetas/Abitab/Redpagos. | manual (comprobante) |
 | | **Transferencia BROU/Itaú**: muestra los datos y pide nº de comprobante. | manual |

@@ -1,17 +1,29 @@
 import React, { useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarDays,
   Check,
   CircleAlert,
+  CreditCard,
   Eye,
   FileImage,
+  Landmark,
+  LayoutGrid,
   Link2,
   Loader2,
-  Megaphone,
+  MapPin,
+  Monitor,
+  MoveHorizontal,
+  PanelBottom,
+  PanelRight,
+  Send,
   ShieldCheck,
+  Timer,
   Upload,
+  Wallet,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   AdCampaign,
   AD_PLACEMENTS_INFO,
@@ -26,13 +38,10 @@ import { RedactorProfile } from "../types/auth";
 import { createAdOrder } from "../utils/paypalAds";
 
 /**
- * Carga de publicidad (flujo del anunciante) como PÁGINA del panel:
- * ubicación → creatividad con vista previa real → plan con alcance
- * estimado → datos y pago. Sustituye al antiguo CreateAdModal.
- *
- * Diseño: tipografía legible (mín. 13 px, títulos 18-24 px), etiquetas
- * visibles sobre cada campo y un stepper guía de 4 pasos con acceso
- * directo por ancla.
+ * Carga de publicidad como ASISTENTE de 4 pantallas dentro del panel:
+ * una decisión por pantalla (dónde → imagen → plan → envío), iconos
+ * grandes, navegación Atrás/Siguiente y vista previa real del slot.
+ * Sustituye al antiguo CreateAdModal.
  */
 interface AdSubmissionPageProps {
   currentUser?: RedactorProfile;
@@ -54,74 +63,68 @@ const PLACEMENT_ORDER: AdPlacement[] = [
 /** Ubicación por defecto: la de más rotación en portada. */
 const DEFAULT_PLACEMENT: AdPlacement = "IN_FEED_LEADERBOARD";
 
+/** Icono por ubicación: dibuja dónde va el anuncio sin necesidad de leer. */
+const PLACEMENT_ICONS: Record<AdPlacement, LucideIcon> = {
+  TOP_BILLBOARD: Monitor,
+  IN_FEED_LEADERBOARD: MoveHorizontal,
+  ARTICLE_SIDEBAR: PanelRight,
+  ARTICLE_FOOTER: PanelBottom,
+  GRID_CARD: LayoutGrid,
+};
+
 const PAYMENT_OPTIONS: Array<{
   id: AdPaymentMethod;
   name: string;
   note: string;
+  icon: LucideIcon;
 }> = [
   {
     id: "PAYPAL",
     name: "PayPal",
     note: "Te lleva a PayPal y vuelves con el pago confirmado.",
+    icon: Wallet,
   },
   {
     id: "BANK_TRANSFER",
     name: "Transferencia",
     note: "Registramos la solicitud y validamos el comprobante.",
+    icon: Landmark,
   },
   {
     id: "MERCADO_PAGO",
     name: "Mercado Pago",
     note: "Registramos la solicitud y validamos el comprobante.",
+    icon: CreditCard,
   },
 ];
 
-const STEPS: Array<{ id: string; label: string }> = [
-  { id: "ubicacion", label: "Ubicación" },
-  { id: "creatividad", label: "Creatividad" },
-  { id: "plan", label: "Plan" },
-  { id: "envio", label: "Envío" },
+const STEPS: Array<{ id: string; label: string; icon: LucideIcon }> = [
+  { id: "ubicacion", label: "Dónde", icon: MapPin },
+  { id: "creatividad", label: "Imagen", icon: FileImage },
+  { id: "plan", label: "Plan", icon: Timer },
+  { id: "envio", label: "Enviar", icon: Send },
 ];
 
-/** Relación de aspecto nominal de la creatividad («970 / 250» → 3.88). */
-const nominalRatioOf = (ratio: string): number => {
-  const [w, h] = ratio.split("/").map((part) => parseFloat(part.trim()));
-  return w && h ? w / h : 1;
-};
+const inputClass = (hasError: boolean) =>
+  `mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
+    hasError ? "border-red-500/60" : "border-white/10"
+  }`;
 
-/** Encabezado de cada sección: número, icono y título grande. */
-const SectionHeading: React.FC<{
-  step: number;
+/** Encabezado centrado de cada pantalla: icono grande + título + ayuda. */
+const StepHeader: React.FC<{
+  icon: LucideIcon;
   title: string;
-  description: string;
-}> = ({ step, title, description }) => (
-  <div className="mb-5 flex items-start gap-3">
-    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 font-mono text-sm font-bold text-emerald-400">
-      {step}
-    </span>
-    <div>
-      <h2 className="text-lg font-semibold text-white sm:text-xl">{title}</h2>
-      <p className="mt-0.5 text-sm leading-relaxed text-neutral-400">
-        {description}
-      </p>
+  hint: string;
+}> = ({ icon: Icon, title, hint }) => (
+  <div className="mb-7 text-center">
+    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
+      <Icon className="h-7 w-7 text-emerald-400" />
     </div>
+    <h2 className="text-xl font-semibold text-white sm:text-2xl">{title}</h2>
+    <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-neutral-400">
+      {hint}
+    </p>
   </div>
-);
-
-/** Etiqueta de campo con texto visible (no solo placeholder). */
-const FieldLabel: React.FC<{
-  htmlFor: string;
-  label: string;
-  hint?: string;
-}> = ({ htmlFor, label, hint }) => (
-  <label htmlFor={htmlFor} className="block">
-    <span className="text-[13px] font-semibold text-neutral-200">{label}</span>
-    {hint && (
-      <span className="mt-0.5 block text-xs font-light text-neutral-500">
-        {hint}
-      </span>
-    )}
-  </label>
 );
 
 export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
@@ -130,6 +133,9 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   onClose,
   initialPlacement,
 }) => {
+  // ── Navegación del asistente ───────────────────────────────────────────
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
   // ── Estado del formulario ───────────────────────────────────────────────
   const [placement, setPlacement] = useState<AdPlacement>(
     initialPlacement || DEFAULT_PLACEMENT,
@@ -158,11 +164,8 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   const [submitted, setSubmitted] = useState<AdCampaign | null>(null);
 
   const placementInfo = AD_PLACEMENTS_INFO[placement];
+  const PlacementIcon = PLACEMENT_ICONS[placement];
   const planViews = estimateCampaignViews(placementInfo, plan);
-  const nominalRatio = nominalRatioOf(placementInfo.ratio);
-  const assetRatio = assetDims ? assetDims.w / assetDims.h : null;
-  const ratioDelta =
-    assetRatio !== null ? Math.abs(assetRatio - nominalRatio) / nominalRatio : null;
 
   const missing = {
     imageUrl: !imageUrl.trim(),
@@ -171,14 +174,13 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
     advertiserUrl: !advertiserUrl.trim(),
   };
   const isValid = !Object.values(missing).some(Boolean);
+  /** Pasos visitables desde el stepper (los completados o el actual). */
+  const stepUnlocked = [true, !missing.imageUrl, true, isValid];
 
-  /** Paso completado (para el stepper guía). */
-  const stepDone = [true, !missing.imageUrl, true, isValid];
-
-  const goToStep = (id: string) => {
-    document
-      .getElementById(`paso-${id}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollTop = () => window.scrollTo({ top: 0, behavior: "auto" });
+  const goToStep = (n: 1 | 2 | 3 | 4) => {
+    setStep(n);
+    scrollTop();
   };
 
   // ── Creatividad: subida al Worker (Cloudinary, original a máxima calidad)
@@ -255,11 +257,12 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowErrors(true);
-    if (!isValid) {
-      // Lleva al primer paso pendiente.
-      goToStep(missing.imageUrl ? "creatividad" : "envio");
+    if (missing.imageUrl) {
+      // Sin creatividad no hay envío: vuelve a la pantalla de la imagen.
+      goToStep(2);
       return;
     }
+    if (!isValid) return;
     setIsSubmitting(true);
 
     const now = new Date();
@@ -338,7 +341,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
             <Check className="h-8 w-8 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-semibold text-white sm:text-3xl">
-            Solicitud registrada
+            ¡Listo! Solicitud registrada
           </h1>
           <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-neutral-300">
             «{submitted.title}» en <strong>{placementInfo.name}</strong>, plan{" "}
@@ -366,81 +369,111 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
+    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
       {/* Cabecera */}
       <div className="mb-6">
         <button
           type="button"
           onClick={onClose}
-          className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-400 transition-colors hover:text-white"
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-neutral-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" /> Volver a mi publicidad
         </button>
-        <h1 className="text-2xl font-semibold text-white sm:text-3xl">
+        <h1 className="mt-3 text-2xl font-semibold text-white sm:text-3xl">
           Cargar una publicidad
         </h1>
-        <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-neutral-300">
-          Son 4 pasos: eliges dónde se ve, subes tu arte, eliges el plan y
-          envías. Todo con vista previa real antes de pagar.
-        </p>
       </div>
 
-      {/* Stepper guía */}
-      <nav
-        aria-label="Pasos"
-        className="mb-10 flex flex-wrap items-center gap-2"
-      >
-        {STEPS.map((step, i) => (
-          <React.Fragment key={step.id}>
-            {i > 0 && (
-              <span className="h-px w-4 bg-white/15 sm:w-6" aria-hidden />
-            )}
-            <button
-              type="button"
-              onClick={() => goToStep(step.id)}
-              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1.5 pl-2 pr-3.5 text-[13px] font-semibold text-neutral-200 transition-colors hover:border-white/30 hover:text-white"
-            >
-              <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full font-mono text-[11px] font-bold ${
-                  stepDone[i]
-                    ? "bg-emerald-500 text-black"
-                    : "bg-neutral-800 text-neutral-300"
-                }`}
+      {/* Stepper: 4 pasos con icono; los completados se pueden revisar */}
+      <nav aria-label="Pasos" className="mb-8 flex items-center">
+        {STEPS.map((s, i) => {
+          const n = (i + 1) as 1 | 2 | 3 | 4;
+          const isCurrent = n === step;
+          const isDone = n < step && stepUnlocked[i];
+          const reachable = isCurrent || stepUnlocked[i];
+          return (
+            <React.Fragment key={s.id}>
+              {i > 0 && (
+                <span
+                  className={`h-0.5 flex-1 rounded ${isDone || isCurrent ? "bg-emerald-500/60" : "bg-white/10"}`}
+                  aria-hidden
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => reachable && goToStep(n)}
+                disabled={!reachable}
+                aria-current={isCurrent ? "step" : undefined}
+                className="flex w-16 shrink-0 flex-col items-center gap-1.5 disabled:cursor-not-allowed sm:w-20"
               >
-                {stepDone[i] ? <Check className="h-3 w-3" /> : i + 1}
-              </span>
-              {step.label}
-            </button>
-          </React.Fragment>
-        ))}
+                <span
+                  className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+                    isCurrent
+                      ? "border-emerald-500 bg-emerald-500 text-black"
+                      : isDone
+                        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                        : "border-white/15 bg-neutral-950 text-neutral-500"
+                  }`}
+                >
+                  {isDone ? (
+                    <Check className="h-4.5 w-4.5" />
+                  ) : (
+                    <s.icon className="h-4.5 w-4.5" />
+                  )}
+                </span>
+                <span
+                  className={`text-xs font-semibold ${
+                    isCurrent
+                      ? "text-white"
+                      : isDone
+                        ? "text-neutral-300"
+                        : "text-neutral-500"
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </button>
+            </React.Fragment>
+          );
+        })}
       </nav>
 
-      {/* 1 · Ubicación */}
-      <section id="paso-ubicacion" className="mb-12 scroll-mt-24">
-        <SectionHeading
-          step={1}
-          title="¿Dónde se ve tu anuncio?"
-          description="Elige la ubicación. Cada una tiene su tamaño y su proporción; la vista previa del paso 2 usa el mismo espacio real del sitio."
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          {PLACEMENT_ORDER.map((id) => {
-            const info = AD_PLACEMENTS_INFO[id];
-            const selected = id === placement;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setPlacement(id)}
-                aria-pressed={selected}
-                className={`rounded-2xl border p-5 text-left transition-colors ${
-                  selected
-                    ? "border-emerald-500/70 bg-emerald-500/5"
-                    : "border-white/10 bg-neutral-950/60 hover:border-white/30"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+      {/* ── PASO 1 · DÓNDE ─────────────────────────────────────────────── */}
+      {step === 1 && (
+        <section>
+          <StepHeader
+            icon={MapPin}
+            title="¿Dónde se ve tu anuncio?"
+            hint="Toca la ubicación que prefieras. Las 5 opciones son espacios reales de BlackNews."
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {PLACEMENT_ORDER.map((id) => {
+              const info = AD_PLACEMENTS_INFO[id];
+              const Icon = PLACEMENT_ICONS[id];
+              const selected = id === placement;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPlacement(id)}
+                  aria-pressed={selected}
+                  className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition-colors ${
+                    selected
+                      ? "border-emerald-500/70 bg-emerald-500/5"
+                      : "border-white/10 bg-neutral-950/60 hover:border-white/30"
+                  }`}
+                >
+                  <span
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+                      selected
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                        : "border-white/10 bg-white/5 text-neutral-300"
+                    }`}
+                  >
+                    <Icon className="h-6 w-6" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
                       <span className="text-[15px] font-semibold text-white">
                         {info.name}
                       </span>
@@ -449,148 +482,105 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                           Recomendado
                         </span>
                       )}
-                      {selected && (
-                        <Check className="h-4 w-4 shrink-0 text-emerald-400" />
-                      )}
-                    </div>
-                    <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-400">
+                    </span>
+                    <span className="mt-0.5 block text-[13px] leading-snug text-neutral-400">
                       {info.description}
-                    </p>
-                  </div>
-                  {/* Miniatura a la proporción de la creatividad */}
-                  <div
-                    className="shrink-0 rounded-lg border border-white/15 bg-black"
-                    style={{
-                      width: 84,
-                      aspectRatio: info.ratio,
-                      maxHeight: 64,
-                    }}
-                    aria-hidden
-                  />
-                </div>
-                <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-                  {info.exportSizes.map((size) => (
-                    <span
-                      key={size}
-                      className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-neutral-200"
-                    >
-                      {size}
                     </span>
-                  ))}
-                </div>
-                <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-neutral-400">
-                  <span>
-                    Proporción{" "}
-                    <span className="font-mono text-neutral-200">
-                      {info.ratio.replace("/", ":")}
+                    <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] text-neutral-300">
+                      <span>{info.exportSizes[0]}</span>
+                      <span className="text-neutral-500">·</span>
+                      <span>≈ {formatAdViews(info.estimatedDailyViews)} vistas/día</span>
                     </span>
                   </span>
-                  <span>
-                    <span className="font-mono text-neutral-200">
-                      ≈ {formatAdViews(info.estimatedDailyViews)}
-                    </span>{" "}
-                    vistas al día
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 2 · Creatividad + vista previa */}
-      <section id="paso-creatividad" className="mb-12 scroll-mt-24">
-        <SectionHeading
-          step={2}
-          title="Sube tu creatividad"
-          description="Arrastra tu imagen o pega una URL. A la derecha ves exactamente cómo se verá en el sitio."
-        />
-
-        {/* Formato recomendado de la ubicación elegida */}
-        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-[13px] text-neutral-300">
-          <span className="font-semibold text-white">
-            {placementInfo.name}:
-          </span>
-          <span>
-            exporta en{" "}
-            <span className="font-mono text-white">
-              {placementInfo.exportSizes[0]}
-            </span>
-          </span>
-          <span>
-            proporción{" "}
-            <span className="font-mono text-white">
-              {placementInfo.ratio.replace("/", ":")}
-            </span>
-          </span>
-          <span className="text-neutral-500">JPG, PNG o WEBP · 20 MB máx.</span>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-2">
-          {/* Controles */}
-          <div className="space-y-4">
+                </button>
+              );
+            })}
+          </div>
+          {/* Vista ilustrativa de la proporción elegida */}
+          <div className="mt-6 flex items-center justify-center gap-4 rounded-2xl border border-white/10 bg-neutral-950/60 px-5 py-4">
             <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files?.[0];
-                if (file) void ingestFile(file);
-              }}
-              className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
-                showErrors && missing.imageUrl
-                  ? "border-red-500/50 bg-red-500/5"
-                  : "border-white/15 bg-neutral-950/60 hover:border-white/35"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void ingestFile(file);
-                  e.target.value = "";
-                }}
-              />
-              <FileImage className="mx-auto mb-3 h-8 w-8 text-neutral-600" />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-black transition-colors hover:bg-neutral-200 disabled:opacity-60"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Subiendo…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" /> Elegir imagen
-                  </>
-                )}
-              </button>
-              <p className="mt-3 text-sm text-neutral-400">
-                o arrastra el archivo hasta aquí
-              </p>
-            </div>
+              className="shrink-0 rounded-lg border border-white/20 bg-black"
+              style={{ width: 96, aspectRatio: placementInfo.ratio, maxHeight: 64 }}
+              aria-hidden
+            />
+            <p className="text-[13px] leading-relaxed text-neutral-400">
+              <span className="font-semibold text-white">
+                {placementInfo.name}
+              </span>
+              <br />
+              Así de ancho es el espacio; tu imagen se muestra{" "}
+              {placementInfo.fit === "cover" ? "a sangre" : "entera, sin recortes"}
+              .
+            </p>
+          </div>
+        </section>
+      )}
 
-            <div>
-              <FieldLabel
-                htmlFor="ad-image-url"
-                label="…o usa una imagen ya publicada"
-                hint="Pega el enlace directo de una imagen (URL que empieza por https://)."
-              />
-              <div className="mt-2 flex items-center gap-2">
+      {/* ── PASO 2 · IMAGEN ────────────────────────────────────────────── */}
+      {step === 2 && (
+        <section>
+          <StepHeader
+            icon={FileImage}
+            title="Sube tu creatividad"
+            hint={`Ideal exportar en ${placementInfo.exportSizes[0]} (proporción ${placementInfo.ratio.replace("/", ":")}). JPG, PNG o WEBP.`}
+          />
+          <div className="grid gap-5 lg:grid-cols-2">
+            {/* Controles */}
+            <div className="space-y-4">
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) void ingestFile(file);
+                }}
+                className="rounded-2xl border-2 border-dashed border-white/15 bg-neutral-950/60 p-8 text-center transition-colors hover:border-white/35"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void ingestFile(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Upload className="mx-auto mb-3 h-9 w-9 text-neutral-500" />
+                {uploading ? (
+                  <p className="flex items-center justify-center gap-2 text-sm font-semibold text-neutral-300">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Subiendo…
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-black transition-colors hover:bg-neutral-200"
+                  >
+                    <Upload className="h-4 w-4" /> Elegir imagen
+                  </button>
+                )}
+                <p className="mt-3 text-sm text-neutral-400">
+                  o arrastra el archivo hasta aquí
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 text-[13px] text-neutral-500">
+                <span className="h-px flex-1 bg-white/10" aria-hidden />o pega
+                una URL<span className="h-px flex-1 bg-white/10" aria-hidden />
+              </div>
+
+              <div className="flex items-center gap-2">
                 <div className="flex h-11 flex-1 items-center rounded-lg border border-white/10 bg-neutral-950/60 px-3 focus-within:border-white/40">
                   <Link2 className="h-4 w-4 shrink-0 text-neutral-500" />
                   <input
-                    id="ad-image-url"
                     type="url"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     onBlur={() => applyUrl(urlInput)}
                     placeholder="https://…"
+                    aria-label="URL de la imagen"
                     className="h-full w-full bg-transparent pl-2 text-sm text-white outline-none placeholder:text-neutral-600"
                   />
                 </div>
@@ -602,180 +592,199 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                   Usar
                 </button>
               </div>
-            </div>
 
-            {uploadError && (
-              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
-                {uploadError}
-              </p>
-            )}
+              {uploadError && (
+                <p className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+                  <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  {uploadError}
+                </p>
+              )}
 
-            {assetDims && (
-              <div className="rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm leading-relaxed text-neutral-300">
-                <span className="font-semibold text-white">Tu imagen: </span>
-                <span className="font-mono text-neutral-100">
-                  {assetDims.w} × {assetDims.h} px
-                </span>
-                {ratioDelta !== null && (
-                  <>
-                    {" · "}
-                    {ratioDelta <= 0.05 ? (
-                      <span className="text-emerald-400">
-                        ✓ coincide con esta ubicación
-                      </span>
+              {assetDims && (
+                <div className="rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm leading-relaxed text-neutral-300">
+                  <span className="font-semibold text-white">Tu imagen: </span>
+                  <span className="font-mono text-neutral-100">
+                    {assetDims.w} × {assetDims.h} px
+                  </span>
+                  {(() => {
+                    const nominal = ((): number => {
+                      const [w, h] = placementInfo.ratio
+                        .split("/")
+                        .map((part) => parseFloat(part.trim()));
+                      return w && h ? w / h : 1;
+                    })();
+                    const delta =
+                      Math.abs(assetDims.w / assetDims.h - nominal) / nominal;
+                    return delta <= 0.05 ? (
+                      <span className="text-emerald-400"> · ✓ proporción ideal</span>
                     ) : (
                       <span className="text-amber-300">
-                        ≠ no coincide: se mostrará{" "}
+                        {" "}
+                        · se mostrará{" "}
                         {placementInfo.fit === "cover"
                           ? "recortada al centro"
                           : "contenida, sin recorte"}
                       </span>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Vista previa con el contenedor REAL del slot */}
-          <div>
-            <p className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-neutral-400">
-              Así se verá en el sitio
-            </p>
-            <div
-              className={`group relative w-full overflow-hidden rounded-xl border border-white/10 bg-black ${
-                placementInfo.containerClass || ""
-              }`}
-              style={
-                placementInfo.aspect
-                  ? { aspectRatio: placementInfo.aspect }
-                  : undefined
-              }
-            >
-              {imageUrl ? (
-                <img
-                  src={imageUrl}
-                  alt="Vista previa de la creatividad"
-                  className={`h-full w-full select-none ${
-                    placementInfo.fit === "cover"
-                      ? "object-cover"
-                      : "object-contain"
-                  }`}
-                />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
-                  <FileImage className="h-6 w-6 text-neutral-700" />
-                  <span className="text-sm text-neutral-500">
-                    Tu creatividad aparecerá aquí
-                  </span>
+                    );
+                  })()}
                 </div>
               )}
-              <span className="pointer-events-none absolute left-2 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">
-                Publicidad
-              </span>
-              <span className="pointer-events-none absolute bottom-1.5 left-2 max-w-[55%] truncate font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                {advertiser || "Tu marca"}
-              </span>
             </div>
-            <p className="mt-2.5 text-[13px] leading-relaxed text-neutral-500">
-              Tu imagen se muestra {placementInfo.fit === "cover" ? "a sangre (se recorta al borde)" : "entera, sin recortes"}; arriba se superponen el rótulo
-              PUBLICIDAD y tu marca.
-            </p>
-          </div>
-        </div>
-      </section>
 
-      {/* 3 · Plan y alcance */}
-      <section id="paso-plan" className="mb-12 scroll-mt-24">
-        <SectionHeading
-          step={3}
-          title="Elige el plan"
-          description="Precio a la vista y alcance estimado para la ubicación elegida. Los planes de impresiones incluyen garantía medida en la plataforma."
-        />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {AD_PRICING_PLANS.map((p) => {
-            const selected = p.id === plan.id;
-            const views = estimateCampaignViews(placementInfo, p);
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPlan(p)}
-                aria-pressed={selected}
-                className={`flex flex-col rounded-2xl border p-5 text-left transition-colors ${
-                  selected
-                    ? "border-emerald-500/70 bg-emerald-500/5"
-                    : "border-white/10 bg-neutral-950/60 hover:border-white/30"
+            {/* Vista previa con el contenedor REAL del slot */}
+            <div>
+              <p className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-neutral-400">
+                Así se verá en el sitio
+              </p>
+              <div
+                className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black ${
+                  placementInfo.containerClass || ""
                 }`}
+                style={
+                  placementInfo.aspect
+                    ? { aspectRatio: placementInfo.aspect }
+                    : undefined
+                }
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[15px] font-semibold text-white">
-                    {p.name}
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="Vista previa de la creatividad"
+                    className={`h-full w-full select-none ${
+                      placementInfo.fit === "cover"
+                        ? "object-cover"
+                        : "object-contain"
+                    }`}
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
+                    <FileImage className="h-8 w-8 text-neutral-700" />
+                    <span className="text-sm text-neutral-500">
+                      Tu imagen aparecerá aquí
+                    </span>
+                  </div>
+                )}
+                <span className="pointer-events-none absolute left-2 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">
+                  Publicidad
+                </span>
+                <span className="pointer-events-none absolute bottom-1.5 left-2 max-w-[55%] truncate font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                  {advertiser || "Tu marca"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── PASO 3 · PLAN ──────────────────────────────────────────────── */}
+      {step === 3 && (
+        <section>
+          <StepHeader
+            icon={Timer}
+            title="¿Cuánto tiempo se publica?"
+            hint={`Las vistas son estimaciones para ${placementInfo.name}. Puedes elegir un plazo fijo o un paquete de impresiones.`}
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {AD_PRICING_PLANS.map((p) => {
+              const selected = p.id === plan.id;
+              const views = estimateCampaignViews(placementInfo, p);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPlan(p)}
+                  aria-pressed={selected}
+                  className={`flex flex-col rounded-2xl border p-5 text-left transition-colors ${
+                    selected
+                      ? "border-emerald-500/70 bg-emerald-500/5"
+                      : "border-white/10 bg-neutral-950/60 hover:border-white/30"
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[15px] font-semibold text-white">
+                      {p.name}
+                    </span>
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                        selected
+                          ? "border-emerald-500 bg-emerald-500 text-black"
+                          : "border-white/15 text-transparent"
+                      }`}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
                   </span>
-                  <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-200">
-                    {p.badge}
+                  <span className="mt-3 font-mono text-2xl font-semibold text-white">
+                    ${p.priceUsd}
+                    <span className="ml-1 text-sm font-normal text-neutral-400">
+                      USD
+                    </span>
                   </span>
-                </div>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-400">
-                  {p.description}
-                </p>
-                <div className="mt-3 font-mono text-2xl font-semibold text-white">
-                  ${p.priceUsd}
-                  <span className="ml-1 text-sm font-normal text-neutral-400">
-                    USD
-                  </span>
-                </div>
-                <div className="font-mono text-[13px] text-neutral-400">
-                  ≈ ${p.priceUyu} UYU
-                </div>
-                <div className="mt-3 space-y-1.5 text-[13px] text-neutral-300">
-                  <div className="flex items-center gap-2">
+                  <span className="mt-3 flex items-center gap-2 text-[13px] text-neutral-300">
                     <CalendarDays className="h-4 w-4 text-neutral-500" />
                     {p.durationDays
                       ? `${p.durationDays} días publicado`
                       : "hasta agotar presupuesto"}
-                  </div>
-                  <div className="flex items-center gap-2">
+                  </span>
+                  <span className="mt-1.5 flex items-center gap-2 text-[13px] text-neutral-300">
                     <Eye className="h-4 w-4 text-neutral-500" />
                     <span className="font-mono text-white">
                       ≈ {formatAdViews(views)}
-                    </span>{" "}
-                    vistas estimadas
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
+                    </span>
+                    vistas
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-5 flex items-start gap-2 text-[13px] leading-relaxed text-neutral-500">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            Solo anuncios de tu empresa o marca propia. El equipo los revisa
+            antes de publicar.
+          </p>
+        </section>
+      )}
 
-      {/* 4 · Datos y envío */}
-      <section id="paso-envio" className="mb-10 scroll-mt-24">
-        <SectionHeading
-          step={4}
-          title="Tus datos y el envío"
-          description="Revisa el resumen de la derecha. La creatividad se publica tras la revisión del equipo y la confirmación del pago."
-        />
-        <div className="grid gap-5 lg:grid-cols-5">
-          {/* Campos */}
-          <div className="space-y-4 lg:col-span-3">
+      {/* ── PASO 4 · ENVIAR ────────────────────────────────────────────── */}
+      {step === 4 && (
+        <section>
+          <StepHeader
+            icon={Send}
+            title="Revisa y envía"
+            hint="Solo faltan tus datos. La publicidad se revisa antes de aparecer en el sitio."
+          />
+
+          {/* Resumen compacto */}
+          <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-white/10 bg-neutral-950/60 px-5 py-4 text-sm">
+            <span className="flex items-center gap-2 text-neutral-200">
+              <PlacementIcon className="h-4 w-4 text-emerald-400" />
+              {placementInfo.name}
+            </span>
+            <span className="flex items-center gap-2 text-neutral-200">
+              <Timer className="h-4 w-4 text-emerald-400" />
+              {plan.name}
+            </span>
+            <span className="flex items-center gap-2 text-neutral-200">
+              <Eye className="h-4 w-4 text-emerald-400" />≈{" "}
+              {formatAdViews(planViews)} vistas
+            </span>
+            <span className="ml-auto font-mono text-lg font-semibold text-white">
+              ${plan.priceUsd} USD
+            </span>
+          </div>
+
+          <div className="space-y-4">
             <div>
-              <FieldLabel
-                htmlFor="ad-title"
-                label="Título del anuncio"
-                hint="Se ve junto a tu marca sobre la imagen."
-              />
+              <label htmlFor="ad-title" className="text-[13px] font-semibold text-neutral-200">
+                Título del anuncio
+              </label>
               <input
                 id="ad-title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ej.: Custodia de oro en Suiza"
-                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                  showErrors && missing.title
-                    ? "border-red-500/60"
-                    : "border-white/10"
-                }`}
+                className={inputClass(showErrors && missing.title)}
               />
               {showErrors && missing.title && (
                 <p className="mt-1 text-xs text-red-300">
@@ -784,22 +793,16 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
               )}
             </div>
             <div>
-              <FieldLabel
-                htmlFor="ad-advertiser"
-                label="Marca o empresa"
-                hint="El nombre que se mostrará como anunciante."
-              />
+              <label htmlFor="ad-advertiser" className="text-[13px] font-semibold text-neutral-200">
+                Marca o empresa
+              </label>
               <input
                 id="ad-advertiser"
                 type="text"
                 value={advertiser}
                 onChange={(e) => setAdvertiser(e.target.value)}
                 placeholder="Ej.: Helvetia Wealth"
-                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                  showErrors && missing.advertiser
-                    ? "border-red-500/60"
-                    : "border-white/10"
-                }`}
+                className={inputClass(showErrors && missing.advertiser)}
               />
               {showErrors && missing.advertiser && (
                 <p className="mt-1 text-xs text-red-300">
@@ -808,22 +811,16 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
               )}
             </div>
             <div>
-              <FieldLabel
-                htmlFor="ad-url"
-                label="Enlace de destino"
-                hint="A dónde llega el lector al hacer clic en tu anuncio."
-              />
+              <label htmlFor="ad-url" className="text-[13px] font-semibold text-neutral-200">
+                ¿A dónde lleva el clic?
+              </label>
               <input
                 id="ad-url"
                 type="url"
                 value={advertiserUrl}
                 onChange={(e) => setAdvertiserUrl(e.target.value)}
                 placeholder="https://tu-sitio.com"
-                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                  showErrors && missing.advertiserUrl
-                    ? "border-red-500/60"
-                    : "border-white/10"
-                }`}
+                className={inputClass(showErrors && missing.advertiserUrl)}
               />
               {showErrors && missing.advertiserUrl && (
                 <p className="mt-1 text-xs text-red-300">
@@ -832,63 +829,51 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
               )}
             </div>
             <div>
-              <FieldLabel
-                htmlFor="ad-badge"
-                label="Rótulo del anuncio"
-                hint="Texto que identifica el anuncio (opcional)."
-              />
-              <input
-                id="ad-badge"
-                type="text"
-                value={badgeText}
-                onChange={(e) => setBadgeText(e.target.value)}
-                placeholder="PATROCINADO"
-                className="mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
-              />
-            </div>
-
-            {/* Pago */}
-            <div>
-              <span className="text-[13px] font-semibold text-neutral-200">
+              <p className="text-[13px] font-semibold text-neutral-200">
                 Forma de pago
-              </span>
+              </p>
               <div className="mt-1.5 grid gap-2.5 sm:grid-cols-3">
-                {PAYMENT_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setPaymentMethod(option.id)}
-                    aria-pressed={paymentMethod === option.id}
-                    className={`rounded-xl border px-4 py-3.5 text-left transition-colors ${
-                      paymentMethod === option.id
-                        ? "border-emerald-500/70 bg-emerald-500/5 text-white"
-                        : "border-white/10 bg-neutral-950/60 text-neutral-300 hover:border-white/30"
-                    }`}
-                  >
-                    <span className="block text-sm font-semibold">
-                      {option.name}
-                    </span>
-                    <span className="mt-1 block text-xs leading-snug text-neutral-400">
-                      {option.note}
-                    </span>
-                  </button>
-                ))}
+                {PAYMENT_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const selected = paymentMethod === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(option.id)}
+                      aria-pressed={selected}
+                      className={`rounded-xl border px-4 py-3.5 text-left transition-colors ${
+                        selected
+                          ? "border-emerald-500/70 bg-emerald-500/5 text-white"
+                          : "border-white/10 bg-neutral-950/60 text-neutral-300 hover:border-white/30"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-semibold">
+                        <Icon
+                          className={`h-4 w-4 ${selected ? "text-emerald-400" : "text-neutral-500"}`}
+                        />
+                        {option.name}
+                      </span>
+                      <span className="mt-1 block text-xs leading-snug text-neutral-400">
+                        {option.note}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             {paymentMethod !== "PAYPAL" && (
               <div>
-                <FieldLabel
-                  htmlFor="ad-receipt"
-                  label="Comprobante (opcional)"
-                  hint="Nº de operación o referencia si ya transfiriste."
-                />
+                <label htmlFor="ad-receipt" className="text-[13px] font-semibold text-neutral-200">
+                  Nº de comprobante (si ya transferiste)
+                </label>
                 <input
                   id="ad-receipt"
                   type="text"
                   value={receiptNote}
                   onChange={(e) => setReceiptNote(e.target.value)}
                   placeholder="Ej.: op. 123456"
-                  className="mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
+                  className={inputClass(false)}
                 />
               </div>
             )}
@@ -896,94 +881,59 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
             {showErrors && !isValid && (
               <p className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
                 <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                Faltan datos: completa los campos marcados y añade una
-                creatividad en el paso 2.
+                Faltan datos: completa los campos marcados.
               </p>
             )}
           </div>
+        </section>
+      )}
 
-          {/* Resumen */}
-          <div className="lg:col-span-2">
-            <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-5">
-              <p className="text-[13px] font-bold uppercase tracking-wider text-neutral-400">
-                Resumen
-              </p>
-              <dl className="mt-4 space-y-3 text-sm">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-neutral-400">Ubicación</dt>
-                  <dd className="text-right font-medium text-white">
-                    {placementInfo.name}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-neutral-400">Formato</dt>
-                  <dd className="text-right font-mono text-[13px] text-neutral-100">
-                    {placementInfo.exportSizes[0]} ·{" "}
-                    {placementInfo.ratio.replace("/", ":")}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-neutral-400">Plan</dt>
-                  <dd className="text-right font-medium text-white">
-                    {plan.name}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-neutral-400">Duración</dt>
-                  <dd className="text-right text-neutral-100">
-                    {plan.durationDays
-                      ? `${plan.durationDays} días`
-                      : "hasta agotar presupuesto"}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-neutral-400">Vistas estimadas</dt>
-                  <dd className="text-right font-mono text-neutral-100">
-                    ≈ {formatAdViews(planViews)}
-                  </dd>
-                </div>
-                <div className="border-t border-white/10 pt-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-neutral-400">Precio</dt>
-                    <dd className="text-right">
-                      <span className="font-mono text-2xl font-semibold text-white">
-                        ${plan.priceUsd}
-                      </span>
-                      <span className="ml-1 font-mono text-[13px] text-neutral-400">
-                        USD
-                      </span>
-                      <span className="block font-mono text-[13px] text-neutral-500">
-                        ≈ ${plan.priceUyu} UYU
-                      </span>
-                    </dd>
-                  </div>
-                </div>
-              </dl>
+      {/* ── Barra de navegación inferior ─────────────────────────────────── */}
+      <div className="sticky bottom-0 mt-8 -mx-4 flex items-center justify-between gap-3 border-t border-white/10 bg-black/90 px-4 py-4 backdrop-blur sm:mx-0 sm:px-0">
+        <button
+          type="button"
+          onClick={() => (step === 1 ? onClose() : goToStep((step - 1) as 1 | 2 | 3 | 4))}
+          className="flex items-center gap-2 rounded-lg border border-white/15 px-4 py-3 text-sm font-semibold text-neutral-300 transition-colors hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {step === 1 ? "Salir" : "Atrás"}
+        </button>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-4 text-sm font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 disabled:opacity-60"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Procesando…
-                  </>
-                ) : paymentMethod === "PAYPAL" ? (
-                  <>Continuar a PayPal</>
-                ) : (
-                  <>Enviar solicitud</>
-                )}
-              </button>
-              <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-neutral-500">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                Se publica tras revisión del equipo y confirmación del pago.
-                Puedes retirarla cuando quieras.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+        {step < 4 ? (
+          <>
+            {step === 2 && missing.imageUrl && (
+              <span className="hidden text-xs text-amber-300 sm:block">
+                Sube o pega tu imagen para continuar
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => goToStep((step + 1) as 2 | 3 | 4)}
+              disabled={step === 2 && missing.imageUrl}
+              className="ml-auto flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Siguiente
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </>
+        ) : (
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="ml-auto flex items-center gap-2 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 disabled:opacity-60"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Procesando…
+              </>
+            ) : paymentMethod === "PAYPAL" ? (
+              <>Continuar a PayPal · ${plan.priceUsd}</>
+            ) : (
+              <>Enviar solicitud · ${plan.priceUsd}</>
+            )}
+          </button>
+        )}
+      </div>
     </form>
   );
 };
