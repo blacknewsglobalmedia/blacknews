@@ -22,7 +22,6 @@ import { PoliciesNoticeBanner } from "./components/PoliciesNoticeBanner";
 import { ReadingDock } from "./components/ReadingDock";
 import { WorldClockBar } from "./components/WorldClockBar";
 import { MobileTabBar } from "./components/MobileTabBar";
-import { CreateAdModal } from "./components/CreateAdModal";
 import { GeoMapSection } from "./components/GeoMapSection";
 import { GlossaryShowcase } from "./components/GlossaryShowcase";
 import { OpenFrontsStrip } from "./components/OpenFrontsStrip";
@@ -41,7 +40,7 @@ import { RedactorProfile, RedactorRole, GUEST_USER_ID } from "./types/auth";
 import type { StudioTab } from "./types/studio";
 import { FrontPageLayoutConfig, AutomationPreset } from "./types/layout";
 import { PodcastEpisode } from "./types/podcast";
-import { AdCampaign, INITIAL_AD_CAMPAIGNS, MOCK_AD_IDS } from "./types/ads";
+import { AdCampaign, AdPlacement, INITIAL_AD_CAMPAIGNS, MOCK_AD_IDS } from "./types/ads";
 import {
   DEFAULT_LAYOUT_CONFIG,
   computeLayoutPreset,
@@ -203,7 +202,12 @@ export default function App() {
   // Sección del panel pedida desde el menú móvil (se consume al aplicarse)
   const [studioTab, setStudioTab] = useState<StudioTab | null>(null);
   const [isGoogleAuthOpen, setIsGoogleAuthOpen] = useState(false);
-  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  // Carga de publicidad pedida desde la portada: ubicación + nonce para que
+  // el panel abra su página de carga aunque ya esté en la pestaña de anuncios
+  const [adSubmissionRequest, setAdSubmissionRequest] = useState<{
+    placement?: AdPlacement;
+    nonce: number;
+  } | null>(null);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1479,6 +1483,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // «Anúnciate aquí» (slots de la portada y pie): abre la página de carga de
+  // publicidad del panel con la ubicación del slot preseleccionada.
+  const openAdSubmission = (placement?: AdPlacement) => {
+    if (!canAccessInternalMedia) {
+      showToast("Inicia sesión con tu cuenta para cargar una publicidad.");
+      setIsGoogleAuthOpen(true);
+      return;
+    }
+    setAdSubmissionRequest({ placement, nonce: Date.now() });
+    setStudioTab("ads");
+    navigateToView("redaccion");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const savedReportsList = reportsList.filter((r) => bookmarkedIds.has(r.id));
 
   return (
@@ -1582,7 +1600,7 @@ export default function App() {
             onRemoveBookmark={handleRemoveBookmark}
             isSubscribed={isSubscribed}
             onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
-            onOpenCreateAd={() => setIsAdModalOpen(true)}
+            adSubmissionRequest={adSubmissionRequest}
             onSelectReport={(report) => {
               navigateToView("portada");
               handleOpenReport(report);
@@ -1601,7 +1619,7 @@ export default function App() {
                 selectedCategory={selectedCategory}
                 onTrackImpression={handleTrackImpression}
                 onTrackClick={handleTrackClick}
-                onOpenInquiry={() => setIsAdModalOpen(true)}
+                onOpenInquiry={openAdSubmission}
               />
             )}
 
@@ -1676,7 +1694,7 @@ export default function App() {
                 selectedCategory={selectedCategory}
                 onTrackImpression={handleTrackImpression}
                 onTrackClick={handleTrackClick}
-                onOpenInquiry={() => setIsAdModalOpen(true)}
+                onOpenInquiry={openAdSubmission}
               />
             )}
 
@@ -1722,7 +1740,7 @@ export default function App() {
           navigateToView("portada");
         }}
         onShareSite={() => handleOpenShare(null)}
-        onOpenAdModal={() => setIsAdModalOpen(true)}
+        onOpenAdModal={() => openAdSubmission()}
         onOpenPolicies={handleOpenPolicies}
       />
       )}
@@ -1783,20 +1801,6 @@ export default function App() {
         onLoginWithGoogle={handleLoginWithGoogle}
         onLogout={handleLogout}
         onOpenStudio={handleToggleStudio}
-      />
-
-      {/* Self-Service Advertising Modal */}
-      <CreateAdModal
-        isOpen={isAdModalOpen}
-        onClose={() => setIsAdModalOpen(false)}
-        currentUser={currentUser}
-        onOpenGoogleAuth={() => setIsGoogleAuthOpen(true)}
-        onSubmitAdCampaign={(campaign) => {
-          handleSaveCampaign(campaign);
-          showToast(
-            "Solicitud de anuncio registrada. Tras confirmar el pago pasará a aprobación.",
-          );
-        }}
       />
 
       {/* Subscription Plans Modal */}

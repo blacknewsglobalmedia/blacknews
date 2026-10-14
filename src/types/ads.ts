@@ -139,6 +139,11 @@ export interface AdPlacementInfo {
   fit: 'contain' | 'cover';
   /** Tamaños nominales recomendados para exportar la creatividad (px) */
   exportSizes: string[];
+  /** Relación de aspecto de la CREATIVIDAD a subir (anchura / altura) */
+  ratio: string;
+  /** Vistas diarias ESTIMADAS de la ubicación (tabla editorial ajustable,
+   *  no analítica en vivo): base para proyectar el alcance de un plan. */
+  estimatedDailyViews: number;
 }
 
 export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
@@ -153,6 +158,8 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     containerClass: 'h-[90px] sm:h-[120px] md:h-[160px]',
     fit: 'contain',
     exportSizes: ['970 × 250', '728 × 90', '320 × 100'],
+    ratio: '970 / 250',
+    estimatedDailyViews: 1200,
   },
   IN_FEED_LEADERBOARD: {
     id: 'IN_FEED_LEADERBOARD',
@@ -165,6 +172,8 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     containerClass: 'h-[72px] sm:h-[96px] md:h-[120px]',
     fit: 'contain',
     exportSizes: ['1200 × 180', '970 × 120', '728 × 90'],
+    ratio: '1200 / 180',
+    estimatedDailyViews: 900,
   },
   ARTICLE_SIDEBAR: {
     id: 'ARTICLE_SIDEBAR',
@@ -177,6 +186,8 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     containerClass: 'h-[200px] sm:h-[250px]',
     fit: 'contain',
     exportSizes: ['300 × 250 (recomendado)', '300 × 600 (vertical, se muestra completo)'],
+    ratio: '300 / 250',
+    estimatedDailyViews: 500,
   },
   ARTICLE_FOOTER: {
     id: 'ARTICLE_FOOTER',
@@ -189,6 +200,8 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     containerClass: 'h-[56px] sm:h-[72px] md:h-[90px]',
     fit: 'contain',
     exportSizes: ['728 × 90', '800 × 120'],
+    ratio: '728 / 90',
+    estimatedDailyViews: 600,
   },
   GRID_CARD: {
     id: 'GRID_CARD',
@@ -201,8 +214,25 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     aspect: '4 / 5',
     fit: 'cover',
     exportSizes: ['800 × 1000 (4:5)'],
+    ratio: '4 / 5',
+    estimatedDailyViews: 400,
   },
 };
+
+/** Impresiones (vistas) estimadas de un plan en una ubicación: los planes
+ *  CPM traen su garantía; los de periodo se proyectan con las vistas
+ *  diarias de la ubicación. Siempre «estimado», nunca promesa. */
+export function estimateCampaignViews(
+  info: Pick<AdPlacementInfo, 'estimatedDailyViews'>,
+  plan: Pick<AdPricingPlan, 'durationDays' | 'targetImpressions'>,
+): number {
+  if (plan.targetImpressions) return plan.targetImpressions;
+  return (plan.durationDays || 30) * info.estimatedDailyViews;
+}
+
+/** Miles con punto: 1200 → «1.200», 36000 → «36.000». */
+export const formatAdViews = (views: number): string =>
+  new Intl.NumberFormat('es-UY').format(Math.round(views));
 
 // Initial institutional campaigns
 export const INITIAL_AD_CAMPAIGNS: AdCampaign[] = [];

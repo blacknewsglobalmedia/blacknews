@@ -77,16 +77,19 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 
 1. **Panel de redacción → AdsManager**: crear/editar campaña (título,
    anunciante, URL, imagen, placement, fechas, estado `ACTIVE`).
-2. **"Anúnciate aquí"** (modal de auto-servicio): el anunciante envía la
-   solicitud y queda pendiente de aprobación en AdsManager.
+2. **"Anúnciate aquí"** (página de carga en el panel, `AdSubmissionPage`):
+   ubicación con proporción y tamaños, creatividad con vista previa real,
+   plan con vistas estimadas y pago; la solicitud queda `PENDIENTE_PAGO`
+   hasta la confirmación y la aprobación en AdsManager.
 3. Mientras una campaña tenga otro estado (`PAUSED`, `PENDIENTE_PAGO`,
    `RECHAZADA`…) o esté fuera de fechas, **no aparece** en la web.
 
 ## Alta de un slot nuevo
 
 1. Agregar la entrada en `AdPlacement` y `AD_PLACEMENTS_INFO`
-   (`src/types/ads.ts`) con `sizing`, `containerClass`/`aspect`, `fit` y
-   `exportSizes`.
+   (`src/types/ads.ts`) con `sizing`, `containerClass`/`aspect`, `fit`,
+   `exportSizes`, `ratio` (proporción de la creatividad) y
+   `estimatedDailyViews` (vistas/día estimadas que usa la página de carga).
 2. Agregar su contenedor en `SLOT_WRAPPER` (`src/components/AdBanner.tsx`).
 3. Renderizar `<AdBanner placement="..." campaigns={adsList} … />` donde
    corresponda.

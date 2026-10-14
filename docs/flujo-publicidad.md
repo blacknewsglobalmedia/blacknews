@@ -31,17 +31,17 @@ PENDIENTE_PAGO ──(pago verificado)──▶ PENDIENTE_APROBACION ──(admi
 | # | Paso | Dónde vive |
 |---|------|-----------|
 | 1 | **Descubre** el espacio: botón *Anúnciate aquí* en el pie, o el recuadro *ESPACIO PATROCINADO DISPONIBLE* en la portada (solo aparece cuando no hay campañas activas). Los suscriptores no ven anuncios ni recuadros. | `Footer.tsx`, `AdBanner.tsx` (placeholder + `onOpenInquiry`) |
-| 2 | **Inicia sesión con Google** (obligatorio — sin login no se puede enviar). | `CreateAdModal.tsx` → `GoogleAuthModal` |
-| 3 | **Elige ubicación y plan** (paso 1): 5 placements con su tamaño nominal y 5 planes (7d/15d/30d/CPM 10k/CPM 50k). | `CreateAdModal.tsx` paso 1 · `types/ads.ts` (`AD_PLACEMENTS_INFO`, `AD_PRICING_PLANS`) |
-| 4 | **Carga la creatividad** (paso 2): título, marca, URL de destino, URL de imagen + vista previa. | `CreateAdModal.tsx` paso 2 |
-| 5 | **Elige el pago** (paso 3): | `CreateAdModal.tsx` paso 3 |
-| | **PayPal** (principal): se cobra en **USD** con el precio del servidor. Botón *PAGAR CON PAYPAL*. | `utils/paypalAds.ts` → `POST /api/paypal/ad-order` |
+| 2 | **Inicia sesión con Google** (obligatorio — sin login, «Anúnciate aquí» muestra el aviso de sesión en vez de abrir la página). | `App.tsx` `openAdSubmission` → `GoogleAuthModal` |
+| 3 | **Elige ubicación y plan** en la página de carga del panel (sección 1): 5 placements con su proporción, tamaños de exportación y vistas diarias estimadas; 5 planes (7d/15d/30d/CPM 10k/CPM 50k) con vistas estimadas por ubicación (sección 3). | `AdSubmissionPage.tsx` · `types/ads.ts` (`AD_PLACEMENTS_INFO`, `AD_PRICING_PLANS`, `estimateCampaignViews`) |
+| 4 | **Carga la creatividad** (sección 2): sube el archivo (va a Cloudinary y se usa el ORIGINAL a máxima calidad) o pega una URL; ve dimensiones reales, aviso de proporción y **vista previa en el contenedor real del slot**. | `AdSubmissionPage.tsx` · `worker/images.ts` (`originalUrl`) |
+| 5 | **Elige el pago** (sección 4): | `AdSubmissionPage.tsx` |
+| | **PayPal** (principal): se cobra en **USD** con el precio del servidor. Botón *CONTINUAR A PAYPAL*. | `utils/paypalAds.ts` → `POST /api/paypal/ad-order` |
 | | **Mercado Pago**: tarjetas/Abitab/Redpagos. | manual (comprobante) |
 | | **Transferencia BROU/Itaú**: muestra los datos y pide nº de comprobante. | manual |
 | 6 | **Envía** → la campaña se registra **siempre** como `PENDIENTE_PAGO` (sobrevive aunque el pago no se complete). | `App.tsx` `handleSaveCampaign` → Firestore `ads` + `localStorage["blacknews_ads"]` |
-| 7a | **PayPal**: redirige a PayPal (`approveUrl`). Al aprobar, PayPal vuelve a `/?ad_campaign=<id>&token=<orderId>` → el Worker **captura y verifica** importe/plan/campaña → la campaña pasa a `PENDIENTE_APROBACION` y se avisa con toast. Si el anunciante abandona, queda `PENDIENTE_PAGO`. Si PayPal no está configurado (sin claves), se registra igual y el paso 4 explica que se le contactará. | `worker/paypal.ts` `handleAdCapture` · `App.tsx` efecto de retorno |
-| 7b | **Transferencia / MP**: la confirmación es manual; el paso 4 muestra `PENDIENTE DE PAGO`. | — |
-| 8 | **Ve la confirmación** (paso 4) con el estado de su solicitud. | `CreateAdModal.tsx` paso 4 |
+| 7a | **PayPal**: redirige a PayPal (`approveUrl`). Al aprobar, PayPal vuelve a `/?ad_campaign=<id>&token=<orderId>` → el Worker **captura y verifica** importe/plan/campaña → la campaña pasa a `PENDIENTE_APROBACION` y se avisa con toast. Si el anunciante abandona, queda `PENDIENTE_PAGO`. Si PayPal no está configurado (sin claves), se registra igual y la confirmación explica que se le contactará. | `worker/paypal.ts` `handleAdCapture` · `App.tsx` efecto de retorno |
+| 7b | **Transferencia / MP**: la confirmación es manual; la vista de confirmación muestra la solicitud registrada. | — |
+| 8 | **Ve la confirmación** con el resumen de su solicitud y el estado. | `AdSubmissionPage.tsx` (vista de confirmación) |
 
 ---
 
@@ -61,6 +61,8 @@ PENDIENTE_PAGO ──(pago verificado)──▶ PENDIENTE_APROBACION ──(admi
 
 - Los anuncios van en **carrusel** por ubicación: fade cada 6 s, pausa al
   hover, dots + flechas, sin autoplay con `prefers-reduced-motion`.
+- Mientras la creatividad baja se ve un **cargador** discreto (skeleton
+  «Cargando…» sobre el negro del slot, sin salto de layout).
 - Etiqueta **PUBLICIDAD** + nombre del anunciante en micro-tipo; borde
   sutil; **nunca recortados** (contain sobre negro AMOLED).
 - Clic → pestaña nueva con `rel="sponsored"` (cuenta +1 clic).
@@ -72,10 +74,10 @@ PENDIENTE_PAGO ──(pago verificado)──▶ PENDIENTE_APROBACION ──(admi
 
 | Componente | Responsabilidad |
 |---|---|
-| `src/components/CreateAdModal.tsx` | Wizard de envío (4 pasos), estado inicial `PENDIENTE_PAGO`, redirección PayPal. |
-| `src/App.tsx` | Estado `adsList`; **Firestore `ads` como fuente de verdad** (pull al arrancar + `setDoc`/`deleteDoc` en cada guardado/borrado); efecto de retorno `?token=&ad_campaign=`; abre el modal desde los placeholders. |
+| `src/components/AdSubmissionPage.tsx` | Página de carga del anunciante en el panel (ubicación → creatividad con vista previa real → plan con alcance estimado → datos y pago); estado inicial `PENDIENTE_PAGO`, redirección PayPal. Sustituye al antiguo `CreateAdModal`. |
+| `src/App.tsx` | Estado `adsList`; **Firestore `ads` como fuente de verdad** (pull al arrancar + `setDoc`/`deleteDoc` en cada guardado/borrado); efecto de retorno `?token=&ad_campaign=`; abre la página de carga desde los placeholders. |
 | `src/components/AdsManager.tsx` | Panel de aprobación/pago/métricas. |
-| `src/components/AdBanner.tsx` | Render de banners: carrusel, tamaños, impresiones (1/campaña/página), clics. |
+| `src/components/AdBanner.tsx` | Render de banners: carrusel, tamaños, cargador/skeleton de imagen, impresiones (1/campaña/página), clics. |
 | `src/types/ads.ts` | Catálogo: placements + tamaños, planes y precios, estados, `AdPaymentMethod` (`PAYPAL`, `MERCADO_PAGO`, `BANK_TRANSFER`, `STRIPE`). |
 | `worker/paypal.ts` | `POST /api/paypal/ad-order` (crea orden con **precio server-side** `AD_PLANS`) y `POST /api/paypal/ad-capture` (captura, verifica importe/plan/campaña, KV `adorder:<id>`, idempotente). |
 | `src/utils/paypalAds.ts` | Cliente de esas dos rutas. |

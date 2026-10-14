@@ -31,6 +31,8 @@ export interface OptimizationResult {
   slug: string;
   originalName: string;
   originalSize: number;
+  /** Entrega del original sin transformación en el CDN */
+  originalUrl: string;
   width: number;
   height: number;
   aspectRatio: number;
@@ -330,6 +332,9 @@ export async function optimizeImage(request: Request, env: CloudinaryEnv): Promi
     slug,
     originalName: input.filename,
     originalSize,
+    // Entrega del original SIN transformación: la usan las creatividades
+    // publicitarias, que necesitan toda la resolución exportada.
+    originalUrl: `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME}/image/upload/${upload.publicId}`,
     width: originalWidth,
     height: originalHeight,
     aspectRatio,

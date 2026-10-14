@@ -61,6 +61,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   const [paused, setPaused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+  const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
 
   // Índice activo siempre dentro de rango cuando cambia la lista
   const activeIndex = eligibleCampaigns.length
@@ -204,11 +205,27 @@ export const AdBanner: React.FC<AdBannerProps> = ({
                   : "z-0 opacity-0 pointer-events-none"
               }`}
             >
+              {/* Cargador: mientras la creatividad baja se ve un skeleton
+                  sutil sobre el mismo negro del slot (sin salto de layout). */}
+              {!loadedImages[c.id] && !brokenImages[c.id] && (
+                <div className="absolute inset-0 flex items-center justify-center bg-neutral-950">
+                  <span
+                    className={`font-mono text-[10px] uppercase tracking-[0.25em] text-neutral-600 ${
+                      reduceMotion ? "" : "animate-pulse"
+                    }`}
+                  >
+                    Cargando…
+                  </span>
+                </div>
+              )}
               <img
                 src={c.imageUrl}
                 alt={c.imageAlt || `${c.advertiser} – ${c.title}`}
                 loading="lazy"
                 draggable={false}
+                onLoad={() =>
+                  setLoadedImages((prev) => ({ ...prev, [c.id]: true }))
+                }
                 onError={() =>
                   setBrokenImages((prev) => ({ ...prev, [c.id]: true }))
                 }

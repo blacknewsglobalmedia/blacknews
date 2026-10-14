@@ -68,7 +68,7 @@ import {
 import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
 import type { PodcastEpisode } from '../types/podcast';
-import { AdCampaign, AdStatus } from '../types/ads';
+import { AdCampaign, AdPlacement, AdStatus } from '../types/ads';
 import {
   HistoryEntry,
   HISTORY_LIMIT,
@@ -92,6 +92,7 @@ import { DraftsModal, ArticleDraft } from './DraftsModal';
 import { ServiceUsagePanel } from './ServiceUsagePanel';
 import { RedactorFloatingBar } from './RedactorFloatingBar';
 import { AdsManager } from './AdsManager';
+import { AdSubmissionPage } from './AdSubmissionPage';
 import { ProfileEditor } from './ProfileEditor';
 import { PoliciesManager } from './PoliciesManager';
 import { OptimizedPicture } from './OptimizedPicture';
@@ -131,7 +132,8 @@ interface RedactionStudioProps {
   onRemoveBookmark?: (reportId: string) => void;
   isSubscribed?: boolean;
   onOpenSubscription?: () => void;
-  onOpenCreateAd?: () => void;
+  /** Carga de publicidad pedida desde la portada (ubicación preseleccionada). */
+  adSubmissionRequest?: { placement?: AdPlacement; nonce: number } | null;
   onSelectReport?: (report: Report) => void;
   /** Guarda nombre y foto editados en Mi Perfil. */
   onSaveProfile: (patch: { name: string; avatarUrl?: string }) => void;
@@ -224,7 +226,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onRemoveBookmark,
   isSubscribed = false,
   onOpenSubscription,
-  onOpenCreateAd,
+  adSubmissionRequest,
   onSelectReport,
   onSaveProfile,
   initialTab = null,
@@ -253,6 +255,11 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   // Default tab based on role
   const [activeTab, setActiveTab] = useState<StudioTab>(DEFAULT_STUDIO_TAB[currentUser.role]);
+  // Página de carga de publicidad (flujo del anunciante dentro del panel)
+  const [adSubmissionOpen, setAdSubmissionOpen] = useState(false);
+  const [adSubmissionPlacement, setAdSubmissionPlacement] = useState<
+    AdPlacement | undefined
+  >(undefined);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const [previewMode, setPreviewMode] = useState(false);
@@ -380,6 +387,15 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
     );
     onInitialTabConsumed?.();
   }, [initialTab, currentUser.role, onInitialTabConsumed]);
+
+  // «Anúnciate aquí» desde la portada: se abre la pestaña de publicidad con
+  // la página de carga y la ubicación del slot preseleccionada.
+  useEffect(() => {
+    if (!adSubmissionRequest) return;
+    setAdSubmissionPlacement(adSubmissionRequest.placement);
+    setAdSubmissionOpen(true);
+    setActiveTab('ads');
+  }, [adSubmissionRequest]);
 
   // Red de seguridad: si el rol cambia (o un enlace aterriza en una sección
   // restringida) volvemos a la pestaña que le corresponde.
@@ -1513,10 +1529,13 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                     <span className="hidden sm:inline">Suscribirme</span>
                   </button>
                 )}
-                {isReader && onOpenCreateAd && (
+                {isReader && (
                   <button
                     type="button"
-                    onClick={onOpenCreateAd}
+                    onClick={() => {
+                      setAdSubmissionOpen(true);
+                      setActiveTab('ads');
+                    }}
                     className="px-3 py-1.5 bg-white text-black hover:bg-neutral-200 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
                     <Megaphone className="w-3.5 h-3.5" />
@@ -2070,21 +2089,27 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         </div>
       )}
 
-      {/* TAB CONTENT: PUBLICIDAD (lector: mis anuncios · redacción: AdsManager) */}
+      {/* TAB CONTENT: PUBLICIDAD (página de carga · lector: mis anuncios ·
+          redacción: AdsManager) */}
       {activeTab === 'ads' && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12 font-sans">
-          {isReader ? (
+          {adSubmissionOpen && onSaveAdCampaign ? (
+            <AdSubmissionPage
+              currentUser={currentUser}
+              onSubmitAdCampaign={onSaveAdCampaign}
+              onClose={() => setAdSubmissionOpen(false)}
+              initialPlacement={adSubmissionPlacement}
+            />
+          ) : isReader ? (
             <div className="max-w-3xl space-y-6">
-              {onOpenCreateAd && (
-                <button
-                  type="button"
-                  onClick={onOpenCreateAd}
-                  className="w-full py-3 bg-emerald-500 text-black font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg"
-                >
-                  <Megaphone className="w-4 h-4" />
-                  <span>Cargar una publicidad</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setAdSubmissionOpen(true)}
+                className="w-full py-3 bg-emerald-500 text-black font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+              >
+                <Megaphone className="w-4 h-4" />
+                <span>Cargar una publicidad</span>
+              </button>
               <p className="text-[11px] text-neutral-500 font-light leading-relaxed text-center -mt-3">
                 Publicidad de pago: se publica tras la revisión del equipo y la
                 confirmación del pago (PayPal, transferencia o Mercado Pago).
@@ -2121,12 +2146,24 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             </div>
           ) : (
             onSaveAdCampaign && onDeleteAdCampaign && (
-              <AdsManager
-                campaigns={adCampaigns}
-                onSaveCampaign={onSaveAdCampaign}
-                onDeleteCampaign={onDeleteAdCampaign}
-                categories={CATEGORIES}
-              />
+              <>
+                <div className="mb-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAdSubmissionOpen(true)}
+                    className="px-3 py-1.5 bg-white text-black hover:bg-neutral-200 font-bold text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Megaphone className="w-3.5 h-3.5" />
+                    Cargar una publicidad (vista anunciante)
+                  </button>
+                </div>
+                <AdsManager
+                  campaigns={adCampaigns}
+                  onSaveCampaign={onSaveAdCampaign}
+                  onDeleteCampaign={onDeleteAdCampaign}
+                  categories={CATEGORIES}
+                />
+              </>
             )
           )}
         </div>
