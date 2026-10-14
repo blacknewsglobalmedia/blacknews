@@ -3,9 +3,12 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  CircleAlert,
   Eye,
+  FileImage,
   Link2,
   Loader2,
+  Megaphone,
   ShieldCheck,
   Upload,
 } from "lucide-react";
@@ -26,6 +29,10 @@ import { createAdOrder } from "../utils/paypalAds";
  * Carga de publicidad (flujo del anunciante) como PÁGINA del panel:
  * ubicación → creatividad con vista previa real → plan con alcance
  * estimado → datos y pago. Sustituye al antiguo CreateAdModal.
+ *
+ * Diseño: tipografía legible (mín. 13 px, títulos 18-24 px), etiquetas
+ * visibles sobre cada campo y un stepper guía de 4 pasos con acceso
+ * directo por ancla.
  */
 interface AdSubmissionPageProps {
   currentUser?: RedactorProfile;
@@ -43,6 +50,9 @@ const PLACEMENT_ORDER: AdPlacement[] = [
   "ARTICLE_FOOTER",
   "GRID_CARD",
 ];
+
+/** Ubicación por defecto: la de más rotación en portada. */
+const DEFAULT_PLACEMENT: AdPlacement = "IN_FEED_LEADERBOARD";
 
 const PAYMENT_OPTIONS: Array<{
   id: AdPaymentMethod;
@@ -66,24 +76,52 @@ const PAYMENT_OPTIONS: Array<{
   },
 ];
 
+const STEPS: Array<{ id: string; label: string }> = [
+  { id: "ubicacion", label: "Ubicación" },
+  { id: "creatividad", label: "Creatividad" },
+  { id: "plan", label: "Plan" },
+  { id: "envio", label: "Envío" },
+];
+
 /** Relación de aspecto nominal de la creatividad («970 / 250» → 3.88). */
 const nominalRatioOf = (ratio: string): number => {
   const [w, h] = ratio.split("/").map((part) => parseFloat(part.trim()));
   return w && h ? w / h : 1;
 };
 
-const SectionTitle: React.FC<{
-  index: string;
+/** Encabezado de cada sección: número, icono y título grande. */
+const SectionHeading: React.FC<{
+  step: number;
   title: string;
-  hint?: string;
-}> = ({ index, title, hint }) => (
-  <div className="mb-4">
-    <h2 className="text-sm font-semibold uppercase tracking-wider text-white">
-      <span className="mr-2 font-mono text-emerald-400">{index}</span>
-      {title}
-    </h2>
-    {hint && <p className="mt-1 text-xs font-light text-neutral-500">{hint}</p>}
+  description: string;
+}> = ({ step, title, description }) => (
+  <div className="mb-5 flex items-start gap-3">
+    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 font-mono text-sm font-bold text-emerald-400">
+      {step}
+    </span>
+    <div>
+      <h2 className="text-lg font-semibold text-white sm:text-xl">{title}</h2>
+      <p className="mt-0.5 text-sm leading-relaxed text-neutral-400">
+        {description}
+      </p>
+    </div>
   </div>
+);
+
+/** Etiqueta de campo con texto visible (no solo placeholder). */
+const FieldLabel: React.FC<{
+  htmlFor: string;
+  label: string;
+  hint?: string;
+}> = ({ htmlFor, label, hint }) => (
+  <label htmlFor={htmlFor} className="block">
+    <span className="text-[13px] font-semibold text-neutral-200">{label}</span>
+    {hint && (
+      <span className="mt-0.5 block text-xs font-light text-neutral-500">
+        {hint}
+      </span>
+    )}
+  </label>
 );
 
 export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
@@ -94,7 +132,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
 }) => {
   // ── Estado del formulario ───────────────────────────────────────────────
   const [placement, setPlacement] = useState<AdPlacement>(
-    initialPlacement || "IN_FEED_LEADERBOARD",
+    initialPlacement || DEFAULT_PLACEMENT,
   );
   const [plan, setPlan] = useState<AdPricingPlan>(AD_PRICING_PLANS[0]);
 
@@ -133,6 +171,15 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
     advertiserUrl: !advertiserUrl.trim(),
   };
   const isValid = !Object.values(missing).some(Boolean);
+
+  /** Paso completado (para el stepper guía). */
+  const stepDone = [true, !missing.imageUrl, true, isValid];
+
+  const goToStep = (id: string) => {
+    document
+      .getElementById(`paso-${id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // ── Creatividad: subida al Worker (Cloudinary, original a máxima calidad)
   const ingestFile = async (file: File) => {
@@ -208,7 +255,11 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowErrors(true);
-    if (!isValid) return;
+    if (!isValid) {
+      // Lleva al primer paso pendiente.
+      goToStep(missing.imageUrl ? "creatividad" : "envio");
+      return;
+    }
     setIsSubmitting(true);
 
     const now = new Date();
@@ -282,29 +333,29 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   if (submitted) {
     return (
       <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10">
-            <Check className="h-6 w-6 text-emerald-400" />
+        <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-8 text-center sm:p-10">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10">
+            <Check className="h-8 w-8 text-emerald-400" />
           </div>
-          <h1 className="text-lg font-semibold text-white">
+          <h1 className="text-2xl font-semibold text-white sm:text-3xl">
             Solicitud registrada
           </h1>
-          <p className="mx-auto mt-2 max-w-md text-xs font-light leading-relaxed text-neutral-400">
-            «{submitted.title}» en {placementInfo.name}, plan {plan.name}. El
-            equipo revisa la creatividad y confirmamos el pago antes de
-            publicarla.
+          <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-neutral-300">
+            «{submitted.title}» en <strong>{placementInfo.name}</strong>, plan{" "}
+            <strong>{plan.name}</strong>. El equipo revisa la creatividad y
+            confirmamos el pago antes de publicarla.
           </p>
           {paypalFailed && (
-            <p className="mx-auto mt-4 max-w-md rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-300">
+            <p className="mx-auto mt-5 max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-300">
               PayPal no respondió, pero tu solicitud quedó guardada. El pago se
               puede completar luego con el equipo.
             </p>
           )}
-          <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+          <div className="mt-8">
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-lg bg-emerald-500 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 sm:w-auto"
+              className="w-full rounded-lg bg-emerald-500 px-6 py-3.5 text-sm font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 sm:w-auto"
             >
               Volver a mi publicidad
             </button>
@@ -317,33 +368,61 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-4xl">
       {/* Cabecera */}
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="mb-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-neutral-500 transition-colors hover:text-white"
-          >
-            <ArrowLeft className="h-3 w-3" /> Mi publicidad
-          </button>
-          <h1 className="text-xl font-semibold text-white sm:text-2xl">
-            Cargar una publicidad
-          </h1>
-          <p className="mt-1 text-xs font-light leading-relaxed text-neutral-400">
-            Elige la ubicación, sube tu creatividad y revisa la vista previa
-            real antes de pagar.
-          </p>
-        </div>
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={onClose}
+          className="mb-3 flex items-center gap-1.5 text-[13px] font-semibold text-neutral-400 transition-colors hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" /> Volver a mi publicidad
+        </button>
+        <h1 className="text-2xl font-semibold text-white sm:text-3xl">
+          Cargar una publicidad
+        </h1>
+        <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-neutral-300">
+          Son 4 pasos: eliges dónde se ve, subes tu arte, eliges el plan y
+          envías. Todo con vista previa real antes de pagar.
+        </p>
       </div>
 
+      {/* Stepper guía */}
+      <nav
+        aria-label="Pasos"
+        className="mb-10 flex flex-wrap items-center gap-2"
+      >
+        {STEPS.map((step, i) => (
+          <React.Fragment key={step.id}>
+            {i > 0 && (
+              <span className="h-px w-4 bg-white/15 sm:w-6" aria-hidden />
+            )}
+            <button
+              type="button"
+              onClick={() => goToStep(step.id)}
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1.5 pl-2 pr-3.5 text-[13px] font-semibold text-neutral-200 transition-colors hover:border-white/30 hover:text-white"
+            >
+              <span
+                className={`flex h-5 w-5 items-center justify-center rounded-full font-mono text-[11px] font-bold ${
+                  stepDone[i]
+                    ? "bg-emerald-500 text-black"
+                    : "bg-neutral-800 text-neutral-300"
+                }`}
+              >
+                {stepDone[i] ? <Check className="h-3 w-3" /> : i + 1}
+              </span>
+              {step.label}
+            </button>
+          </React.Fragment>
+        ))}
+      </nav>
+
       {/* 1 · Ubicación */}
-      <section className="mb-10">
-        <SectionTitle
-          index="1"
-          title="Ubicación"
-          hint="Cada ubicación tiene su tamaño y su proporción. Verás la vista previa al estilo real del sitio."
+      <section id="paso-ubicacion" className="mb-12 scroll-mt-24">
+        <SectionHeading
+          step={1}
+          title="¿Dónde se ve tu anuncio?"
+          description="Elige la ubicación. Cada una tiene su tamaño y su proporción; la vista previa del paso 2 usa el mismo espacio real del sitio."
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {PLACEMENT_ORDER.map((id) => {
             const info = AD_PLACEMENTS_INFO[id];
             const selected = id === placement;
@@ -352,53 +431,65 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                 key={id}
                 type="button"
                 onClick={() => setPlacement(id)}
-                className={`rounded-xl border p-4 text-left transition-colors ${
+                aria-pressed={selected}
+                className={`rounded-2xl border p-5 text-left transition-colors ${
                   selected
-                    ? "border-emerald-500/60 bg-emerald-500/5"
-                    : "border-white/10 bg-neutral-950/60 hover:border-white/25"
+                    ? "border-emerald-500/70 bg-emerald-500/5"
+                    : "border-white/10 bg-neutral-950/60 hover:border-white/30"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-xs font-semibold uppercase tracking-wider text-white">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[15px] font-semibold text-white">
                         {info.name}
                       </span>
+                      {id === DEFAULT_PLACEMENT && (
+                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                          Recomendado
+                        </span>
+                      )}
                       {selected && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        <Check className="h-4 w-4 shrink-0 text-emerald-400" />
                       )}
                     </div>
-                    <p className="mt-1 text-[11px] font-light leading-relaxed text-neutral-500">
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-400">
                       {info.description}
                     </p>
                   </div>
                   {/* Miniatura a la proporción de la creatividad */}
                   <div
-                    className="shrink-0 rounded-md border border-white/15 bg-black"
+                    className="shrink-0 rounded-lg border border-white/15 bg-black"
                     style={{
-                      width: 72,
+                      width: 84,
                       aspectRatio: info.ratio,
-                      maxHeight: 56,
+                      maxHeight: 64,
                     }}
                     aria-hidden
                   />
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
                   {info.exportSizes.map((size) => (
                     <span
                       key={size}
-                      className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[9px] text-neutral-300"
+                      className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-neutral-200"
                     >
                       {size}
                     </span>
                   ))}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-neutral-400">
                   <span>
-                    Proporción <span className="text-neutral-300">{info.ratio.replace("/", ":")}</span>
+                    Proporción{" "}
+                    <span className="font-mono text-neutral-200">
+                      {info.ratio.replace("/", ":")}
+                    </span>
                   </span>
                   <span>
-                    ≈ {formatAdViews(info.estimatedDailyViews)} vistas/día
+                    <span className="font-mono text-neutral-200">
+                      ≈ {formatAdViews(info.estimatedDailyViews)}
+                    </span>{" "}
+                    vistas al día
                   </span>
                 </div>
               </button>
@@ -408,15 +499,36 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
       </section>
 
       {/* 2 · Creatividad + vista previa */}
-      <section className="mb-10">
-        <SectionTitle
-          index="2"
-          title="Creatividad"
-          hint={`Exporta tu asset en ${placementInfo.exportSizes.join(" o ")} (proporción ${placementInfo.ratio.replace("/", ":")}). JPG, PNG o WEBP, hasta 20 MB.`}
+      <section id="paso-creatividad" className="mb-12 scroll-mt-24">
+        <SectionHeading
+          step={2}
+          title="Sube tu creatividad"
+          description="Arrastra tu imagen o pega una URL. A la derecha ves exactamente cómo se verá en el sitio."
         />
-        <div className="grid gap-4 lg:grid-cols-2">
+
+        {/* Formato recomendado de la ubicación elegida */}
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-[13px] text-neutral-300">
+          <span className="font-semibold text-white">
+            {placementInfo.name}:
+          </span>
+          <span>
+            exporta en{" "}
+            <span className="font-mono text-white">
+              {placementInfo.exportSizes[0]}
+            </span>
+          </span>
+          <span>
+            proporción{" "}
+            <span className="font-mono text-white">
+              {placementInfo.ratio.replace("/", ":")}
+            </span>
+          </span>
+          <span className="text-neutral-500">JPG, PNG o WEBP · 20 MB máx.</span>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
           {/* Controles */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
@@ -424,7 +536,11 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                 const file = e.dataTransfer.files?.[0];
                 if (file) void ingestFile(file);
               }}
-              className="rounded-xl border border-dashed border-white/15 bg-neutral-950/60 p-5 text-center transition-colors hover:border-white/30"
+              className={`rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+                showErrors && missing.imageUrl
+                  ? "border-red-500/50 bg-red-500/5"
+                  : "border-white/15 bg-neutral-950/60 hover:border-white/35"
+              }`}
             >
               <input
                 ref={fileInputRef}
@@ -437,83 +553,94 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                   e.target.value = "";
                 }}
               />
+              <FileImage className="mx-auto mb-3 h-8 w-8 text-neutral-600" />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-white/15 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-black transition-colors hover:bg-neutral-200 disabled:opacity-60"
               >
                 {uploading ? (
                   <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Subiendo…
+                    <Loader2 className="h-4 w-4 animate-spin" /> Subiendo…
                   </>
                 ) : (
                   <>
-                    <Upload className="h-3.5 w-3.5" /> Subir imagen
+                    <Upload className="h-4 w-4" /> Elegir imagen
                   </>
                 )}
               </button>
-              <p className="mt-2 text-[10px] font-light text-neutral-500">
-                Arrastra el archivo aquí o pulsa el botón.
+              <p className="mt-3 text-sm text-neutral-400">
+                o arrastra el archivo hasta aquí
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 flex-1 items-center rounded-lg border border-white/10 bg-neutral-950/60 px-3">
-                <Link2 className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
-                <input
-                  type="url"
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onBlur={() => applyUrl(urlInput)}
-                  placeholder="…o pega la URL de tu imagen"
-                  className="h-full w-full bg-transparent pl-2 text-xs text-white outline-none placeholder:text-neutral-600"
-                />
+            <div>
+              <FieldLabel
+                htmlFor="ad-image-url"
+                label="…o usa una imagen ya publicada"
+                hint="Pega el enlace directo de una imagen (URL que empieza por https://)."
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex h-11 flex-1 items-center rounded-lg border border-white/10 bg-neutral-950/60 px-3 focus-within:border-white/40">
+                  <Link2 className="h-4 w-4 shrink-0 text-neutral-500" />
+                  <input
+                    id="ad-image-url"
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    onBlur={() => applyUrl(urlInput)}
+                    placeholder="https://…"
+                    className="h-full w-full bg-transparent pl-2 text-sm text-white outline-none placeholder:text-neutral-600"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => applyUrl(urlInput)}
+                  className="h-11 shrink-0 rounded-lg border border-white/20 px-4 text-sm font-semibold text-neutral-200 transition-colors hover:text-white"
+                >
+                  Usar
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => applyUrl(urlInput)}
-                className="h-9 shrink-0 rounded-lg border border-white/15 px-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-300 transition-colors hover:text-white"
-              >
-                Usar
-              </button>
             </div>
 
             {uploadError && (
-              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] leading-relaxed text-red-300">
+              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
                 {uploadError}
               </p>
             )}
 
             {assetDims && (
-              <div className="rounded-lg border border-white/5 bg-neutral-950/60 px-3 py-2 text-[11px] text-neutral-400">
-                <span className="font-mono uppercase tracking-wider text-neutral-500">
-                  Tu asset:{" "}
-                </span>
-                <span className="font-mono text-neutral-200">
+              <div className="rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm leading-relaxed text-neutral-300">
+                <span className="font-semibold text-white">Tu imagen: </span>
+                <span className="font-mono text-neutral-100">
                   {assetDims.w} × {assetDims.h} px
-                </span>{" "}
-                {ratioDelta !== null &&
-                  (ratioDelta <= 0.05 ? (
-                    <span className="text-emerald-400">
-                      ✓ coincide con la proporción de esta ubicación
-                    </span>
-                  ) : (
-                    <span className="text-amber-300">
-                      ≠ no coincide: se mostrará{" "}
-                      {placementInfo.fit === "cover"
-                        ? "recortada al centro"
-                        : "contenida, sin recorte"}
-                    </span>
-                  ))}
+                </span>
+                {ratioDelta !== null && (
+                  <>
+                    {" · "}
+                    {ratioDelta <= 0.05 ? (
+                      <span className="text-emerald-400">
+                        ✓ coincide con esta ubicación
+                      </span>
+                    ) : (
+                      <span className="text-amber-300">
+                        ≠ no coincide: se mostrará{" "}
+                        {placementInfo.fit === "cover"
+                          ? "recortada al centro"
+                          : "contenida, sin recorte"}
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
 
           {/* Vista previa con el contenedor REAL del slot */}
           <div>
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
-              Vista previa en el sitio
+            <p className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-neutral-400">
+              Así se verá en el sitio
             </p>
             <div
               className={`group relative w-full overflow-hidden rounded-xl border border-white/10 bg-black ${
@@ -536,38 +663,36 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                   }`}
                 />
               ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-4 text-center">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
+                  <FileImage className="h-6 w-6 text-neutral-700" />
+                  <span className="text-sm text-neutral-500">
                     Tu creatividad aparecerá aquí
                   </span>
                 </div>
               )}
-              <span className="pointer-events-none absolute left-2 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              <span className="pointer-events-none absolute left-2 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-400">
                 Publicidad
               </span>
-              <span className="pointer-events-none absolute bottom-1.5 left-2 max-w-[55%] truncate font-mono text-[10px] uppercase tracking-widest text-neutral-600">
+              <span className="pointer-events-none absolute bottom-1.5 left-2 max-w-[55%] truncate font-mono text-[10px] uppercase tracking-widest text-neutral-500">
                 {advertiser || "Tu marca"}
               </span>
             </div>
-            <p className="mt-2 text-[10px] font-light leading-relaxed text-neutral-500">
-              {placementInfo.description} La creatividad nunca se recorta si su
-              proporción coincide{" "}
-              {placementInfo.fit === "cover" &&
-                "(en esta ubicación se usa recorte tipo «cover» sobre la tarjeta)"}
-              .
+            <p className="mt-2.5 text-[13px] leading-relaxed text-neutral-500">
+              Tu imagen se muestra {placementInfo.fit === "cover" ? "a sangre (se recorta al borde)" : "entera, sin recortes"}; arriba se superponen el rótulo
+              PUBLICIDAD y tu marca.
             </p>
           </div>
         </div>
       </section>
 
       {/* 3 · Plan y alcance */}
-      <section className="mb-10">
-        <SectionTitle
-          index="3"
-          title="Plan y alcance"
-          hint="Las vistas son estimaciones de la ubicación seleccionada; los planes de impresiones incluyen garantía medida en la plataforma."
+      <section id="paso-plan" className="mb-12 scroll-mt-24">
+        <SectionHeading
+          step={3}
+          title="Elige el plan"
+          description="Precio a la vista y alcance estimado para la ubicación elegida. Los planes de impresiones incluyen garantía medida en la plataforma."
         />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {AD_PRICING_PLANS.map((p) => {
             const selected = p.id === plan.id;
             const views = estimateCampaignViews(placementInfo, p);
@@ -576,40 +701,46 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                 key={p.id}
                 type="button"
                 onClick={() => setPlan(p)}
-                className={`rounded-xl border p-4 text-left transition-colors ${
+                aria-pressed={selected}
+                className={`flex flex-col rounded-2xl border p-5 text-left transition-colors ${
                   selected
-                    ? "border-emerald-500/60 bg-emerald-500/5"
-                    : "border-white/10 bg-neutral-950/60 hover:border-white/25"
+                    ? "border-emerald-500/70 bg-emerald-500/5"
+                    : "border-white/10 bg-neutral-950/60 hover:border-white/30"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-white">
+                  <span className="text-[15px] font-semibold text-white">
                     {p.name}
                   </span>
-                  <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-neutral-300">
+                  <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-200">
                     {p.badge}
                   </span>
                 </div>
-                <p className="mt-1.5 text-[11px] font-light leading-relaxed text-neutral-500">
+                <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-400">
                   {p.description}
                 </p>
-                <div className="mt-3 font-mono text-sm text-white">
-                  ${p.priceUsd} USD
-                  <span className="ml-1.5 text-[10px] text-neutral-500">
-                    / ${p.priceUyu} UYU
+                <div className="mt-3 font-mono text-2xl font-semibold text-white">
+                  ${p.priceUsd}
+                  <span className="ml-1 text-sm font-normal text-neutral-400">
+                    USD
                   </span>
                 </div>
-                <div className="mt-2 space-y-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-                  <div className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3 w-3" />
-                    {p.durationDays ? `${p.durationDays} días` : "hasta agotar"}
+                <div className="font-mono text-[13px] text-neutral-400">
+                  ≈ ${p.priceUyu} UYU
+                </div>
+                <div className="mt-3 space-y-1.5 text-[13px] text-neutral-300">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-neutral-500" />
+                    {p.durationDays
+                      ? `${p.durationDays} días publicado`
+                      : "hasta agotar presupuesto"}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Eye className="h-3 w-3" />
-                    <span className="text-neutral-300">
-                      ≈ {formatAdViews(views)} vistas
-                    </span>
-                    <span className="normal-case">(estimado)</span>
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-neutral-500" />
+                    <span className="font-mono text-white">
+                      ≈ {formatAdViews(views)}
+                    </span>{" "}
+                    vistas estimadas
                   </div>
                 </div>
               </button>
@@ -619,166 +750,237 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
       </section>
 
       {/* 4 · Datos y envío */}
-      <section className="mb-10">
-        <SectionTitle
-          index="4"
-          title="Datos y envío"
-          hint="Revisa el resumen: la creatividad se publica tras la revisión del equipo y la confirmación del pago."
+      <section id="paso-envio" className="mb-10 scroll-mt-24">
+        <SectionHeading
+          step={4}
+          title="Tus datos y el envío"
+          description="Revisa el resumen de la derecha. La creatividad se publica tras la revisión del equipo y la confirmación del pago."
         />
-        <div className="grid gap-4 lg:grid-cols-5">
+        <div className="grid gap-5 lg:grid-cols-5">
           {/* Campos */}
-          <div className="space-y-3 lg:col-span-3">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Título del anuncio (se ve junto a tu marca)"
-              className={`w-full rounded-lg border bg-neutral-950/60 px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                showErrors && missing.title ? "border-red-500/60" : "border-white/10"
-              }`}
-            />
-            <input
-              type="text"
-              value={advertiser}
-              onChange={(e) => setAdvertiser(e.target.value)}
-              placeholder="Marca o empresa"
-              className={`w-full rounded-lg border bg-neutral-950/60 px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                showErrors && missing.advertiser
-                  ? "border-red-500/60"
-                  : "border-white/10"
-              }`}
-            />
-            <input
-              type="url"
-              value={advertiserUrl}
-              onChange={(e) => setAdvertiserUrl(e.target.value)}
-              placeholder="https://tu-sitio.com (adónde lleva el clic)"
-              className={`w-full rounded-lg border bg-neutral-950/60 px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
-                showErrors && missing.advertiserUrl
-                  ? "border-red-500/60"
-                  : "border-white/10"
-              }`}
-            />
-            <input
-              type="text"
-              value={badgeText}
-              onChange={(e) => setBadgeText(e.target.value)}
-              placeholder="Etiqueta (PATROCINADO)"
-              className="w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
-            />
+          <div className="space-y-4 lg:col-span-3">
+            <div>
+              <FieldLabel
+                htmlFor="ad-title"
+                label="Título del anuncio"
+                hint="Se ve junto a tu marca sobre la imagen."
+              />
+              <input
+                id="ad-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ej.: Custodia de oro en Suiza"
+                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
+                  showErrors && missing.title
+                    ? "border-red-500/60"
+                    : "border-white/10"
+                }`}
+              />
+              {showErrors && missing.title && (
+                <p className="mt-1 text-xs text-red-300">
+                  Escribe un título para tu anuncio.
+                </p>
+              )}
+            </div>
+            <div>
+              <FieldLabel
+                htmlFor="ad-advertiser"
+                label="Marca o empresa"
+                hint="El nombre que se mostrará como anunciante."
+              />
+              <input
+                id="ad-advertiser"
+                type="text"
+                value={advertiser}
+                onChange={(e) => setAdvertiser(e.target.value)}
+                placeholder="Ej.: Helvetia Wealth"
+                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
+                  showErrors && missing.advertiser
+                    ? "border-red-500/60"
+                    : "border-white/10"
+                }`}
+              />
+              {showErrors && missing.advertiser && (
+                <p className="mt-1 text-xs text-red-300">
+                  Indica la marca o empresa anunciante.
+                </p>
+              )}
+            </div>
+            <div>
+              <FieldLabel
+                htmlFor="ad-url"
+                label="Enlace de destino"
+                hint="A dónde llega el lector al hacer clic en tu anuncio."
+              />
+              <input
+                id="ad-url"
+                type="url"
+                value={advertiserUrl}
+                onChange={(e) => setAdvertiserUrl(e.target.value)}
+                placeholder="https://tu-sitio.com"
+                className={`mt-1.5 w-full rounded-lg border bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40 ${
+                  showErrors && missing.advertiserUrl
+                    ? "border-red-500/60"
+                    : "border-white/10"
+                }`}
+              />
+              {showErrors && missing.advertiserUrl && (
+                <p className="mt-1 text-xs text-red-300">
+                  Añade el enlace de destino (https://…).
+                </p>
+              )}
+            </div>
+            <div>
+              <FieldLabel
+                htmlFor="ad-badge"
+                label="Rótulo del anuncio"
+                hint="Texto que identifica el anuncio (opcional)."
+              />
+              <input
+                id="ad-badge"
+                type="text"
+                value={badgeText}
+                onChange={(e) => setBadgeText(e.target.value)}
+                placeholder="PATROCINADO"
+                className="mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
+              />
+            </div>
 
             {/* Pago */}
-            <div className="grid gap-2 sm:grid-cols-3">
-              {PAYMENT_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setPaymentMethod(option.id)}
-                  title={option.note}
-                  className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                    paymentMethod === option.id
-                      ? "border-emerald-500/60 bg-emerald-500/5 text-white"
-                      : "border-white/10 bg-neutral-950/60 text-neutral-400 hover:border-white/25"
-                  }`}
-                >
-                  <span className="block text-[11px] font-semibold uppercase tracking-wider">
-                    {option.name}
-                  </span>
-                  <span className="mt-0.5 block text-[10px] font-light leading-snug text-neutral-500">
-                    {option.note}
-                  </span>
-                </button>
-              ))}
+            <div>
+              <span className="text-[13px] font-semibold text-neutral-200">
+                Forma de pago
+              </span>
+              <div className="mt-1.5 grid gap-2.5 sm:grid-cols-3">
+                {PAYMENT_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setPaymentMethod(option.id)}
+                    aria-pressed={paymentMethod === option.id}
+                    className={`rounded-xl border px-4 py-3.5 text-left transition-colors ${
+                      paymentMethod === option.id
+                        ? "border-emerald-500/70 bg-emerald-500/5 text-white"
+                        : "border-white/10 bg-neutral-950/60 text-neutral-300 hover:border-white/30"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold">
+                      {option.name}
+                    </span>
+                    <span className="mt-1 block text-xs leading-snug text-neutral-400">
+                      {option.note}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
             {paymentMethod !== "PAYPAL" && (
-              <input
-                type="text"
-                value={receiptNote}
-                onChange={(e) => setReceiptNote(e.target.value)}
-                placeholder="Nº de operación o referencia del comprobante (opcional)"
-                className="w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-xs text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
-              />
+              <div>
+                <FieldLabel
+                  htmlFor="ad-receipt"
+                  label="Comprobante (opcional)"
+                  hint="Nº de operación o referencia si ya transfiriste."
+                />
+                <input
+                  id="ad-receipt"
+                  type="text"
+                  value={receiptNote}
+                  onChange={(e) => setReceiptNote(e.target.value)}
+                  placeholder="Ej.: op. 123456"
+                  className="mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-950/60 px-3.5 py-3 text-sm text-white outline-none transition-colors placeholder:text-neutral-600 focus:border-white/40"
+                />
+              </div>
             )}
 
             {showErrors && !isValid && (
-              <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
-                Completa los campos marcados y añade una creatividad.
+              <p className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-300">
+                <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                Faltan datos: completa los campos marcados y añade una
+                creatividad en el paso 2.
               </p>
             )}
           </div>
 
           {/* Resumen */}
-          <div className="rounded-xl border border-white/10 bg-neutral-950/60 p-4 lg:col-span-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
-              Resumen
-            </p>
-            <dl className="mt-3 space-y-2 text-[11px]">
-              <div className="flex justify-between gap-3">
-                <dt className="text-neutral-500">Ubicación</dt>
-                <dd className="text-right text-neutral-200">
-                  {placementInfo.name}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-neutral-500">Formato</dt>
-                <dd className="text-right font-mono text-neutral-200">
-                  {placementInfo.exportSizes[0]} ·{" "}
-                  {placementInfo.ratio.replace("/", ":")}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-neutral-500">Plan</dt>
-                <dd className="text-right text-neutral-200">{plan.name}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-neutral-500">Duración</dt>
-                <dd className="text-right text-neutral-200">
-                  {plan.durationDays
-                    ? `${plan.durationDays} días`
-                    : "hasta agotar presupuesto"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-neutral-500">Vistas estimadas</dt>
-                <dd className="text-right font-mono text-neutral-200">
-                  ≈ {formatAdViews(planViews)}
-                </dd>
-              </div>
-              <div className="border-t border-white/5 pt-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-neutral-500">Precio</dt>
-                  <dd className="text-right">
-                    <span className="font-mono text-base text-white">
-                      ${plan.priceUsd} USD
-                    </span>
-                    <span className="ml-1 font-mono text-[10px] text-neutral-500">
-                      / ${plan.priceUyu} UYU
-                    </span>
+          <div className="lg:col-span-2">
+            <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-5">
+              <p className="text-[13px] font-bold uppercase tracking-wider text-neutral-400">
+                Resumen
+              </p>
+              <dl className="mt-4 space-y-3 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-400">Ubicación</dt>
+                  <dd className="text-right font-medium text-white">
+                    {placementInfo.name}
                   </dd>
                 </div>
-              </div>
-            </dl>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-400">Formato</dt>
+                  <dd className="text-right font-mono text-[13px] text-neutral-100">
+                    {placementInfo.exportSizes[0]} ·{" "}
+                    {placementInfo.ratio.replace("/", ":")}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-400">Plan</dt>
+                  <dd className="text-right font-medium text-white">
+                    {plan.name}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-400">Duración</dt>
+                  <dd className="text-right text-neutral-100">
+                    {plan.durationDays
+                      ? `${plan.durationDays} días`
+                      : "hasta agotar presupuesto"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-neutral-400">Vistas estimadas</dt>
+                  <dd className="text-right font-mono text-neutral-100">
+                    ≈ {formatAdViews(planViews)}
+                  </dd>
+                </div>
+                <div className="border-t border-white/10 pt-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-neutral-400">Precio</dt>
+                    <dd className="text-right">
+                      <span className="font-mono text-2xl font-semibold text-white">
+                        ${plan.priceUsd}
+                      </span>
+                      <span className="ml-1 font-mono text-[13px] text-neutral-400">
+                        USD
+                      </span>
+                      <span className="block font-mono text-[13px] text-neutral-500">
+                        ≈ ${plan.priceUyu} UYU
+                      </span>
+                    </dd>
+                  </div>
+                </div>
+              </dl>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-3 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 disabled:opacity-60"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Procesando…
-                </>
-              ) : paymentMethod === "PAYPAL" ? (
-                <>Continuar a PayPal</>
-              ) : (
-                <>Enviar solicitud</>
-              )}
-            </button>
-            <p className="mt-2 flex items-start gap-1.5 text-[10px] font-light leading-relaxed text-neutral-500">
-              <ShieldCheck className="mt-px h-3 w-3 shrink-0" />
-              Se publica tras revisión del equipo y confirmación del pago. Puedes
-              retirarla cuando quieras.
-            </p>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-4 text-sm font-bold uppercase tracking-wider text-black transition-colors hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Procesando…
+                  </>
+                ) : paymentMethod === "PAYPAL" ? (
+                  <>Continuar a PayPal</>
+                ) : (
+                  <>Enviar solicitud</>
+                )}
+              </button>
+              <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-neutral-500">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                Se publica tras revisión del equipo y confirmación del pago.
+                Puedes retirarla cuando quieras.
+              </p>
+            </div>
           </div>
         </div>
       </section>
