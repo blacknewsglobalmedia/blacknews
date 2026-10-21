@@ -6,11 +6,11 @@
  *
  * 1. **Google ID token** (ruta principal): el frontend envía el ID token de
  *    Firebase Auth (`auth.currentUser.getIdToken()`); el Worker verifica la
- *    firma RS256 contra el JWKS oficial de las claves de Firebase
- *    (https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com),
- *    comprueba exp/iss y que el email del token esté en
- *    `OSINT_ADMIN_EMAILS` (allowlist). Sin esta variable configurada el
- *    módulo queda CERRADO (fail-closed).
+ *    firma RS256 contra las claves públicas de Firebase
+ *    (https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys,
+ *    el mismo endpoint que usa firebase-admin), comprueba exp/iss y
+ *    que el email del token esté en `OSINT_ADMIN_EMAILS` (allowlist).
+ *    Sin esta variable configurada el módulo queda CERRADO (fail-closed).
  *
  * 2. **Token administrativo compartido** (CI/scripts/desarrollo local):
  *    cabecera `x-bn-admin-token` que debe coincidir con el secreto
@@ -34,21 +34,20 @@ export interface OsintAuthInfo {
 
 interface CertEntry {
   kid: string;
-  n: string;
-  e: string;
-  kty: string;
-  alg?: string;
-  use?: string;
+  pem: string;
 }
 
 /**
- * JWKS oficial de las claves con las que Firebase firma sus ID tokens.
- * Verificado 2026-10-21: HTTP 200 con claves RSA (kid/n/e). El endpoint
- * antiguo `https://www.googleapis.com/identity/v1/certs` devolvía 404 y
- * dejaba la verificación por Google imposible.
+ * Claves públicas con las que Firebase firma sus ID tokens. Es el MISMO
+ * endpoint que usa firebase-admin para verificar (formato JSON
+ * {kid: PEM x509}, no JWKS). Verificado 2026-10-21: HTTP 200, 5 claves.
+ *
+ * Ojo: el JWKS del service account
+ * (service_accounts/v1/jwk/securetoken@system.gserviceaccount.com) NO
+ * sirve aquí: publica otro juego de claves con kids distintos, y el kid
+ * del token de Firebase Auth nunca coincide → la firma nunca verificaría.
  */
-const CERTS_URL =
-  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+const CERTS_URL = 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys';
 /** Caché por aislamiento del Worker (1 h). */
 let certCache: { certs: CertEntry[]; fetchedAt: number } | null = null;
 
@@ -65,11 +64,50 @@ async function getGoogleCerts(): Promise<CertEntry[]> {
   if (certCache && Date.now() - certCache.fetchedAt < 3_600_000) return certCache.certs;
   const res = await fetch(CERTS_URL, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`Google certs HTTP ${res.status}`);
-  const body = (await res.json()) as { keys?: CertEntry[] };
-  const keys = (body.keys || []).filter((k) => k.kty === 'RSA');
+  const body = (await res.json()) as Record<string, unknown>;
+  const keys: CertEntry[] = [];
+  for (const [kid, pem] of Object.entries(body)) {
+    if (typeof pem === 'string' && pem.includes('BEGIN CERTIFICATE')) keys.push({ kid, pem });
+  }
   if (keys.length === 0) throw new Error('Google certs vacíos');
   certCache = { certs: keys, fetchedAt: Date.now() };
   return keys;
+}
+
+/** PEM x509 → DER (bytes del certificado completo). */
+function pemToDer(pem: string): Uint8Array {
+  return b64urlToBytes(
+    pem
+      .replace(/-----(BEGIN|END) CERTIFICATE-----/g, '')
+      .replace(/\s+/g, ''),
+  );
+}
+
+/* ASN.1 DER mínimo (sólo lectura de TLV) para recortar la SubjectPublicKey
+ * Info de un certificado X509: WebCrypto importa 'spki' (la clave desnuda),
+ * no el certificado entero. */
+function tlvContentStart(buf: Uint8Array, pos: number): number {
+  const b = buf[pos + 1];
+  return b < 0x80 ? pos + 2 : pos + 2 + (b & 0x7f);
+}
+
+function tlvEnd(buf: Uint8Array, pos: number): number {
+  const start = tlvContentStart(buf, pos);
+  const b = buf[pos + 1];
+  if (b < 0x80) return start + b;
+  let len = 0;
+  for (let i = 0; i < (b & 0x7f); i++) len = len * 256 + buf[pos + 2 + i];
+  return start + len;
+}
+
+function x509ToSpki(der: Uint8Array): Uint8Array {
+  // Certificate → tbsCertificate → (version?) serial, sigAlg, issuer,
+  // validity, subject → subjectPublicKeyInfo.
+  let pos = tlvContentStart(der, 0);
+  pos = tlvContentStart(der, pos);
+  if (der[pos] === 0xa0) pos = tlvEnd(der, pos); // [0] version (opcional)
+  for (let i = 0; i < 5; i++) pos = tlvEnd(der, pos);
+  return der.subarray(pos, tlvEnd(der, pos));
 }
 
 interface TokenPayload {
@@ -133,8 +171,8 @@ export async function verifyGoogleIdToken(
     for (const cert of candidates) {
       try {
         const key = await crypto.subtle.importKey(
-          'jwk',
-          { kty: 'RSA', n: cert.n, e: cert.e, alg: 'RS256', ext: true },
+          'spki',
+          x509ToSpki(pemToDer(cert.pem)) as unknown as ArrayBuffer,
           { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
           false,
           ['verify'],
@@ -143,7 +181,10 @@ export async function verifyGoogleIdToken(
           { name: 'RSASSA-PKCS1-v1_5' },
           key,
           data as unknown as ArrayBuffer,
-          b64urlToBytes(parts[0] + '.' + parts[1]) as unknown as ArrayBuffer,
+          // Los bytes firmados son el texto "header.payload" tal cual
+          // (UTF-8/ASCII); NO hay que decodificarlos de base64 (el punto
+          // haría fallar a atob y la firma nunca verificaría).
+          new TextEncoder().encode(`${parts[0]}.${parts[1]}`) as unknown as ArrayBuffer,
         );
         if (ok) return { ok: true, payload };
       } catch {

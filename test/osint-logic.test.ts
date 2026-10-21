@@ -395,4 +395,94 @@ await atest('exp caducado → invalid', async () => {
 });
 
 /* ------------------------------------------------------------------ */
+console.log('\n[10] Verificación completa con clave propia (fetch simulado, sin red)');
+
+/* Construye un certificado X509 mínimo (mismo esqueleto ASN.1 que los de
+ * Google: SEQUENCE { TBS { serial, sigAlg, issuer, validity, subject,
+ * SPKI }, ... }) alrededor de una clave RSA generada en caliente, para
+ * ejercitar pemToDer → x509ToSpki → importKey('spki') → verify con el
+ * código real del Worker. */
+function der(tag: number, content: Uint8Array): Uint8Array {
+  const len = content.length;
+  const head =
+    len < 0x80
+      ? Uint8Array.of(tag, len)
+      : Uint8Array.of(tag, 0x82, len >> 8, len & 0xff); // 2 bytes bastan (<64 KiB)
+  const out = new Uint8Array(head.length + content.length);
+  out.set(head, 0);
+  out.set(content, head.length);
+  return out;
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let off = 0;
+  for (const p of parts) {
+    out.set(p, off);
+    off += p.length;
+  }
+  return out;
+}
+
+const derSeq = (...parts: Uint8Array[]) => der(0x30, concatBytes(parts));
+
+await atest('JWT firmado con clave propia y cert simulado → ok:true', async () => {
+  const kp = (await crypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+    true,
+    ['sign', 'verify'],
+  )) as CryptoKeyPair;
+  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey));
+  // Certificate ::= SEQUENCE { tbsCertificate SEQUENCE { serial, sigAlg,
+  //   issuer, validity, subject, SPKI }, ... }
+  const fakeCert = derSeq(
+    derSeq(
+      der(0x02, Uint8Array.of(1)), // serialNumber
+      derSeq(), derSeq(), derSeq(), derSeq(), // sigAlg, issuer, validity, subject
+      spki,
+    ),
+  );
+  const b64 = btoa(String.fromCharCode(...fakeCert));
+  const pem = `-----BEGIN CERTIFICATE-----\n${b64.match(/.{1,64}/g)!.join('\n')}\n-----END CERTIFICATE-----`;
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: unknown) => {
+    if (String(url).includes('identitytoolkit')) {
+      return { ok: true, json: async () => ({ TESTKEY: pem }) } as Response;
+    }
+    throw new Error(`red inesperada: ${String(url)}`);
+  }) as typeof fetch;
+
+  try {
+    const b64uOf = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+    const header = b64uOf({ alg: 'RS256', kid: 'TESTKEY' });
+    const payload = b64uOf({ iss: 'https://securetoken.google.com/proy-test', exp: 9_999_999_999 });
+    const sig = new Uint8Array(
+      await crypto.subtle.sign(
+        { name: 'RSASSA-PKCS1-v1_5' },
+        kp.privateKey,
+        Buffer.from(`${header}.${payload}`),
+      ),
+    );
+    const jwt = `${header}.${payload}.${Buffer.from(sig).toString('base64url')}`;
+
+    const good = await verifyGoogleIdToken(jwt);
+    assert.equal(good.ok, true, 'debe verificar');
+    if (good.ok) {
+      assert.equal(good.payload.iss, 'https://securetoken.google.com/proy-test');
+    }
+
+    // firma alterada → invalid (misma clave y kid, otro contenido)
+    const evil = `${header}.${b64uOf({ iss: 'https://securetoken.google.com/proy-test', exp: 9_999_999_999, admin: true })}.${Buffer.from(sig).toString('base64url')}`;
+    assert.deepEqual(await verifyGoogleIdToken(evil), { ok: false, reason: 'invalid' });
+
+    // kid desconocido → invalid
+    const otherKid = `${b64uOf({ alg: 'RS256', kid: 'OTRA' })}.${payload}.${Buffer.from(sig).toString('base64url')}`;
+    assert.deepEqual(await verifyGoogleIdToken(otherKid), { ok: false, reason: 'invalid' });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+/* ------------------------------------------------------------------ */
 console.log(`\n${passed} pruebas superadas${process.exitCode ? ' (CON FALLOS)' : ''}.`);
