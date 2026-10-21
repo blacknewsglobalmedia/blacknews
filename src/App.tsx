@@ -741,6 +741,28 @@ export default function App() {
           isOwnerEmail(email) ? "Administrador" : "Usuario Básico",
           true,
         );
+      } else {
+        // Sin sesión de Firebase (la observer resuelve el estado inicial
+        // desde la persistencia local, así que null es definitivo). Si el
+        // perfil restaurado venía de un inicio de sesión con Google
+        // verificado, la sesión caducó o se cerró en otra parte: antes el
+        // panel seguía "logueado" mientras los módulos que exigen token
+        // real (p. ej. OSINT) recibían 401. Sincronizamos: se cierra la
+        // sesión local para que el usuario pueda volver a entrar con el
+        // popup de Google. Los perfiles manuales (sin Google) no se tocan.
+        try {
+          const saved = localStorage.getItem("blacknews_active_user");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.isGoogleAccount && parsed.email) {
+              setCurrentUser(GUEST_USER);
+              localStorage.removeItem("blacknews_active_user");
+              showToast(
+                "Sesión de Google cerrada o caducada: vuelve a entrar con «Acceder con cuenta Google» para conservar tus permisos.",
+              );
+            }
+          }
+        } catch {}
       }
     });
     return () => unsubscribe();
