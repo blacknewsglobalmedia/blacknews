@@ -50,7 +50,9 @@ Navegador (OsintCenter.tsx)          Worker Cloudflare (worker/osint/)
 1. **Google ID token (ruta principal)** — el frontend envía
    `Authorization: Bearer <idToken>` de Firebase Auth
    (`auth.currentUser.getIdToken()`). El Worker verifica la firma RS256
-   contra `https://www.googleapis.com/identity/v1/certs` (caché 1 h),
+   contra el JWKS oficial de Firebase
+   `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`
+   (caché 1 h; el endpoint antiguo `identity/v1/certs` devolvía 404),
    `exp`, `iss` (securetoken.google.com / accounts.google.com),
    `email_verified` y que el email esté en `OSINT_ADMIN_EMAILS`.
 2. **Token administrativo** — cabecera `x-bn-admin-token` igual al secreto
@@ -167,7 +169,7 @@ OSINT_RSS_ALLOWLIST=bbc.co.uk,dw.com,france24.com,un.org
 ## 7. Pruebas
 
 ```bash
-npx tsx test/osint-logic.test.ts   # 23 pruebas: dedupe, scoring, SSRF, RSS/Atom, traducción
+npx tsx test/osint-logic.test.ts   # 27 pruebas: dedupe, scoring, SSRF, RSS/Atom, traducción, tokens Google
 npm run lint                       # tsc (incluye worker/ y test/)
 ```
 

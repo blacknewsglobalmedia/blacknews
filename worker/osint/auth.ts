@@ -6,10 +6,11 @@
  *
  * 1. **Google ID token** (ruta principal): el frontend envía el ID token de
  *    Firebase Auth (`auth.currentUser.getIdToken()`); el Worker verifica la
- *    firma RS256 contra los certs públicos de Google
- *    (https://www.googleapis.com/identity/v1/certs), comprueba exp/iss y
- *    que el email del token esté en `OSINT_ADMIN_EMAILS` (allowlist).
- *    Sin esta variable configurada el módulo queda CERRADO (fail-closed).
+ *    firma RS256 contra el JWKS oficial de las claves de Firebase
+ *    (https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com),
+ *    comprueba exp/iss y que el email del token esté en
+ *    `OSINT_ADMIN_EMAILS` (allowlist). Sin esta variable configurada el
+ *    módulo queda CERRADO (fail-closed).
  *
  * 2. **Token administrativo compartido** (CI/scripts/desarrollo local):
  *    cabecera `x-bn-admin-token` que debe coincidir con el secreto
@@ -40,7 +41,14 @@ interface CertEntry {
   use?: string;
 }
 
-const CERTS_URL = 'https://www.googleapis.com/identity/v1/certs';
+/**
+ * JWKS oficial de las claves con las que Firebase firma sus ID tokens.
+ * Verificado 2026-10-21: HTTP 200 con claves RSA (kid/n/e). El endpoint
+ * antiguo `https://www.googleapis.com/identity/v1/certs` devolvía 404 y
+ * dejaba la verificación por Google imposible.
+ */
+const CERTS_URL =
+  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 /** Caché por aislamiento del Worker (1 h). */
 let certCache: { certs: CertEntry[]; fetchedAt: number } | null = null;
 
@@ -75,36 +83,48 @@ interface TokenPayload {
   [k: string]: unknown;
 }
 
+/** Resultado de la verificación: distingue token inválido de red caída. */
+export type VerifyOutcome =
+  | { ok: true; payload: TokenPayload }
+  | { ok: false; reason: 'invalid' | 'unreachable' };
+
 /**
- * Verifica la firma y los campos básicos de un Google/Firebase ID token.
- * Devuelve el payload o null si no es válido. No lanza.
+ * Verifica la firma y los campos básicos de un ID token de Firebase.
+ * Distingue `invalid` (el token no es válido: no culpar al servidor) de
+ * `unreachable` (el servidor de claves de Google no respondió: no culpar
+ * al usuario). No lanza.
  */
 export async function verifyGoogleIdToken(
   token: string,
   expectedAudience?: string,
-): Promise<TokenPayload | null> {
+): Promise<VerifyOutcome> {
   const parts = token.split('.');
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3) return { ok: false, reason: 'invalid' };
   let header: { alg?: string; kid?: string };
   let payload: TokenPayload;
   try {
     header = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[0])));
     payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(parts[1])));
   } catch {
-    return null;
+    return { ok: false, reason: 'invalid' };
   }
-  if (header.alg !== 'RS256') return null;
-  // Issuer: Firebase Auth (securetoken.google.com/<proyecto>) o Google Accounts.
+  if (header.alg !== 'RS256') return { ok: false, reason: 'invalid' };
+  // Issuer: sólo ID tokens de Firebase Auth (securetoken.google.com/<proyecto>),
+  // que es exactamente lo que envía el frontend con getIdToken(). Un token
+  // OAuth crudo (accounts.google.com) no está soportado: lo firma otro
+  // juego de claves distinto.
   const iss = payload.iss || '';
-  const issOk =
-    iss.startsWith('https://securetoken.google.com/') ||
-    iss === 'https://accounts.google.com' ||
-    iss === 'accounts.google.com';
-  if (!issOk) return null;
+  if (!iss.startsWith('https://securetoken.google.com/')) {
+    return { ok: false, reason: 'invalid' };
+  }
   const nowSec = Math.floor(Date.now() / 1000);
-  if (typeof payload.exp !== 'number' || payload.exp <= nowSec) return null;
-  if (expectedAudience && payload.aud && payload.aud !== expectedAudience) return null;
-  if (payload.email_verified === false) return null;
+  if (typeof payload.exp !== 'number' || payload.exp <= nowSec) {
+    return { ok: false, reason: 'invalid' };
+  }
+  if (expectedAudience && payload.aud && payload.aud !== expectedAudience) {
+    return { ok: false, reason: 'invalid' };
+  }
+  if (payload.email_verified === false) return { ok: false, reason: 'invalid' };
 
   try {
     const certs = await getGoogleCerts();
@@ -125,15 +145,17 @@ export async function verifyGoogleIdToken(
           data as unknown as ArrayBuffer,
           b64urlToBytes(parts[0] + '.' + parts[1]) as unknown as ArrayBuffer,
         );
-        if (ok) return payload;
+        if (ok) return { ok: true, payload };
       } catch {
         // cert inutilizable → probamos el siguiente
       }
     }
   } catch {
-    return null;
+    // Fallo al traer/procesar las claves de Google (red, HTTP, JSON):
+    // problema del servidor, no del token.
+    return { ok: false, reason: 'unreachable' };
   }
-  return null;
+  return { ok: false, reason: 'invalid' };
 }
 
 /** `OSINT_ADMIN_EMAILS` en minúsculas, sin vacíos. */
@@ -184,10 +206,16 @@ export async function requireOsintAdmin(
       403,
     );
   }
-  const payload = await verifyGoogleIdToken(match[1]);
-  if (!payload) {
-    return denied('Token de Google inválido o expirado.', 401);
+  const outcome = await verifyGoogleIdToken(match[1]);
+  if (outcome.ok === false) {
+    return outcome.reason === 'unreachable'
+      ? denied(
+          'No se pudo verificar la firma de Google en este momento (servidor de claves no disponible); inténtalo de nuevo en unos segundos.',
+          503,
+        )
+      : denied('Token de Google inválido o expirado.', 401);
   }
+  const payload = outcome.payload;
   const email = (payload.email || '').toLowerCase();
   if (!email || !allowlist.includes(email)) {
     return denied('Esta cuenta no está autorizada para OSINT.', 403);

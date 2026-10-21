@@ -5,8 +5,9 @@
  *
  * Cubre: URLs canónicas, normalización de titulares, detección de
  * duplicados/agrupación de acontecimientos, puntuación editorial con
- * factores explicados, guard SSRF, parser RSS/Atom y la traducción
- * automática al importar (prompt y parser de la respuesta de la IA).
+ * factores explicados, guard SSRF, parser RSS/Atom, la traducción
+ * automática al importar (prompt y parser de la respuesta de la IA) y
+ * las rutas sin red de la verificación de ID tokens de Google.
  * Son funciones puras (sin red ni KV), así que corren igual en local y CI.
  */
 import assert from 'node:assert/strict';
@@ -27,6 +28,7 @@ import {
 } from '../worker/osint/ssrf';
 import { parseFeed } from '../worker/osint/connectors';
 import { buildTranslationPrompt, parseTranslationResponse } from '../worker/osint/translate';
+import { verifyGoogleIdToken } from '../worker/osint/auth';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -340,6 +342,56 @@ test('parseTranslationResponse es tolerante a saltos de línea y devuelve null s
   assert.equal(parseTranslationResponse('texto sin json'), null);
   assert.equal(parseTranslationResponse('{"title":"sin cerrar"'), null, 'JSON truncado → null');
   assert.equal(parseTranslationResponse(''), null);
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\n[9] Verificación de ID token de Google (rutas sin red)');
+
+async function atest(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    console.error(`  ✗ ${name}`);
+    console.error(err);
+    process.exitCode = 1;
+  }
+}
+
+const b64u = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+
+await atest('tokens malformados → invalid sin tocar la red', async () => {
+  assert.deepEqual(await verifyGoogleIdToken('no-es-jwt'), { ok: false, reason: 'invalid' });
+  assert.deepEqual(await verifyGoogleIdToken(''), { ok: false, reason: 'invalid' });
+  assert.deepEqual(await verifyGoogleIdToken('a.b.c'), { ok: false, reason: 'invalid' });
+});
+
+await atest('alg distinto de RS256 → invalid', async () => {
+  const header = b64u({ alg: 'HS256' });
+  const payload = b64u({ iss: 'https://securetoken.google.com/p', exp: 9_999_999_999 });
+  assert.deepEqual(await verifyGoogleIdToken(`${header}.${payload}.sig`), {
+    ok: false,
+    reason: 'invalid',
+  });
+});
+
+await atest('issuer no-firebase → invalid', async () => {
+  const header = b64u({ alg: 'RS256' });
+  const payload = b64u({ iss: 'https://example.com', exp: 9_999_999_999 });
+  assert.deepEqual(await verifyGoogleIdToken(`${header}.${payload}.sig`), {
+    ok: false,
+    reason: 'invalid',
+  });
+});
+
+await atest('exp caducado → invalid', async () => {
+  const header = b64u({ alg: 'RS256' });
+  const payload = b64u({ iss: 'https://securetoken.google.com/p', exp: 1_000_000_000 });
+  assert.deepEqual(await verifyGoogleIdToken(`${header}.${payload}.sig`), {
+    ok: false,
+    reason: 'invalid',
+  });
 });
 
 /* ------------------------------------------------------------------ */
