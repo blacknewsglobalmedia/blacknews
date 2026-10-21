@@ -31,7 +31,16 @@
     // Se admiten varios modelos separados por comas para concatenar fallbacks:
     // si el primero está saturado (429) o en mantenimiento, pasa automáticamente
     // al siguiente sin interrumpir la generación del usuario.
-    "OPENROUTER_MODEL": "nvidia/nemotron-3-super-120b-a12b:free, meta-llama/llama-3.3-70b-instruct:free, deepseek/deepseek-r1:free, qwen/qwen-2.5-72b-instruct:free, google/gemma-2-9b-it:free"
+    "OPENROUTER_MODEL": "nvidia/nemotron-3-super-120b-a12b:free, meta-llama/llama-3.3-70b-instruct:free, deepseek/deepseek-r1:free, qwen/qwen-2.5-72b-instruct:free, google/gemma-2-9b-it:free",
+    // Módulo OSINT (Centro de Investigación) — ver docs/osint.md.
+    // Allowlist de administradores: correos que pueden usar /api/osint/* con su
+    // Google ID token de Firebase. VACÍO = módulo cerrado (fail-closed).
+    //   "OSINT_ADMIN_EMAILS": "tu-email@gmail.com"
+    "OSINT_ADMIN_EMAILS": "",
+    // Dominios permitidos para feeds RSS personalizados (subdominios incluidos).
+    // Vacío = feeds personalizados deshabilitados.
+    //   "OSINT_RSS_ALLOWLIST": "mi-medio.org,un.org"
+    "OSINT_RSS_ALLOWLIST": ""
   },
   // Accesos de suscripción concedidos (solo escribe el Worker tras cobrar en PayPal)
   "kv_namespaces": [

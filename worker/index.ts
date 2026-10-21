@@ -35,6 +35,11 @@ export interface Env {
   // Búsqueda web de la redacción (Tavily). Sin clave la llamada va sin fuentes.
   TAVILY_API_KEY?: string; // secreto con `wrangler secret put`
   TAVILY_API_BASE?: string; // SOLO pruebas locales (ver worker/ai.ts)
+  // Módulo OSINT (Centro de Investigación). Fail-closed: sin allowlist ni
+  // token configurado, /api/osint/* responde 403.
+  OSINT_ADMIN_EMAILS?: string; // allowlist de admins (vídeo: Google ID token)
+  OSINT_ADMIN_TOKEN?: string; // secreto alternativo (CI/scripts): wrangler secret put
+  OSINT_RSS_ALLOWLIST?: string; // dominios permitidos para feeds RSS personalizados
   // Accesos concedidos (solo el Worker escribe aquí)
   PAYPAL_KV: {
     get(key: string): Promise<string | null>;
@@ -103,6 +108,14 @@ async function handleApi(request: Request, env: Env, pathname: string): Promise<
         openrouter: Boolean(env.OPENROUTER_API_KEY?.trim()),
       },
     });
+  }
+
+  // Módulo OSINT (Centro de Investigación): búsquedas multi-fuente con
+  // verificación de administración en el backend (Google ID token o token
+  // secreto). Ver worker/osint/ y docs/osint.md.
+  if (pathname.startsWith('/api/osint/')) {
+    const { handleOsintRequest } = await import('./osint/routes');
+    return handleOsintRequest(request, env, pathname);
   }
 
   if (pathname.startsWith('/api/video/')) {

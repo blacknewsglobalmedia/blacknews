@@ -15,6 +15,7 @@ export type StudioTab =
   | 'post-generator'
   | 'calendar'
   | 'ads'
+  | 'osint'
   | 'users'
   | 'my-articles'
   | 'register'
@@ -77,6 +78,10 @@ export const canOpenStudioTab = (
       return p.canManagePolicies;
     case 'calendar':
       return p.canAccessInternalMedia;
+    case 'osint':
+      // Centro de Investigación OSINT: exclusivo de administradores.
+      // El frontend oculta la pestaña; el Worker vuelve a verificar en backend.
+      return role === 'ADMIN';
     case 'register':
       return role === 'LECTOR';
     default:

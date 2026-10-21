@@ -40,6 +40,7 @@ import {
   User,
 } from "lucide-react";
 import { Report } from "../types/news";
+import type { OsintPostImport } from "../types/osint";
 import { CATEGORIES } from "../data/newsData";
 import fixWebmDuration from "fix-webm-duration";
 import {
@@ -65,6 +66,10 @@ export { CountryFlag, loadFlagImage };
 interface SocialPostGeneratorProps {
   reports?: Report[];
   categories?: string[];
+  /** Hallazgo OSINT a precompletar (borrador editable; nunca publica solo). */
+  importPayload?: OsintPostImport | null;
+  /** Avisa al panel tras aplicar la importación para limpiar el puente. */
+  onImportConsumed?: () => void;
 }
 
 // Categorías canónicas del sitio: fuente única en data/newsData.ts.
@@ -671,6 +676,8 @@ type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   reports = [],
   categories: propCategories = [],
+  importPayload = null,
+  onImportConsumed,
 }) => {
   // Combine prop categories with expanded list without duplicates
   const allAvailableCategories = Array.from(
@@ -700,6 +707,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   );
   // Optional caption/character at bottom right of photo
   const [photoCaption, setPhotoCaption] = useState<string>("");
+  // Procedencia del hallazgo OSINT importado: franja visible con el enlace
+  // original. Vive fuera del borrador JSON para no alterar su contrato.
+  const [osintSource, setOsintSource] = useState<
+    { name: string; url: string; publishedAt?: string } | null
+  >(null);
 
   // Countries / Regional attribution
   const [selectedCountries, setSelectedCountries] = useState<CountryItem[]>([
@@ -2378,6 +2390,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       draftRestoredRef.current = true;
     }
   }, []);
+
+  // Prellenado desde el Centro de Investigación OSINT: titular original,
+  // fragmento de la fuente, países (cuando la fuente los informa), crédito
+  // de origen e imagen si existe. El resultado queda como borrador
+  // editable: la publicación sigue siendo un paso manual del editor.
+  useEffect(() => {
+    if (!importPayload) return;
+    const p = importPayload;
+    if (p.title) setTitle(p.title);
+    if (p.description) setDescription(p.description);
+    if (p.category && enabledCategories.includes(p.category)) setCategory(p.category);
+    if (p.countries.length > 0) setSelectedCountries(p.countries);
+    setPhotoCaption(`Fuente: ${p.sourceName}`);
+    if (p.imageUrl) {
+      setMediaSrc(p.imageUrl);
+      setMediaType("image");
+      setMediaName("hallazgo-osint");
+    }
+    setOsintSource({ name: p.sourceName, url: p.sourceUrl, publishedAt: p.publishedAt });
+    onImportConsumed?.();
+  }, [importPayload, onImportConsumed]);
 
   // Las líneas de la vista previa se miden con la métrica real de Lexend: al
   // terminar de cargar la fuente se re-mide para no quedar con la métrica de
@@ -7127,6 +7160,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           : "calc(var(--bn-nav-h) + 4.5rem)",
       }}
     >
+      {/* Franja de procedencia OSINT: conserva el enlace del hallazgo
+          importado mientras el editor trabaja (no forma parte del JSON
+          del borrador). Se cierra sin tocar los campos ya precompletados. */}
+      {osintSource && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] text-emerald-200">
+          <span className="font-bold uppercase tracking-wider">Hallazgo OSINT importado</span>
+          <span className="text-neutral-300">
+            {osintSource.name}
+            {osintSource.publishedAt
+              ? ` · publicado ${new Date(osintSource.publishedAt).toLocaleDateString("es-UY")}`
+              : ""}
+          </span>
+          <a
+            href={osintSource.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-white truncate max-w-[40ch]"
+          >
+            {osintSource.url}
+          </a>
+          <button
+            type="button"
+            onClick={() => setOsintSource(null)}
+            aria-label="Ocultar la franja de procedencia OSINT"
+            className="ml-auto px-2 py-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* High-res processing canvas (positioned offscreen to maintain active compositor pipeline for captureStream) */}
       <canvas
         ref={hiddenCanvasRef}

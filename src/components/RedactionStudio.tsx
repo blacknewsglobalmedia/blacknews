@@ -53,7 +53,8 @@ import {
   DollarSign,
   MapPin,
   Scale,
-  CalendarDays
+  CalendarDays,
+  Radar
 } from 'lucide-react';
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
@@ -69,6 +70,8 @@ import { FrontPageLayoutConfig, AutomationPreset } from '../types/layout';
 import { FlashNews } from '../types/news';
 import type { PodcastEpisode } from '../types/podcast';
 import { AdCampaign, AdPlacement, AdStatus } from '../types/ads';
+import { OsintCenter } from './OsintCenter';
+import type { OsintItem, OsintPostImport } from '../types/osint';
 import {
   HistoryEntry,
   HISTORY_LIMIT,
@@ -338,6 +341,31 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [lastSavedDraftAt, setLastSavedDraftAt] = useState<string | null>(null);
+
+  // OSINT: puentes de importación desde el Centro de Investigación.
+  // Un hallazgo importado precompleta el constructor/generador como
+  // BORRADOR editable; nunca se publica automáticamente.
+  const [osintArticleImport, setOsintArticleImport] = useState<OsintItem | null>(null);
+  const [osintPostImport, setOsintPostImport] = useState<OsintPostImport | null>(null);
+
+  useEffect(() => {
+    if (!osintArticleImport) return;
+    const item = osintArticleImport;
+    setTitle(item.title);
+    if (item.snippet) setSubtitle(item.snippet.slice(0, 180));
+    if (item.author) setImageCaption(`${item.sourceName} · ${item.author}`);
+    if (item.country && /^[A-Z]{2}$/.test(item.country)) setArticleCountries([item.country]);
+    setFormError(null);
+    setPublishSuccess(false);
+    setEditingReportId(null);
+    setActiveTab('builder');
+    setOsintArticleImport(null);
+  }, [osintArticleImport]);
+
+  const handleOsintImportToPosts = (payload: OsintPostImport) => {
+    setOsintPostImport(payload);
+    setActiveTab('post-generator');
+  };
 
   // Reload drafts when user changes
   useEffect(() => {
@@ -1190,6 +1218,33 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               </button>
             </div>
 
+            {/* Category: Inteligencia (sólo administradores; el Worker
+                vuelve a verificar el acceso en backend) */}
+            {currentUser.role === 'ADMIN' && (
+              <div className="space-y-1">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 px-2 font-semibold">
+                  Inteligencia
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('osint');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                    activeTab === 'osint'
+                      ? 'bg-white text-black font-bold'
+                      : 'text-neutral-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Radar className="w-4 h-4 text-neutral-400" />
+                    <span>OSINT · Investigación</span>
+                  </div>
+                </button>
+              </div>
+            )}
+
             {/* Category: Multimedia & Redes (solo redacción) */}
             {permissions.canWritePosts && (
             <div className="space-y-1">
@@ -1446,6 +1501,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'saved' && 'MIS GUARDADOS'}
               {activeTab === 'profile' && 'MI PERFIL'}
               {activeTab === 'ads' && (isReader ? 'MI PUBLICIDAD' : 'GESTIÓN DE PUBLICIDAD')}
+              {activeTab === 'osint' && 'CENTRO DE INVESTIGACIÓN OSINT'}
             </span>
           </div>
 
@@ -3240,8 +3296,18 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
           <SocialPostGenerator
             reports={publishedReports}
             categories={categories}
+            importPayload={osintPostImport}
+            onImportConsumed={() => setOsintPostImport(null)}
           />
         </div>
+      )}
+
+      {/* TAB CONTENT: OSINT (sólo administradores; el Worker verifica otra vez) */}
+      {activeTab === 'osint' && currentUser.role === 'ADMIN' && (
+        <OsintCenter
+          onImportToPosts={handleOsintImportToPosts}
+          onImportToArticle={(item) => setOsintArticleImport(item)}
+        />
       )}
 
       {/* TAB CONTENT: CALENDARIO EDITORIAL (acreditados de prensa) */}
