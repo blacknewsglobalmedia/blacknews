@@ -35,8 +35,7 @@
     // Módulo OSINT (Centro de Investigación) — ver docs/osint.md.
     // Allowlist de administradores: correos que pueden usar /api/osint/* con su
     // Google ID token de Firebase. VACÍO = módulo cerrado (fail-closed).
-    //   "OSINT_ADMIN_EMAILS": "tu-email@gmail.com"
-    "OSINT_ADMIN_EMAILS": "",
+    "OSINT_ADMIN_EMAILS": "blacknewsglobalmedia@gmail.com",
     // Dominios permitidos para feeds RSS personalizados (subdominios incluidos).
     // Vacío = feeds personalizados deshabilitados.
     //   "OSINT_RSS_ALLOWLIST": "mi-medio.org,un.org"
