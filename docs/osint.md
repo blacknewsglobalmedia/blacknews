@@ -50,15 +50,16 @@ Navegador (OsintCenter.tsx)          Worker Cloudflare (worker/osint/)
 1. **Google ID token (ruta principal)** — el frontend envía
    `Authorization: Bearer <idToken>` de Firebase Auth
    (`auth.currentUser.getIdToken()`). El Worker verifica la firma RS256
-   contra las claves públicas de Firebase
-   `https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys`
-   (el MISMO endpoint que usa `firebase-admin`; formato JSON `{kid: PEM}`,
-   caché 1 h). Ojo con las trampas: `identity/v1/certs` devuelve 404 y el
-   JWKS del service account `securetoken@system.gserviceaccount.com` tiene
-   otros `kid` (nunca coincidirían con los tokens de Firebase Auth). El
-   Worker recorta la SPKI del certificado X509 y comprueba `exp`,
-   `iss` (sólo `securetoken.google.com/<proyecto>`), `email_verified` y
-   que el email esté en `OSINT_ADMIN_EMAILS`.
+   contra las claves públicas de los ID tokens de Firebase
+   `https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com`
+   (el MISMO endpoint que usan los SDKs de `firebase-admin` y el que
+   documenta Firebase; formato JSON `{kid: PEM}`, caché 1 h). Ojo con las
+   trampas: `identity/v1/certs` devuelve 404, y `identitytoolkit/v3/
+   relyingparty/publicKeys` es para *session cookies* (otros `kid`, nunca
+   coincidirían con un ID token). El Worker recorta la SPKI del
+   certificado X509, comprueba `exp`, `iss` (sólo
+   `securetoken.google.com/<proyecto>`), `email_verified` y que el email
+   esté en `OSINT_ADMIN_EMAILS`.
 2. **Token administrativo** — cabecera `x-bn-admin-token` igual al secreto
    `OSINT_ADMIN_TOKEN` (CI, scripts, asistente local). Si el secreto no
    existe, la vía no existe.

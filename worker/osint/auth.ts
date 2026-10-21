@@ -39,15 +39,19 @@ interface CertEntry {
 
 /**
  * Claves públicas con las que Firebase firma sus ID tokens. Es el MISMO
- * endpoint que usa firebase-admin para verificar (formato JSON
- * {kid: PEM x509}, no JWKS). Verificado 2026-10-21: HTTP 200, 5 claves.
+ * endpoint que usan los SDKs de firebase-admin para verificar ID tokens
+ * (formato JSON {kid: PEM x509}): lo documenta Firebase de forma literal
+ * ("kid must correspond to one of the public keys listed at .../robot/v1/
+ * metadata/x509/securetoken@system.gserviceaccount.com"). Verificado
+ * 2026-10-21: HTTP 200, 4 claves (kids hex), Cache-Control ~6 h.
  *
- * Ojo: el JWKS del service account
- * (service_accounts/v1/jwk/securetoken@system.gserviceaccount.com) NO
- * sirve aquí: publica otro juego de claves con kids distintos, y el kid
- * del token de Firebase Auth nunca coincide → la firma nunca verificaría.
+ * Ojo con las dos trampas en las que ya se cayó aquí: el JWKS del mismo
+ * service account sirve (mismos kids), pero `identitytoolkit/v3/relyingparty/
+ * publicKeys` NO: ese juego de claves firma session cookies
+ * (iss session.firebase.google.com), y su kid nunca coincide con el de un
+ * ID token.
  */
-const CERTS_URL = 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys';
+const CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
 /** Caché por aislamiento del Worker (1 h). */
 let certCache: { certs: CertEntry[]; fetchedAt: number } | null = null;
 

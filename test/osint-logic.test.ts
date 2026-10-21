@@ -447,7 +447,7 @@ await atest('JWT firmado con clave propia y cert simulado → ok:true', async ()
 
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (url: unknown) => {
-    if (String(url).includes('identitytoolkit')) {
+    if (String(url).includes('robot/v1')) {
       return { ok: true, json: async () => ({ TESTKEY: pem }) } as Response;
     }
     throw new Error(`red inesperada: ${String(url)}`);
