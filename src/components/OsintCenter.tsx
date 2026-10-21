@@ -158,6 +158,10 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
   const [saved, setSaved] = useState<OsintSavedItem[]>([]);
   const [savedFilter, setSavedFilter] = useState<'all' | OsintSavedState>('all');
 
+  /* ---------------- importaciones (con traducción) ---------------- */
+  const [importing, setImporting] = useState<null | 'posts' | 'article'>(null);
+  const [importNotice, setImportNotice] = useState<{ tone: 'emerald' | 'amber'; text: string } | null>(null);
+
   /* ---------------- fuentes ---------------- */
   const [testingUrl, setTestingUrl] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
@@ -264,31 +268,101 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
     );
 
   /* ---------------- importaciones ---------------- */
-  const importToPosts = (item: OsintItem) => {
-    const payload: OsintPostImport = {
-      title: item.title,
-      description: item.snippet || '',
-      countries: item.country ? [{ name: countryName(item.country) || item.country, code: item.country, flag: flagEmoji(item.country) }] : [],
-      sourceName: item.sourceName,
-      sourceUrl: item.url,
-      imageUrl: item.imageUrl,
-      publishedAt: item.publishedAt,
-    };
-    onImportToPosts(payload);
-    updateSaved(item.id, { state: 'imported_posts' });
-    if (!savedIds.has(item.id)) {
-      const now = new Date().toISOString();
-      persistSaved([{ item, state: 'imported_posts', notes: '', savedAt: now, updatedAt: now }, ...saved]);
+  /**
+   * Guarda/actualiza el hallazgo con su estado y, si la nota automática
+   * encaja (sólo si el editor no escribió notas propias), la deja puesta.
+   */
+  const upsertSaved = (item: OsintItem, state: OsintSavedState, autoNote?: string) => {
+    const now = new Date().toISOString();
+    const existing = saved.find((s) => s.item.id === item.id);
+    if (existing) {
+      persistSaved(
+        saved.map((s) =>
+          s.item.id === item.id
+            ? { ...s, state, notes: s.notes.trim() ? s.notes : autoNote || s.notes, updatedAt: now }
+            : s,
+        ),
+      );
+    } else {
+      persistSaved([{ item, state, notes: autoNote || '', savedAt: now, updatedAt: now }, ...saved]);
     }
   };
 
-  const importToArticle = (item: OsintItem) => {
-    onImportToArticle(item);
-    updateSaved(item.id, { state: 'imported_article' });
-    if (!savedIds.has(item.id)) {
-      const now = new Date().toISOString();
-      persistSaved([{ item, state: 'imported_article', notes: '', savedAt: now, updatedAt: now }, ...saved]);
+  /**
+   * Traducción automática al importar: si la fuente no está en español se
+   * traduce con la IA gratuita del Worker. El resultado lleva etiqueta
+   * «traducción automática» y el texto original queda conservado (aquí en
+   * el aviso, y en guardados/franja del generador). Si la IA falla o no
+   * está configurada, se importa el ORIGINAL sin bloquear nada.
+   */
+  const maybeTranslate = async (item: OsintItem): Promise<OsintItem> => {
+    if (item.language === 'es') return item;
+    try {
+      const res = await osintApi.translate(item.title, item.snippet);
+      if (res.ok && res.title) {
+        setImportNotice({
+          tone: 'emerald',
+          text: `Traducción automática aplicada (${res.provider || 'IA del proyecto'}). El texto original de la fuente se conserva en la vista previa, en los guardados y en la franja del generador.`,
+        });
+        return {
+          ...item,
+          title: res.title,
+          snippet: res.snippet || item.snippet,
+          originalTitle: item.title,
+          machineTranslated: true,
+        };
+      }
+      setImportNotice({
+        tone: 'amber',
+        text: `No se pudo traducir (${res.error || 'error desconocido'}): se importó el texto ORIGINAL de la fuente.`,
+      });
+    } catch (err) {
+      setImportNotice({
+        tone: 'amber',
+        text: `No se pudo traducir (${err instanceof Error ? err.message : 'error'}): se importó el texto ORIGINAL de la fuente.`,
+      });
     }
+    return item;
+  };
+
+  const importToPosts = async (item: OsintItem) => {
+    if (importing) return;
+    setImporting('posts');
+    const src = await maybeTranslate(item);
+    const payload: OsintPostImport = {
+      title: src.title,
+      description: src.snippet || '',
+      countries: item.country
+        ? [{ name: countryName(item.country) || item.country, code: item.country, flag: flagEmoji(item.country) }]
+        : [],
+      sourceName: src.sourceName,
+      sourceUrl: src.url,
+      imageUrl: src.imageUrl,
+      publishedAt: src.publishedAt,
+      machineTranslated: src.machineTranslated,
+      originalTitle: src.originalTitle,
+      originalSnippet: src.machineTranslated ? item.snippet : undefined,
+    };
+    onImportToPosts(payload);
+    upsertSaved(
+      item, // los guardados conservan SIEMPRE el hallazgo original
+      'imported_posts',
+      src.machineTranslated ? 'Importado al generador con traducción automática (original preservado en la fuente).' : undefined,
+    );
+    setImporting(null);
+  };
+
+  const importToArticle = async (item: OsintItem) => {
+    if (importing) return;
+    setImporting('article');
+    const src = await maybeTranslate(item);
+    onImportToArticle(src);
+    upsertSaved(
+      item,
+      'imported_article',
+      src.machineTranslated ? 'Importado al redactor con traducción automática (original preservado en la fuente).' : undefined,
+    );
+    setImporting(null);
   };
 
   /* ---------------- fuentes (admin) ---------------- */
@@ -434,6 +508,34 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
           </button>
         ))}
       </div>
+
+      {/* Aviso de importación/traducción (se cierra solo al continuar) */}
+      {importNotice && (
+        <div
+          className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-[13px] leading-relaxed ${
+            importNotice.tone === 'emerald'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            {importNotice.tone === 'emerald' ? (
+              <Sparkles className="w-4 h-4 mt-0.5 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            )}
+            <span>{importNotice.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setImportNotice(null)}
+            aria-label="Cerrar aviso de importación"
+            className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* ------------- Estado del sistema ------------- */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -742,11 +844,21 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3 py-2 text-[13px] text-neutral-200 placeholder:text-neutral-600 resize-y"
                 />
                 <div className="flex flex-wrap gap-2">
-                  <SmallBtn onClick={() => importToPosts(s.item)}>
-                    <FileInput className="w-3.5 h-3.5" /> Importar al generador
+                  <SmallBtn onClick={() => void importToPosts(s.item)} disabled={importing !== null}>
+                    {importing === 'posts' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <FileInput className="w-3.5 h-3.5" />
+                    )}
+                    {importing === 'posts' ? 'Traduciendo…' : 'Importar al generador'}
                   </SmallBtn>
-                  <SmallBtn onClick={() => importToArticle(s.item)}>
-                    <PencilLine className="w-3.5 h-3.5" /> Importar al redactor
+                  <SmallBtn onClick={() => void importToArticle(s.item)} disabled={importing !== null}>
+                    {importing === 'article' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <PencilLine className="w-3.5 h-3.5" />
+                    )}
+                    {importing === 'article' ? 'Traduciendo…' : 'Importar al redactor'}
                   </SmallBtn>
                   <SmallBtn onClick={() => setPreview(s.item)}>
                     <Search className="w-3.5 h-3.5" /> Previsualizar
@@ -830,9 +942,10 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
           item={preview}
           cluster={clustersById.get(preview.clusterId)}
           saved={savedIds.has(preview.id)}
+          importing={importing}
           onClose={() => setPreview(null)}
-          onImportPosts={() => importToPosts(preview)}
-          onImportArticle={() => importToArticle(preview)}
+          onImportPosts={() => void importToPosts(preview)}
+          onImportArticle={() => void importToArticle(preview)}
           onSave={() => saveItem(preview)}
         />
       )}
@@ -950,12 +1063,21 @@ function Chip({
   );
 }
 
-function SmallBtn({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+function SmallBtn({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-white/10 text-[13px] font-semibold text-neutral-200 flex items-center gap-1.5 transition-colors"
+      disabled={disabled}
+      className="px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 text-[13px] font-semibold text-neutral-200 flex items-center gap-1.5 transition-colors"
     >
       {children}
     </button>
@@ -1063,6 +1185,7 @@ function PreviewDrawer({
   item,
   cluster,
   saved,
+  importing,
   onClose,
   onImportPosts,
   onImportArticle,
@@ -1071,6 +1194,7 @@ function PreviewDrawer({
   item: OsintItem;
   cluster?: OsintCluster;
   saved: boolean;
+  importing: null | 'posts' | 'article';
   onClose: () => void;
   onImportPosts: () => void;
   onImportArticle: () => void;
@@ -1145,6 +1269,15 @@ function PreviewDrawer({
           </div>
         )}
 
+        {item.language !== 'es' && (
+          <p className="text-[13px] text-neutral-500 leading-relaxed flex items-start gap-2">
+            <Languages className="w-4 h-4 mt-0.5 shrink-0 text-neutral-500" />
+            Esta fuente no está en español: al importar se traduzirá automáticamente con la IA del
+            proyecto y el texto original quedará conservado. Si la IA no está disponible, se
+            importará el original tal cual.
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <a
             href={item.url}
@@ -1157,16 +1290,28 @@ function PreviewDrawer({
           <button
             type="button"
             onClick={onImportPosts}
-            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-[14px] font-bold flex items-center gap-2"
+            disabled={importing !== null}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/40 text-black text-[14px] font-bold flex items-center gap-2"
           >
-            <FileInput className="w-4 h-4" /> Importar al generador de posts
+            {importing === 'posts' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileInput className="w-4 h-4" />
+            )}
+            {importing === 'posts' ? 'Traduciendo…' : 'Importar al generador de posts'}
           </button>
           <button
             type="button"
             onClick={onImportArticle}
-            className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-white/10 text-[14px] font-semibold text-neutral-200 flex items-center gap-2"
+            disabled={importing !== null}
+            className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 border border-white/10 text-[14px] font-semibold text-neutral-200 flex items-center gap-2"
           >
-            <PencilLine className="w-4 h-4" /> Importar al redactor
+            {importing === 'article' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <PencilLine className="w-4 h-4" />
+            )}
+            {importing === 'article' ? 'Traduciendo…' : 'Importar al redactor'}
           </button>
           {!saved && (
             <button

@@ -72,4 +72,11 @@ export const osintApi = {
       '/sources/test',
       { method: 'POST', body: JSON.stringify({ url }) },
     ),
+
+  /** Traducción automática al español con la IA gratuita del Worker. */
+  translate: (title: string, snippet?: string) =>
+    request<{ ok: boolean; title?: string; snippet?: string; provider?: string; error?: string }>(
+      '/translate',
+      { method: 'POST', body: JSON.stringify({ title, snippet }) },
+    ),
 };

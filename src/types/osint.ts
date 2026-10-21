@@ -134,6 +134,12 @@ export interface OsintItem {
   score: number;
   /** Factores que explican la puntuación (no es prueba de veracidad). */
   scoreFactors: string[];
+  /**
+   * Relleno al importar con traducción automática: el texto original de la
+   * fuente se conserva aquí mientras title/snippet llevan la traducción.
+   */
+  originalTitle?: string;
+  machineTranslated?: boolean;
 }
 
 export interface OsintCluster {
@@ -263,4 +269,9 @@ export interface OsintPostImport {
   sourceUrl: string;
   imageUrl?: string;
   publishedAt?: string;
+  /** Traducción automática aplicada al importar (IA del proyecto). */
+  machineTranslated?: boolean;
+  /** Texto ORIGINAL de la fuente, conservado junto a la traducción. */
+  originalTitle?: string;
+  originalSnippet?: string;
 }

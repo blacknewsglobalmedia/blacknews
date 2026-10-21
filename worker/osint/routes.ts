@@ -13,6 +13,8 @@
  *   POST   /api/osint/sources      → añadir feed RSS personalizado (allowlist)
  *   DELETE /api/osint/sources?id=  → eliminar una fuente personalizada
  *   POST   /api/osint/sources/test → probar conexión + vista previa de datos
+ *   POST   /api/osint/translate   → traducir hallazgo al español (IA gratuita
+ *                                   del proyecto; el original nunca se toca)
  */
 import type {
   OsintSearchRequest,
@@ -23,6 +25,7 @@ import type { Env } from '../index';
 import { requireOsintAdmin } from './auth';
 import { searchRssFeed } from './connectors';
 import { searchAll } from './search';
+import { translateFinding } from './translate';
 import { assertSafeOutboundUrl, hostnameOf, isDomainAllowlisted, SsrfError } from './ssrf';
 import { hashHex } from './normalize';
 import { defaultRuntime, loadLastSearchAt, loadSources, saveSources } from './store';
@@ -237,6 +240,27 @@ export async function handleOsintRequest(
       const message = err instanceof Error ? err.message : 'No se pudo leer el feed.';
       return json({ ok: false, error: message }, 502);
     }
+  }
+
+  /* -------------------------------------------------------------- */
+  /* Traducción automática al español (al importar; IA del proyecto)  */
+  /* -------------------------------------------------------------- */
+  if (pathname === '/api/osint/translate' && request.method === 'POST') {
+    let body: { title?: string; snippet?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return error('Cuerpo JSON inválido.');
+    }
+    const title = (body.title || '').trim();
+    if (title.length < 2 || title.length > 2000) {
+      return error('El titular a traducir debe tener entre 2 y 2000 caracteres.');
+    }
+    const snippet = (body.snippet || '').trim().slice(0, 1500) || undefined;
+    const out = await translateFinding(env, { title, snippet });
+    // ok:false es una respuesta legítima (sin proveedor o ilegible): el
+    // importador usará el original. Sólo los fallos de formulario son 4xx.
+    return json(out);
   }
 
   return error('Ruta OSINT no encontrada.', 404);

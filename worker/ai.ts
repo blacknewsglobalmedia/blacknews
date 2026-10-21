@@ -795,10 +795,13 @@ async function callWorkersAi(
   followUp?: { assistant: string; user: string },
 ): Promise<string | null> {
   if (!env.AI) return null;
+  // Catálogo Workers AI verificado (2026-08): llama-3.1-8b-instruct fue
+  // deprecado y mistral-7b-instruct-v0.2 eliminado; se sustituyen por
+  // equivalentes vigentes. Si un modelo cae, se prueba el siguiente.
   const models = [
     "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    "@cf/meta/llama-3.1-8b-instruct",
-    "@cf/mistral/mistral-7b-instruct-v0.2",
+    "@cf/meta/llama-3.1-8b-instruct-fp8",
+    "@cf/mistral/mistral-small-3.1-24b-instruct",
   ];
   for (const model of models) {
     try {
@@ -822,6 +825,9 @@ async function callWorkersAi(
             ? res
             : null;
       if (text && text.trim()) return text;
+      console.warn(
+        `[BLACKNEWS WORKER] Workers AI warn: respuesta vacía o con forma inesperada del modelo ${model}.`,
+      );
     } catch (err) {
       console.warn("[BLACKNEWS WORKER] Workers AI warn:", err);
     }
@@ -941,7 +947,12 @@ function tryParsePost(raw: string): {
 // Los tres proveedores 100% gratuitos, en orden de prioridad: el primero que
 // responde manda. Si no hay ninguno configurado (o todos fallan) devuelve
 // null; cada proveedor ya salta por su cuenta a su siguiente modelo.
-async function callFreeModel(
+/**
+ * Cadena gratuita de modelos (Workers AI → Groq → Gemini). Exportada para
+ * que el módulo OSINT reutilice la misma infraestructura (traducción de
+ * hallazgos). Devuelve null si no hay ningún proveedor configurado.
+ */
+export async function callFreeModel(
   env: AiEnv,
   systemContent: string,
   userContent: string,

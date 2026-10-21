@@ -43,6 +43,7 @@ Navegador (OsintCenter.tsx)          Worker Cloudflare (worker/osint/)
 | POST | `/api/osint/sources` | Añadir feed RSS personalizado (dominio en allowlist) |
 | DELETE | `/api/osint/sources?id=` | Eliminar una fuente personalizada (las built-in no) |
 | POST | `/api/osint/sources/test` | Probar conexión + vista previa de 5 titulares |
+| POST | `/api/osint/translate` | Traducción automática de un hallazgo al español (IA gratuita) |
 
 ### Autenticación (doble vía, ninguna expone secretos)
 
@@ -121,6 +122,28 @@ se reinicia a medianoche UTC) y un **cortacircuito de 15 min** tras un 429
   siendo manual. Estado del hallazgo guardado pasa a «Importado al
   generador»/«Importado al redactor».
 
+### Traducción automática al importar
+
+- Si el hallazgo **no está declarado en español** (`language !== 'es'`), el
+  importador llama a `POST /api/osint/translate`, que reutiliza
+  `callFreeModel` de `worker/ai.ts` (Workers AI → Groq → Gemini). No hay
+  configuración nueva: usa exactamente la misma IA gratuita que la
+  redacción asistida.
+- **Etiqueta y original**: lo traducido lleva siempre la marca «traducción
+  automática» (aviso emerald en la UI, chip ámbar en la franja del
+  generador con «Ver texto original de la fuente») y el texto original se
+  conserva en la vista previa, en los guardados (nota automática sólo si
+  el editor no escribió notas propias) y en `originalTitle`/
+  `originalSnippet` del payload.
+- **Nunca bloquea**: si no hay proveedor de IA o la respuesta es
+  ilegible, el servidor responde `ok:false` (200) con el motivo y la
+  importación continúa con el **texto original** de la fuente. Un aviso
+  ámbar lo explica.
+- El botón muestra «Traduciendo…» con spinner y queda deshabilitado
+  mientras la petición está en vuelo. Los límites internos y las cuotas
+  por fuente no se ven afectados: la traducción usa la IA del proyecto,
+  no cuota OSINT.
+
 ## 6. Configuración
 
 ```bash
@@ -144,7 +167,7 @@ OSINT_RSS_ALLOWLIST=bbc.co.uk,dw.com,france24.com,un.org
 ## 7. Pruebas
 
 ```bash
-npx tsx test/osint-logic.test.ts   # 19 pruebas: dedupe, scoring, SSRF, RSS/Atom
+npx tsx test/osint-logic.test.ts   # 23 pruebas: dedupe, scoring, SSRF, RSS/Atom, traducción
 npm run lint                       # tsc (incluye worker/ y test/)
 ```
 

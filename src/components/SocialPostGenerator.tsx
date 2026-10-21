@@ -709,8 +709,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [photoCaption, setPhotoCaption] = useState<string>("");
   // Procedencia del hallazgo OSINT importado: franja visible con el enlace
   // original. Vive fuera del borrador JSON para no alterar su contrato.
+  // Si la importación trajo traducción automática, conserva el texto
+  // original de la fuente para que el editor pueda compararlo.
   const [osintSource, setOsintSource] = useState<
-    { name: string; url: string; publishedAt?: string } | null
+    {
+      name: string;
+      url: string;
+      publishedAt?: string;
+      machineTranslated?: boolean;
+      originalTitle?: string;
+      originalSnippet?: string;
+    } | null
   >(null);
 
   // Countries / Regional attribution
@@ -2408,7 +2417,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setMediaType("image");
       setMediaName("hallazgo-osint");
     }
-    setOsintSource({ name: p.sourceName, url: p.sourceUrl, publishedAt: p.publishedAt });
+    setOsintSource({
+      name: p.sourceName,
+      url: p.sourceUrl,
+      publishedAt: p.publishedAt,
+      machineTranslated: p.machineTranslated,
+      originalTitle: p.originalTitle,
+      originalSnippet: p.originalSnippet,
+    });
     onImportConsumed?.();
   }, [importPayload, onImportConsumed]);
 
@@ -7180,6 +7196,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           >
             {osintSource.url}
           </a>
+          {osintSource.machineTranslated && (
+            <>
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                Traducción automática
+              </span>
+              <details className="w-full sm:w-auto">
+                <summary className="cursor-pointer text-[13px] text-amber-300/90 hover:text-amber-200">
+                  Ver texto original de la fuente
+                </summary>
+                <div className="mt-1 space-y-1 text-neutral-300 leading-relaxed">
+                  <p className="font-semibold">{osintSource.originalTitle}</p>
+                  {osintSource.originalSnippet && <p>{osintSource.originalSnippet}</p>}
+                </div>
+              </details>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setOsintSource(null)}

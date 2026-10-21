@@ -5,8 +5,9 @@
  *
  * Cubre: URLs canónicas, normalización de titulares, detección de
  * duplicados/agrupación de acontecimientos, puntuación editorial con
- * factores explicados, guard SSRF y parser RSS/Atom. Son funciones puras
- * (sin red ni KV), así que corren igual en local y en CI.
+ * factores explicados, guard SSRF, parser RSS/Atom y la traducción
+ * automática al importar (prompt y parser de la respuesta de la IA).
+ * Son funciones puras (sin red ni KV), así que corren igual en local y CI.
  */
 import assert from 'node:assert/strict';
 import {
@@ -25,6 +26,7 @@ import {
   SsrfError,
 } from '../worker/osint/ssrf';
 import { parseFeed } from '../worker/osint/connectors';
+import { buildTranslationPrompt, parseTranslationResponse } from '../worker/osint/translate';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -292,6 +294,52 @@ test('el filtro de búsqueda del feed es por tokens (sin consulta devuelve todo)
   assert.equal(parseFeed(RSS_SAMPLE, 'es', 10, 'zzzzsincoincidencia').length, 0);
   assert.equal(parseFeed(RSS_SAMPLE, 'es', 10, '').length, 1);
   assert.equal(parseFeed(RSS_SAMPLE, 'es', 10, 'ampersand').length, 1);
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\n[8] Traducción automática de hallazgos');
+
+test('el prompt incluye el texto a traducir, la meta JSON y la consigna de fidelidad', () => {
+  const { system, user } = buildTranslationPrompt({
+    title: 'Government unveils new AI rules',
+    snippet: 'The cabinet approved the bill on Tuesday.',
+  });
+  assert.match(system, /AL ESPAÑOL/i);
+  assert.match(system, /SOLO JSON/i);
+  assert.match(system, /no resumas/i);
+  assert.match(system, /no añadas|no añad/i);
+  const sent = JSON.parse(user) as { title: string; snippet: string };
+  assert.equal(sent.title, 'Government unveils new AI rules');
+  assert.equal(sent.snippet, 'The cabinet approved the bill on Tuesday.');
+});
+
+test('parseTranslationResponse acepta JSON limpio y recorta longitudes', () => {
+  const long = 'x'.repeat(5000);
+  const out = parseTranslationResponse(JSON.stringify({ title: long, snippet: 'ok' }));
+  assert.ok(out);
+  assert.equal(out.title.length, 300);
+  assert.equal(out.snippet, 'ok');
+});
+
+test('parseTranslationResponse acepta JSON cercado por markdown o texto', () => {
+  const fenced = '```json\n{"title":"Titular traducido","snippet":"Fragmento."}\n```';
+  const a = parseTranslationResponse(fenced);
+  assert.equal(a?.title, 'Titular traducido');
+  const chatty = 'Aquí tienes la traducción: {"title":"Titular","snippet":"Breve"} ¡espero que sirva!';
+  const b = parseTranslationResponse(chatty);
+  assert.equal(b?.title, 'Titular');
+  assert.equal(b?.snippet, 'Breve');
+});
+
+test('parseTranslationResponse es tolerante a saltos de línea y devuelve null si no hay titular', () => {
+  const out = parseTranslationResponse('{"title":"  Titular\\n  con espacios  ","snippet":""}');
+  assert.equal(out?.title, 'Titular con espacios');
+  assert.equal(out?.snippet, undefined, 'snippet vacío → undefined');
+  assert.equal(parseTranslationResponse('{"snippet":"sin titular"}'), null);
+  assert.equal(parseTranslationResponse('{"title":""}'), null);
+  assert.equal(parseTranslationResponse('texto sin json'), null);
+  assert.equal(parseTranslationResponse('{"title":"sin cerrar"'), null, 'JSON truncado → null');
+  assert.equal(parseTranslationResponse(''), null);
 });
 
 /* ------------------------------------------------------------------ */
