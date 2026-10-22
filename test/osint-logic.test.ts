@@ -27,7 +27,12 @@ import {
   SsrfError,
 } from '../worker/osint/ssrf';
 import { parseFeed } from '../worker/osint/connectors';
-import { buildTranslationPrompt, parseTranslationResponse } from '../worker/osint/translate';
+import {
+  buildRewritePrompt,
+  buildTranslationPrompt,
+  parseTranslationResponse,
+  translateFinding,
+} from '../worker/osint/translate';
 import { verifyGoogleIdToken } from '../worker/osint/auth';
 
 let passed = 0;
@@ -342,6 +347,55 @@ test('parseTranslationResponse es tolerante a saltos de línea y devuelve null s
   assert.equal(parseTranslationResponse('texto sin json'), null);
   assert.equal(parseTranslationResponse('{"title":"sin cerrar"'), null, 'JSON truncado → null');
   assert.equal(parseTranslationResponse(''), null);
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\n[8b] Reescritura antiplagio (adaptación al importar)');
+
+test('el prompt de adaptación inyecta la consigna anti-copia sólo cuando se pide reescribir', () => {
+  const plain = buildTranslationPrompt({ title: 'AI bill approved', snippet: 'The cabinet voted.' });
+  const adapted = buildTranslationPrompt(
+    { title: 'AI bill approved', snippet: 'The cabinet voted.' },
+    { rewrite: true },
+  );
+  assert.ok(!plain.system.includes('palabras propias'), 'sin rewrite no se inyecta la consigna');
+  assert.match(adapted.system, /palabras propias/i);
+  assert.match(adapted.system, /no copies ni una frase literal/i);
+  assert.match(adapted.system, /SOLO JSON/i, 'la meta JSON no se pierde');
+  const sent = JSON.parse(adapted.user) as { title: string; snippet: string };
+  assert.equal(sent.title, 'AI bill approved');
+  assert.equal(sent.snippet, 'The cabinet voted.');
+});
+
+test('el prompt de reescritura (original en español) pide reencuadrar a nuestra voz', () => {
+  const { system, user } = buildRewritePrompt({
+    title: 'Titular en español',
+    snippet: 'Texto de la fuente.',
+  });
+  assert.match(system, /Reescribe EN ESPAÑOL/i);
+  assert.match(system, /nuestra voz/i);
+  assert.match(system, /SOLO JSON/i);
+  const sent = JSON.parse(user) as { title: string; snippet: string };
+  assert.equal(sent.title, 'Titular en español');
+  assert.equal(sent.snippet, 'Texto de la fuente.');
+});
+
+test('sin rewrite y en español, translateFinding no toca nada ni pide IA', async () => {
+  const out = await translateFinding({}, { title: 'Titular en español', language: 'es' });
+  assert.equal(out.ok, true);
+  assert.equal(out.ok && out.action, 'nada');
+  assert.equal(out.ok && out.title, 'Titular en español');
+  assert.equal(out.ok && out.changed, false);
+});
+
+test('sin proveedor de IA la adaptación falla abierto con el original intacto', async () => {
+  const out = await translateFinding(
+    {},
+    { title: 'Government unveils new AI rules', language: 'en' },
+    { rewrite: true },
+  );
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false && /original/.test(out.error), true, 'el mensaje menciona el original');
 });
 
 /* ------------------------------------------------------------------ */

@@ -77,7 +77,8 @@ configuración.
 | Fuente | Clave | Ofrece | Límites / notas (verbatim en la UI) | Cuota por defecto |
 |---|---|---|---|---|
 | **GDELT DOC 2.0** | no | `artlist` global con fecha, idioma, país, socialimage | recomienda ~1 consulta/15 s; `maxrecords` ≤ 250; no publica cuota diaria | `official` (nota) |
-| **RSS/Atom built-in** | no | BBC World/Mundo, DW, France 24 EN, ONU News: título, enlace, fecha, fragmento, autor, imagen | feeds públicos sin cuota documentada | `internal` |
+| **RSS/Atom built-in** | no | 47 feeds verificados uno a uno con peticiones reales: internacionales (Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, BBC, DW, France 24, ONU), españoles (El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka…) y temáticos (defensa, energía, espacio, marítimo): título, enlace, fecha, fragmento, autor, imagen | feeds públicos sin cuota documentada | `internal` |
+| **RSS por categoría** | no | Fuentes «RSS · Defensa y fuerzas armadas / Tecnología e innovación / Energía y clima / Guerra marítima y costera» con feeds especializados propios de cada una (mismo parser y mismas garantías) | feeds públicos sin cuota documentada; se activan/desactivan por fuente | `internal` |
 | **OpenAlex** | no | publicaciones académicas + abstract reconstruido + autores | «polite pool» ~100.000 req/día declaradas; sin saldo en cabeceras | `official` |
 | **Wikidata SPARQL** | no | entidades estructuradas + enlace Wikipedia | pide User-Agent; límites de tasa no documentados con exactitud | `unknown` |
 | **Tavily** | `TAVILY_API_KEY` (secreto ya existente del proyecto) | búsqueda web de noticias con fecha de publicación | plan gratuito con límite diario no publicado | `unknown` |
@@ -129,26 +130,38 @@ se reinicia a medianoche UTC) y un **cortacircuito de 15 min** tras un 429
   siendo manual. Estado del hallazgo guardado pasa a «Importado al
   generador»/«Importado al redactor».
 
-### Traducción automática al importar
+### Adaptación automática al importar (traducción + reescritura antiplagio)
 
-- Si el hallazgo **no está declarado en español** (`language !== 'es'`), el
-  importador llama a `POST /api/osint/translate`, que reutiliza
+El texto **nunca entra en la redacción tal cual llega de la fuente**
+(antiplagio): al importar, el hallazgo se ADAPTA.
+
+- **Qué se hace**: si el hallazgo **no está declarado en español**
+  (`language !== 'es'`) se traduce; y en todos los casos se **reescribe
+  con palabras propias** (paráfrasis, otro encuadre, sin frases
+  literales de la fuente), también cuando el original ya está en
+  español. El dato duro (cifras, nombres, fechas) se conserva y las
+  opiniones se atribuyen a quien las dijo.
+- **Cómo**: el importador llama a `POST /api/osint/translate` con
+  `{ title, snippet, language, rewrite: true }`, que reutiliza
   `callFreeModel` de `worker/ai.ts` (Workers AI → Groq → Gemini). No hay
   configuración nueva: usa exactamente la misma IA gratuita que la
   redacción asistida.
-- **Etiqueta y original**: lo traducido lleva siempre la marca «traducción
-  automática» (aviso emerald en la UI, chip ámbar en la franja del
-  generador con «Ver texto original de la fuente») y el texto original se
-  conserva en la vista previa, en los guardados (nota automática sólo si
-  el editor no escribió notas propias) y en `originalTitle`/
-  `originalSnippet` del payload.
+- **Etiqueta y original**: lo adaptado lleva siempre la marca honesta
+  (aviso «Adaptación automática aplicada…», chip ámbar «Texto adaptado
+  por IA (reescrito)» en la franja del generador con «Ver texto
+  original de la fuente») y el texto original se conserva en la vista
+  previa, en los guardados (nota automática sólo si el editor no escribió
+  notas propias) y en `originalTitle`/`originalSnippet` del payload.
+  La respuesta del servidor incluye `action`
+  (`traducido+reescribir` / `reescribir` / `nada`) para etiquetar sin
+  exagerar lo que pasó de verdad.
 - **Nunca bloquea**: si no hay proveedor de IA o la respuesta es
   ilegible, el servidor responde `ok:false` (200) con el motivo y la
   importación continúa con el **texto original** de la fuente. Un aviso
   ámbar lo explica.
-- El botón muestra «Traduciendo…» con spinner y queda deshabilitado
+- El botón muestra «Adaptando…» con spinner y queda deshabilitado
   mientras la petición está en vuelo. Los límites internos y las cuotas
-  por fuente no se ven afectados: la traducción usa la IA del proyecto,
+  por fuente no se ven afectados: la adaptación usa la IA del proyecto,
   no cuota OSINT.
 
 ## 6. Configuración
@@ -174,7 +187,7 @@ OSINT_RSS_ALLOWLIST=bbc.co.uk,dw.com,france24.com,un.org
 ## 7. Pruebas
 
 ```bash
-npx tsx test/osint-logic.test.ts   # 28 pruebas: dedupe, scoring, SSRF, RSS/Atom, traducción, tokens Google
+npx tsx test/osint-logic.test.ts   # 32 pruebas: dedupe, scoring, SSRF, RSS/Atom, adaptación antiplagio, tokens Google
 npm run lint                       # tsc (incluye worker/ y test/)
 ```
 

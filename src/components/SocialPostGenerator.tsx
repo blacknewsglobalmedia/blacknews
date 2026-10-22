@@ -7199,7 +7199,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           {osintSource.machineTranslated && (
             <>
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                Traducción automática
+                Texto adaptado por IA (reescrito)
               </span>
               <details className="w-full sm:w-auto">
                 <summary className="cursor-pointer text-[13px] text-amber-300/90 hover:text-amber-200">

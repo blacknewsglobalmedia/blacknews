@@ -73,10 +73,13 @@ export const osintApi = {
       { method: 'POST', body: JSON.stringify({ url }) },
     ),
 
-  /** Traducción automática al español con la IA gratuita del Worker. */
-  translate: (title: string, snippet?: string) =>
-    request<{ ok: boolean; title?: string; snippet?: string; provider?: string; error?: string }>(
+  /** Adaptación automática al importar (traduce si hace falta y reescribe con palabras propias). */
+  translate: (title: string, snippet?: string, opts?: { language?: string; rewrite?: boolean }) =>
+    request<{ ok: boolean; title?: string; snippet?: string; provider?: string; action?: string; error?: string }>(
       '/translate',
-      { method: 'POST', body: JSON.stringify({ title, snippet }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({ title, snippet, language: opts?.language, rewrite: opts?.rewrite }),
+      },
     ),
 };

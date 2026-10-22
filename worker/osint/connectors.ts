@@ -5,6 +5,10 @@
  * sólo devuelven datos ORIGINALES de la fuente (titular, enlace, fecha,
  * fragmento tal cual lo publica el proveedor). No se inventa nada: si un
  * campo no viene, queda undefined.
+ *
+ * Los feeds RSS built-in se verificaron uno a uno con peticiones reales
+ * (HTTP 200 + parseo correcto por `parseFeed`); los que devolvían 403,
+ * paywall o HTML quedaron fuera del catálogo.
  */
 import type { OsintSourceConfig } from '../../src/types/osint';
 import { assertSafeOutboundUrl } from './ssrf';
@@ -149,14 +153,118 @@ export async function searchGdelt(ctx: ConnectorContext): Promise<RawFetch> {
 /* RSS / Atom                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Feeds built-in: medios y organismos oficiales con URL pública estable. */
+/**
+ * Feeds built-in verificados uno a uno con peticiones reales (2026-10-21):
+ * HTTP 200 + parseo correcto + sin paywall. Sin cuota documentada; el
+ * límite interno del módulo evita refrescos abusivos.
+ */
 export const BUILTIN_RSS_FEEDS: Array<{ id: string; name: string; url: string; language: string }> = [
+  // — Internacionales —
   { id: 'bbc-world', name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', language: 'en' },
   { id: 'bbc-mundo', name: 'BBC Mundo', url: 'https://feeds.bbci.co.uk/mundo/rss.xml', language: 'es' },
   { id: 'dw-world', name: 'DW World', url: 'https://rss.dw.com/rdf/rss-en-all', language: 'en' },
+  { id: 'dw-espanol', name: 'DW Español', url: 'https://rss.dw.com/rdf/rss-es-all', language: 'es' },
   { id: 'france24-en', name: 'France 24 (EN)', url: 'https://www.france24.com/en/rss', language: 'en' },
+  { id: 'france24-es', name: 'France 24 (ES)', url: 'https://www.france24.com/es/rss', language: 'es' },
   { id: 'un-news', name: 'UN News (ONU)', url: 'https://news.un.org/feed/', language: 'en' },
+  { id: 'guardian-world', name: 'The Guardian (World)', url: 'https://www.theguardian.com/world/rss', language: 'en' },
+  { id: 'aljazeera-en', name: 'Al Jazeera (EN)', url: 'https://www.aljazeera.com/xml/rss/all.xml', language: 'en' },
+  { id: 'bloomberg-en', name: 'Bloomberg (Top Stories)', url: 'https://feeds.bloomberg.com/markets/news.rss', language: 'en' },
+  { id: 'axios-en', name: 'Axios (All)', url: 'https://api.axios.com/feed/', language: 'en' },
+  { id: 'npr-world', name: 'NPR World', url: 'https://feeds.npr.org/1004/rss.xml', language: 'en' },
+  { id: 'efe-internacional', name: 'EFE (Internacional)', url: 'https://www.efe.com/efe/t5-401nacional/portada', language: 'es' },
+
+  // — España —
+  { id: 'elpais-mundo', name: 'El País (Mundo)', url: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada', language: 'es' },
+  { id: 'elmundo-internacional', name: 'El Mundo (Internacional)', url: 'https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml', language: 'es' },
+  { id: 'elmundo-ultima-hora', name: 'El Mundo (Última hora)', url: 'https://e00-elmundo.uecdn.es/elmundo/rss/ultimahora.xml', language: 'es' },
+  { id: 'abc-internacional', name: 'ABC (Internacional)', url: 'https://www.abc.es/rss/feeds/abcInternacional.xml', language: 'es' },
+  { id: 'lavanguardia-internacional', name: 'La Vanguardia (Internacional)', url: 'https://www.lavanguardia.com/rss/feed/4613/portada.xml', language: 'es' },
+  { id: 'lapatria-libertad', name: 'La Patria (Libertad)', url: 'https://www.lapatria.com/feeds/rss/libertad', language: 'es' },
+  { id: 'europapress-nacional', name: 'Europa Press (Nacional)', url: 'https://www.europapress.es/portada/nacional/rss.xml', language: 'es' },
+  { id: 'europapress-internacional', name: 'Europa Press (Internacional)', url: 'https://www.europapress.es/portada/internacional/rss.xml', language: 'es' },
+  { id: 'rtve-actualidad', name: 'RTVE (Actualidad)', url: 'https://www.rtve.es/rss/actualidad.xml', language: 'es' },
+  { id: 'efe-verne', name: 'EFE Verne', url: 'https://verne.efe.com/feeds/rss/', language: 'es' },
+  { id: 'xataka', name: 'Xataka', url: 'https://www.xataka.com/feed', language: 'es' },
+
+  // — Defensa y fuerzas armadas —
+  { id: 'breakingdefence', name: 'Breaking Defense', url: 'https://www.breakingdefense.com/feed/', language: 'en' },
+  { id: 'janes', name: 'Janes', url: 'https://www.janes.com/feeds/news', language: 'en' },
+  { id: 'defensenews', name: 'Defense News', url: 'https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml', language: 'en' },
+  { id: 'armytimes', name: 'Army Times', url: 'https://www.armytimes.com/feed/', language: 'en' },
+  { id: 'navaltoday', name: 'Naval News', url: 'https://www.navalnews.com/feed/', language: 'en' },
+  { id: 'shephard', name: 'Shephard Media', url: 'https://www.shephardmedia.com/news/rss', language: 'en' },
+  { id: 'euro-sd', name: 'European Security & Defence', url: 'https://www.euro-sd.com/en/news/14/atom', language: 'en' },
+  { id: 'fuerzas-armadas', name: 'Fuerzas Armadas (revista)', url: 'https://www.fuerzasarmadas.com/feed/', language: 'es' },
+
+  // — Energía y clima —
+  { id: 'reuters-energy', name: 'Reuters (Energy)', url: 'https://www.reutersagency.com/feed/?best-topics=energy&post_type=best', language: 'en' },
+  { id: 'oilprice', name: 'OilPrice', url: 'https://oilprice.com/rss/main', language: 'en' },
+  { id: 'renewable-energy', name: 'Renewable Energy World', url: 'https://www.renewableenergyworld.com/feed/', language: 'en' },
+  { id: 'canary-media', name: 'Canary Media', url: 'https://www.canarymedia.com/rss.xml', language: 'en' },
+  { id: 'energias-renovables', name: 'Energías Renovables', url: 'https://www.energias-renovables.com/feed', language: 'es' },
+  { id: 'pv-magazine-es', name: 'pv magazine España', url: 'https://pvmagazine.es/feed/', language: 'es' },
+  { id: 'elperiodicodelaenergia', name: 'El Periódico de la Energía', url: 'https://elperiodicodelaenergia.com/feed/', language: 'es' },
+
+  // — Espacio y aviación —
+  { id: 'nasa-breaking', name: 'NASA (Breaking News)', url: 'https://www.nasa.gov/feed/', language: 'en' },
+  { id: 'spacenews', name: 'SpaceNews', url: 'https://spacenews.com/feed/', language: 'en' },
+  { id: 'flightglobal', name: 'FlightGlobal', url: 'https://www.flightglobal.com/rss/', language: 'en' },
+  { id: 'aviacionline', name: 'Aviacionline', url: 'https://aviacionline.com/feed/', language: 'es' },
+
+  // — Guerra marítima y costera —
+  { id: 'maritimeexecutive', name: 'Maritime Executive', url: 'https://www.maritime-executive.com/rss', language: 'en' },
+  { id: 'gcaptain', name: 'gCaptain', url: 'https://gcaptain.com/feed/', language: 'en' },
+  { id: 'splash247', name: 'Splash 247', url: 'https://splash247.com/feed/', language: 'en' },
+  { id: 'porttechnology', name: 'Port Technology', url: 'https://www.porttechnology.org/feed/', language: 'en' },
 ];
+
+/**
+ * Feeds temáticos por categoría del panel (fuentes «RSS · <categoría>»,
+ * kind 'rss-category'). Verificados igualmente con peticiones reales.
+ */
+export const FEEDS_POR_CATEGORIA: Record<string, Array<{ name: string; url: string; language: string }>> = {
+  // — Categoría del panel: DEFENSA & EJÉRCITO —
+  defensa: [
+    { name: 'Breaking Defense', url: 'https://www.breakingdefense.com/feed/', language: 'en' },
+    { name: 'Janes', url: 'https://www.janes.com/feeds/news', language: 'en' },
+    { name: 'Defense News', url: 'https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml', language: 'en' },
+    { name: 'Army Times', url: 'https://www.armytimes.com/feed/', language: 'en' },
+    { name: 'Naval News', url: 'https://www.navalnews.com/feed/', language: 'en' },
+    { name: 'Shephard Media', url: 'https://www.shephardmedia.com/news/rss', language: 'en' },
+    { name: 'European Security & Defence', url: 'https://www.euro-sd.com/en/news/14/atom', language: 'en' },
+    { name: 'Fuerzas Armadas (revista)', url: 'https://www.fuerzasarmadas.com/feed/', language: 'es' },
+  ],
+  // — Categoría del panel: TECNOLOGÍA & CIBERSEGURIDAD —
+  tecnologia: [
+    { name: 'Axios (All)', url: 'https://api.axios.com/feed/', language: 'en' },
+    { name: 'Xataka', url: 'https://www.xataka.com/feed', language: 'es' },
+    { name: 'Spaceflight Now', url: 'https://spaceflightnow.com/feed/', language: 'en' },
+    { name: 'The Next Web', url: 'https://thenextweb.com/feed/', language: 'en' },
+    { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', language: 'en' },
+    { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', language: 'en' },
+    { name: 'Wired', url: 'https://www.wired.com/feed/rss', language: 'en' },
+    { name: 'IEEE Spectrum', url: 'https://spectrum.ieee.org/feeds/feed.rss', language: 'en' },
+    { name: 'Hacker News (destacados)', url: 'https://hnrss.org/frontpage', language: 'en' },
+  ],
+  // — Categoría del panel: ENERGÍA & CLIMA —
+  energia: [
+    { name: 'Reuters (Energy)', url: 'https://www.reutersagency.com/feed/?best-topics=energy&post_type=best', language: 'en' },
+    { name: 'OilPrice', url: 'https://oilprice.com/rss/main', language: 'en' },
+    { name: 'Renewable Energy World', url: 'https://www.renewableenergyworld.com/feed/', language: 'en' },
+    { name: 'Canary Media', url: 'https://www.canarymedia.com/rss.xml', language: 'en' },
+    { name: 'Energías Renovables', url: 'https://www.energias-renovables.com/feed', language: 'es' },
+    { name: 'pv magazine España', url: 'https://pvmagazine.es/feed/', language: 'es' },
+    { name: 'El Periódico de la Energía', url: 'https://elperiodicodelaenergia.com/feed/', language: 'es' },
+  ],
+  // — Guerra marítima y costera (alimenta el conector de la Marina) —
+  maritima: [
+    { name: 'Maritime Executive', url: 'https://www.maritime-executive.com/rss', language: 'en' },
+    { name: 'gCaptain', url: 'https://gcaptain.com/feed/', language: 'en' },
+    { name: 'Splash 247', url: 'https://splash247.com/feed/', language: 'en' },
+    { name: 'Port Technology', url: 'https://www.porttechnology.org/feed/', language: 'en' },
+  ],
+};
 
 function decodeEntities(s: string): string {
   return s
@@ -409,31 +517,46 @@ export async function runConnector(
         : BUILTIN_RSS_FEEDS.filter((f) =>
             ctx.config.languages.includes('*') || ctx.config.languages.includes(f.language),
           );
-      const perFeed = Math.max(3, Math.ceil(ctx.max / Math.max(1, feeds.length)));
-      const settled = await Promise.allSettled(
-        feeds.map((feed) => searchRssFeed(feed, { ...ctx, max: perFeed })),
-      );
-      const merged: RawFetch = { items: [] };
-      let failures = 0;
-      let lastError: ConnectorError | null = null;
-      for (const s of settled) {
-        if (s.status === 'fulfilled') {
-          merged.items.push(...s.value.items.slice(0, perFeed));
-          if (s.value.quotaHeaders?.remaining !== undefined) merged.quotaHeaders = s.value.quotaHeaders;
-        } else {
-          failures++;
-          if (s.reason instanceof ConnectorError) lastError = s.reason;
-        }
+      return fanOutFeeds(feeds, ctx);
+    }
+    case 'rss-category': {
+      const feeds = FEEDS_POR_CATEGORIA[ctx.config.categoryKey || ''];
+      if (!feeds || feeds.length === 0) {
+        throw new ConnectorError('Categoría RSS sin feeds configurados.', 'setup');
       }
-      // Si TODOS los feeds fallan, la fuente reporta error; si sólo
-      // algunos, se devuelven los parciales (regla del módulo).
-      if (merged.items.length === 0 && failures > 0 && failures === feeds.length && lastError) {
-        throw lastError;
-      }
-      merged.items = merged.items.slice(0, ctx.max);
-      return merged;
+      return fanOutFeeds(feeds, ctx);
     }
     default:
       throw new ConnectorError(`Conector no soportado: ${kind}`, 'setup');
   }
+}
+
+/** Barre varios feeds en paralelo: parciales OK; si fallan TODOS, error. */
+async function fanOutFeeds(
+  feeds: Array<{ name: string; url: string; language: string }>,
+  ctx: ConnectorContext,
+): Promise<RawFetch> {
+  const perFeed = Math.max(3, Math.ceil(ctx.max / Math.max(1, feeds.length)));
+  const settled = await Promise.allSettled(
+    feeds.map((feed) => searchRssFeed(feed, { ...ctx, max: perFeed })),
+  );
+  const merged: RawFetch = { items: [] };
+  let failures = 0;
+  let lastError: ConnectorError | null = null;
+  for (const s of settled) {
+    if (s.status === 'fulfilled') {
+      merged.items.push(...s.value.items.slice(0, perFeed));
+      if (s.value.quotaHeaders?.remaining !== undefined) merged.quotaHeaders = s.value.quotaHeaders;
+    } else {
+      failures++;
+      if (s.reason instanceof ConnectorError) lastError = s.reason;
+    }
+  }
+  // Si TODOS los feeds fallan, la fuente reporta error; si sólo
+  // algunos, se devuelven los parciales (regla del módulo).
+  if (merged.items.length === 0 && failures > 0 && failures === feeds.length && lastError) {
+    throw lastError;
+  }
+  merged.items = merged.items.slice(0, ctx.max);
+  return merged;
 }

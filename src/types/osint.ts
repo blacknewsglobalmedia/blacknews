@@ -14,7 +14,7 @@
  * - Los errores de una fuente no bloquean las demás (resultados parciales).
  */
 
-export type OsintSourceKind = 'gdelt' | 'rss' | 'openalex' | 'wikidata' | 'tavily';
+export type OsintSourceKind = 'gdelt' | 'rss' | 'rss-category' | 'openalex' | 'wikidata' | 'tavily';
 
 export type OsintSourceStatus =
   | 'active'
@@ -68,6 +68,8 @@ export interface OsintSourceConfig {
   internalDailyLimit?: number;
   /** ¿Fuente añadida por el administrador (no built-in)? */
   custom?: boolean;
+  /** Clave de la categoría temática (sólo kind 'rss-category'; connectors.ts). */
+  categoryKey?: string;
 }
 
 /** Estado de consumo/errores de una fuente (persistido en KV). */

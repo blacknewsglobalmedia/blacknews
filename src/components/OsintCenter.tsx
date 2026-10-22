@@ -292,20 +292,26 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
   };
 
   /**
-   * Traducción automática al importar: si la fuente no está en español se
-   * traduce con la IA gratuita del Worker. El resultado lleva etiqueta
-   * «traducción automática» y el texto original queda conservado (aquí en
-   * el aviso, y en guardados/franja del generador). Si la IA falla o no
-   * está configurada, se importa el ORIGINAL sin bloquear nada.
+   * Adaptación al importar (antiplagio): el texto NUNCA entra en la
+   * redacción tal cual llega de la fuente. Pedimos a la IA del Worker
+   * que traduzca si hace falta Y reescriba con palabras propias
+   * (paráfrasis, otro encuadre, sin frases copiadas) — también si el
+   * original ya está en español. El resultado lleva etiqueta honesta y
+   * el texto original queda conservado (aquí en el aviso, y en
+   * guardados/franja del generador). Si la IA falla o no está
+   * configurada, se importa el ORIGINAL sin bloquear nada (fail-open).
    */
   const maybeTranslate = async (item: OsintItem): Promise<OsintItem> => {
-    if (item.language === 'es') return item;
     try {
-      const res = await osintApi.translate(item.title, item.snippet);
+      const res = await osintApi.translate(item.title, item.snippet, {
+        rewrite: true,
+        language: item.language,
+      });
       if (res.ok && res.title) {
+        if (res.action === 'nada') return item; // nada que adaptar
         setImportNotice({
           tone: 'emerald',
-          text: `Traducción automática aplicada (${res.provider || 'IA del proyecto'}). El texto original de la fuente se conserva en la vista previa, en los guardados y en la franja del generador.`,
+          text: `Adaptación automática aplicada (${res.provider || 'IA del proyecto'}): traducida si hacía falta y reescrita con palabras propias, sin copiar frases de la fuente. El texto original se conserva en la vista previa, en los guardados y en la franja del generador.`,
         });
         return {
           ...item,
@@ -317,12 +323,12 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
       }
       setImportNotice({
         tone: 'amber',
-        text: `No se pudo traducir (${res.error || 'error desconocido'}): se importó el texto ORIGINAL de la fuente.`,
+        text: `No se pudo adaptar el texto (${res.error || 'error desconocido'}): se importó el texto ORIGINAL de la fuente.`,
       });
     } catch (err) {
       setImportNotice({
         tone: 'amber',
-        text: `No se pudo traducir (${err instanceof Error ? err.message : 'error'}): se importó el texto ORIGINAL de la fuente.`,
+        text: `No se pudo adaptar el texto (${err instanceof Error ? err.message : 'error'}): se importó el texto ORIGINAL de la fuente.`,
       });
     }
     return item;
@@ -350,7 +356,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
     upsertSaved(
       item, // los guardados conservan SIEMPRE el hallazgo original
       'imported_posts',
-      src.machineTranslated ? 'Importado al generador con traducción automática (original preservado en la fuente).' : undefined,
+      src.machineTranslated ? 'Importado al generador con adaptación automática: traducido si hacía falta y reescrito con palabras propias (original preservado en la fuente).' : undefined,
     );
     setImporting(null);
   };
@@ -363,7 +369,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
     upsertSaved(
       item,
       'imported_article',
-      src.machineTranslated ? 'Importado al redactor con traducción automática (original preservado en la fuente).' : undefined,
+      src.machineTranslated ? 'Importado al redactor con adaptación automática: traducido si hacía falta y reescrito con palabras propias (original preservado en la fuente).' : undefined,
     );
     setImporting(null);
   };
@@ -862,7 +868,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                     ) : (
                       <FileInput className="w-3.5 h-3.5" />
                     )}
-                    {importing === 'posts' ? 'Traduciendo…' : 'Importar al generador'}
+                    {importing === 'posts' ? 'Adaptando…' : 'Importar al generador'}
                   </SmallBtn>
                   <SmallBtn onClick={() => void importToArticle(s.item)} disabled={importing !== null}>
                     {importing === 'article' ? (
@@ -870,7 +876,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                     ) : (
                       <PencilLine className="w-3.5 h-3.5" />
                     )}
-                    {importing === 'article' ? 'Traduciendo…' : 'Importar al redactor'}
+                    {importing === 'article' ? 'Adaptando…' : 'Importar al redactor'}
                   </SmallBtn>
                   <SmallBtn onClick={() => setPreview(s.item)}>
                     <Search className="w-3.5 h-3.5" /> Previsualizar
@@ -1310,7 +1316,7 @@ function PreviewDrawer({
             ) : (
               <FileInput className="w-4 h-4" />
             )}
-            {importing === 'posts' ? 'Traduciendo…' : 'Importar al generador de posts'}
+            {importing === 'posts' ? 'Adaptando…' : 'Importar al generador de posts'}
           </button>
           <button
             type="button"
@@ -1323,7 +1329,7 @@ function PreviewDrawer({
             ) : (
               <PencilLine className="w-4 h-4" />
             )}
-            {importing === 'article' ? 'Traduciendo…' : 'Importar al redactor'}
+            {importing === 'article' ? 'Adaptando…' : 'Importar al redactor'}
           </button>
           {!saved && (
             <button

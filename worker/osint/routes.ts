@@ -13,8 +13,10 @@
  *   POST   /api/osint/sources      → añadir feed RSS personalizado (allowlist)
  *   DELETE /api/osint/sources?id=  → eliminar una fuente personalizada
  *   POST   /api/osint/sources/test → probar conexión + vista previa de datos
- *   POST   /api/osint/translate   → traducir hallazgo al español (IA gratuita
- *                                   del proyecto; el original nunca se toca)
+ *   POST   /api/osint/translate   → adaptar hallazgo al importar: traduce si
+ *                                   hace falta y reescribe con palabras
+ *                                   propias (antiplagio; IA gratuita del
+ *                                   proyecto; el original nunca se toca)
  */
 import type {
   OsintSearchRequest,
@@ -243,10 +245,10 @@ export async function handleOsintRequest(
   }
 
   /* -------------------------------------------------------------- */
-  /* Traducción automática al español (al importar; IA del proyecto)  */
+  /* Adaptación al importar (traducción + reescritura antiplagio)    */
   /* -------------------------------------------------------------- */
   if (pathname === '/api/osint/translate' && request.method === 'POST') {
-    let body: { title?: string; snippet?: string };
+    let body: { title?: string; snippet?: string; language?: string; rewrite?: boolean };
     try {
       body = await request.json();
     } catch {
@@ -257,7 +259,12 @@ export async function handleOsintRequest(
       return error('El titular a traducir debe tener entre 2 y 2000 caracteres.');
     }
     const snippet = (body.snippet || '').trim().slice(0, 1500) || undefined;
-    const out = await translateFinding(env, { title, snippet });
+    const language =
+      typeof body.language === 'string' && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(body.language.trim())
+        ? body.language.trim()
+        : undefined;
+    const rewrite = body.rewrite === true;
+    const out = await translateFinding(env, { title, snippet, language }, { rewrite });
     // ok:false es una respuesta legítima (sin proveedor o ilegible): el
     // importador usará el original. Sólo los fallos de formulario son 4xx.
     return json(out);

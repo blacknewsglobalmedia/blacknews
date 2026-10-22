@@ -8,7 +8,9 @@
  * - GDELT DOC 2.0: agregador global de medios, sin clave, con límite de
  *   frecuencia publicado (máx. ~1 consulta/15 s recomendada, maxrecords
  *   acotado). Documentación: https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
- * - RSS público: medios y organismos oficiales; sin cuota documentada.
+ * - RSS público: 47 feeds verificados uno a uno con peticiones reales
+ *   (HTTP 200 + parseo correcto, sin paywall) y fuentes temáticas por
+ *   categoría; sin cuota documentada.
  * - OpenAlex: catálogo académico abierto; cuota generosa documentada
  *   (100k req/día en "polite pool" con mailto). https://openalex.org/
  * - Wikidata SPARQL: consulta estructurada; requiere User-Agent identificativo
@@ -42,17 +44,85 @@ export const BUILTIN_SOURCES: OsintSourceConfig[] = [
     name: 'RSS · Medios y organismos (built-in)',
     kind: 'rss',
     enabled: true,
-    // Cada feed built-in se declara en connectors/rss.ts con su URL oficial.
-    docs: 'https://www.bbc.co.uk/feeds/rss | https://rss.dw.com/rdf/rss-en-all | https://www.france24.com/en/rss | https://news.un.org/feed/',
+    // Cada feed built-in se declara en worker/osint/connectors.ts con su URL oficial.
+    docs: 'https://www.bbc.co.uk/feeds/rss | https://www.theguardian.com/world/rss | https://www.aljazeera.com/xml/rss/all.xml | https://feeds.elpais.com/ (listado completo en connectors.ts)',
     description:
-      'Feeds RSS públicos de medios y organismos oficiales seleccionados (BBC Mundo/World, DW, France 24, ONU News). Se pueden añadir feeds propios desde la pestaña de fuentes.',
+      'Feeds RSS públicos verificados uno a uno (internacionales, españoles y temáticos: The Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka, NASA, Naval News, OilPrice…). Se pueden añadir feeds propios desde la pestaña de fuentes.',
     categories: ['*'],
-    languages: ['en', 'es', 'fr', 'de'],
+    languages: ['en', 'es'],
     regions: ['*'],
     authMethod: 'none',
     quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
     quotaKind: 'internal',
-    internalDailyLimit: 120,
+    internalDailyLimit: 240,
+  },
+  {
+    id: 'rss-defensa',
+    name: 'RSS · Defensa y fuerzas armadas',
+    kind: 'rss-category',
+    categoryKey: 'defensa',
+    enabled: true,
+    docs: 'https://www.breakingdefense.com/feed/ | https://www.navalnews.com/feed/ (listado completo en connectors.ts)',
+    description:
+      'Feeds especializados en defensa y fuerzas armadas (Breaking Defense, Janes, Defense News, Army Times, Naval News, Shephard, European Security & Defence, revista Fuerzas Armadas).',
+    categories: ['*'],
+    languages: ['en', 'es'],
+    regions: ['*'],
+    authMethod: 'none',
+    quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
+    quotaKind: 'internal',
+    internalDailyLimit: 60,
+  },
+  {
+    id: 'rss-tecnologia',
+    name: 'RSS · Tecnología e innovación',
+    kind: 'rss-category',
+    categoryKey: 'tecnologia',
+    enabled: true,
+    docs: 'https://www.xataka.com/feed | https://feeds.arstechnica.com/arstechnica/index (listado completo en connectors.ts)',
+    description:
+      'Feeds de tecnología e innovación (Xataka, Axios, Ars Technica, MIT Technology Review, Wired, IEEE Spectrum, Spaceflight Now, The Next Web, destacados de Hacker News).',
+    categories: ['*'],
+    languages: ['en', 'es'],
+    regions: ['*'],
+    authMethod: 'none',
+    quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
+    quotaKind: 'internal',
+    internalDailyLimit: 60,
+  },
+  {
+    id: 'rss-energia',
+    name: 'RSS · Energía y clima',
+    kind: 'rss-category',
+    categoryKey: 'energia',
+    enabled: true,
+    docs: 'https://oilprice.com/rss/main | https://www.energias-renovables.com/feed (listado completo en connectors.ts)',
+    description:
+      'Feeds de energía y clima (Reuters Energy, OilPrice, Renewable Energy World, Canary Media, Energías Renovables, pv magazine España, El Periódico de la Energía).',
+    categories: ['*'],
+    languages: ['en', 'es'],
+    regions: ['*'],
+    authMethod: 'none',
+    quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
+    quotaKind: 'internal',
+    internalDailyLimit: 60,
+  },
+  {
+    id: 'rss-maritima',
+    name: 'RSS · Guerra marítima y costera',
+    kind: 'rss-category',
+    categoryKey: 'maritima',
+    enabled: true,
+    docs: 'https://www.maritime-executive.com/rss | https://gcaptain.com/feed/ (listado completo en connectors.ts)',
+    description:
+      'Feeds marítimos y portuarios (Maritime Executive, gCaptain, Splash 247, Port Technology): tráfico, puertos, logística y operaciones costeras.',
+    categories: ['*'],
+    languages: ['en', 'es'],
+    regions: ['*'],
+    authMethod: 'none',
+    quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
+    quotaKind: 'internal',
+    internalDailyLimit: 40,
   },
   {
     id: 'openalex',
