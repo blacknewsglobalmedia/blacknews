@@ -20,7 +20,13 @@ import type {
   OsintSourceResult,
   OsintSourceRuntime,
 } from '../../src/types/osint';
-import { ConnectorError, runConnector, type ConnectorContext, type OsintEnvLike } from './connectors';
+import {
+  ConnectorError,
+  runConnector,
+  SUBREQUEST_BUDGET,
+  type ConnectorContext,
+  type OsintEnvLike,
+} from './connectors';
 import { clusterItems, normalizeItems, scoreItems, sortItems } from './normalize';
 import { isDomainAllowlisted, hostnameOf, SsrfError } from './ssrf';
 import { loadSources, markSearch, saveRuntime, type KvLike } from './store';
@@ -94,6 +100,9 @@ export async function searchAll(
 
   const results: OsintSourceResult[] = [];
   const allRaw: Array<{ config: OsintSourceConfig; raws: Awaited<ReturnType<typeof runConnector>>['items'] }> = [];
+  // Presupuesto de subpeticiones COMPARTIDO por todas las fuentes de esta
+  // búsqueda (plan gratuito: 50 por request; verificado en producción).
+  const budget = { remaining: SUBREQUEST_BUDGET };
 
   await Promise.all(
     targets.map(async (entry) => {
@@ -130,6 +139,7 @@ export async function searchAll(
         to,
         max: maxPerSource,
         languages: body.languages && body.languages.length > 0 ? body.languages : undefined,
+        subrequests: budget,
       };
 
       const rt: OsintSourceRuntime = { ...runtime };
@@ -180,21 +190,26 @@ export async function searchAll(
       } catch (err) {
         const isRateLimit = err instanceof ConnectorError && err.kind === 'rate_limit';
         const isSetup = err instanceof ConnectorError && err.kind === 'setup';
+        const isBudget = err instanceof ConnectorError && err.kind === 'budget';
         const message =
           err instanceof ConnectorError
             ? err.message
             : err instanceof SsrfError
               ? `URL bloqueada por seguridad: ${err.message}`
               : 'Error inesperado al consultar la fuente.';
-        rt.lastError = message;
-        rt.lastErrorAt = detectedAt;
+        // Un tope de presupuesto NO es un error de la fuente: se informa en
+        // la fila, pero no se castiga su estado (sigue activa y sana).
+        if (!isBudget) {
+          rt.lastError = message;
+          rt.lastErrorAt = detectedAt;
+        }
         if (isRateLimit) {
           rt.status = 'rate_limited';
           rt.lastLimitAt = detectedAt;
           rt.blockedUntil = new Date(Date.now() + RATE_LIMIT_COOLDOWN_MS).toISOString();
         } else if (isSetup) {
           rt.status = 'pending_setup';
-        } else {
+        } else if (!isBudget) {
           rt.status = 'error';
         }
         results.push({

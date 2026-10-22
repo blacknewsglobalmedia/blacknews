@@ -26,6 +26,8 @@ export interface ConnectorContext {
   to: Date;
   max: number;
   languages?: string[];
+  /** Presupuesto de subpeticiones compartido por la petición completa. */
+  subrequests?: SubrequestBudget;
 }
 
 export interface RawFetch {
@@ -41,12 +43,14 @@ export interface RawFetch {
   }>;
   /** Cuota leída de cabeceras HTTP (sólo si el proveedor la devuelve). */
   quotaHeaders?: { remaining?: number; limit?: number };
+  /** Feeds no consultados por presupuesto de subpeticiones agotado. */
+  budgetSkipped?: number;
 }
 
 export class ConnectorError extends Error {
   constructor(
     message: string,
-    readonly kind: 'rate_limit' | 'network' | 'http' | 'parse' | 'setup' = 'http',
+    readonly kind: 'rate_limit' | 'network' | 'http' | 'parse' | 'setup' | 'budget' = 'http',
   ) {
     super(message);
   }
@@ -57,7 +61,56 @@ export class ConnectorError extends Error {
 const UA = 'BlackNews-OSINT/1.0 (redaction desk; contact: blacknewsglobalmedia@gmail.com)';
 const TIMEOUT_MS = 12_000;
 
-async function fetchText(url: string, init?: RequestInit): Promise<{ res: Response; text: string }> {
+/* ------------------------------------------------------------------ */
+/* Presupuesto de subpeticiones por request                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * El plan gratuito de Cloudflare Workers permite 50 subpeticiones por
+ * request (verificado empíricamente en producción: con feeds que suman
+ * >50, las fuentes tardías mueren). Reservamos margen para la
+ * verificación de Google (1) y otros subrequests del Worker.
+ */
+export const SUBREQUEST_BUDGET = 45;
+
+export interface SubrequestBudget {
+  remaining: number;
+}
+
+/** Presupuesto honesto, compartido por TODAS las fuentes de una búsqueda. */
+export const BUDGET_MSG =
+  `Límite de subpeticiones de la petición alcanzado (el módulo reserva ${SUBREQUEST_BUDGET} ` +
+  'de las 50 del plan gratuito): esta fuente se pospuso a la siguiente búsqueda. ' +
+  'Reduce las fuentes activadas o inténtalo de nuevo en unos minutos.';
+
+/** Consume 1 subpetición del presupuesto compartido (si hay). */
+export function takeSubrequest(ctx: ConnectorContext): boolean {
+  const b = ctx.subrequests;
+  if (!b) return true; // sin presupuesto (tests/préstamo) → sin límite
+  if (b.remaining <= 0) return false;
+  b.remaining -= 1;
+  return true;
+}
+
+/** Ventana rotativa determinista de feeds por consulta: mismos (día,
+ *  consulta) → mismos feeds; otras entradas → feeds distintos, así la
+ *  cobertura del catálogo rota en el tiempo sin pasar del presupuesto. */
+export const RSS_WINDOW_PER_QUERY = 12;
+
+export function feedWindow<T>(items: T[], query: string, daySalt: number, size: number): T[] {
+  if (items.length <= size) return items;
+  let h = daySalt >>> 0;
+  const q = query.toLowerCase() || 'global';
+  for (let i = 0; i < q.length; i++) h = (h * 31 + q.charCodeAt(i)) >>> 0;
+  const start = h % items.length;
+  return Array.from({ length: size }, (_, i) => items[(start + i) % items.length]);
+}
+
+async function fetchText(
+  url: string,
+  init?: RequestInit,
+  timeoutMs: number = TIMEOUT_MS,
+): Promise<{ res: Response; text: string }> {
   assertSafeOutboundUrl(url); // guard SSRF en TODA salida
   let res: Response;
   try {
@@ -65,7 +118,7 @@ async function fetchText(url: string, init?: RequestInit): Promise<{ res: Respon
       ...init,
       headers: { 'user-agent': UA, ...(init?.headers || {}) },
       redirect: 'follow',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {
     const timedOut = err instanceof Error && /timeout|abort/i.test(err.name + err.message);
@@ -119,6 +172,7 @@ function parseGdeltDate(s: string | undefined): string | undefined {
 }
 
 export async function searchGdelt(ctx: ConnectorContext): Promise<RawFetch> {
+  if (!takeSubrequest(ctx)) throw new ConnectorError(BUDGET_MSG, 'budget');
   // GDELT admite un solo sourcelang por consulta; con varios idiomas se
   // pide sin filtro y se filtra después por el campo `language` real.
   const langIso = ctx.languages && ctx.languages.length === 1 ? ctx.languages[0] : undefined;
@@ -128,7 +182,9 @@ export async function searchGdelt(ctx: ConnectorContext): Promise<RawFetch> {
     `${GDELT_API}?query=${encodeURIComponent(query)}` +
     `&mode=artlist&format=json&maxrecords=${Math.min(75, ctx.max)}` +
     `&startdatetime=${gdeltDate(ctx.from)}&enddatetime=${gdeltDate(ctx.to)}`;
-  const { res, text } = await fetchText(url, { headers: { accept: 'application/json' } });
+  // GDELT supera a menudo los 12 s con ventanas amplias: se le da margen
+  // propio (medido en producción: 13-15 s con periodos de 7 días).
+  const { res, text } = await fetchText(url, { headers: { accept: 'application/json' } }, 25_000);
   let body: { articles?: Array<Record<string, string>> };
   try {
     body = JSON.parse(text);
@@ -335,6 +391,8 @@ export async function searchRssFeed(
   feed: { name: string; url: string; language: string },
   ctx: ConnectorContext,
 ): Promise<RawFetch> {
+  // Presupuesto agotado: NO se consulta (y no se cuenta como fallo de red).
+  if (!takeSubrequest(ctx)) return { items: [], budgetSkipped: 1 };
   const { res, text } = await fetchText(feed.url, { headers: { accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' } });
   const items = parseFeed(text, feed.language, ctx.max, ctx.query).filter((it) => {
     if (!it.publishedAt) return true; // sin fecha confiable no se descarta
@@ -360,6 +418,7 @@ function rebuildAbstract(inverted: Record<string, number[]> | undefined, limit =
 }
 
 export async function searchOpenAlex(ctx: ConnectorContext): Promise<RawFetch> {
+  if (!takeSubrequest(ctx)) throw new ConnectorError(BUDGET_MSG, 'budget');
   const from = ctx.from.toISOString().slice(0, 10);
   const to = ctx.to.toISOString().slice(0, 10);
   const url =
@@ -398,6 +457,7 @@ export async function searchOpenAlex(ctx: ConnectorContext): Promise<RawFetch> {
 /* ------------------------------------------------------------------ */
 
 export async function searchWikidata(ctx: ConnectorContext): Promise<RawFetch> {
+  if (!takeSubrequest(ctx)) throw new ConnectorError(BUDGET_MSG, 'budget');
   const safe = ctx.query.replace(/["\\]/g, ' ').slice(0, 120);
   const sparql = `
     SELECT ?item ?itemLabel ?itemDescription ?article ?articleLang WHERE {
@@ -453,6 +513,7 @@ export async function searchWikidata(ctx: ConnectorContext): Promise<RawFetch> {
 /* ------------------------------------------------------------------ */
 
 export async function searchTavily(ctx: ConnectorContext): Promise<RawFetch> {
+  if (!takeSubrequest(ctx)) throw new ConnectorError(BUDGET_MSG, 'budget');
   const key = (ctx.env.TAVILY_API_KEY || '').trim();
   if (!key) {
     throw new ConnectorError('Falta el secreto TAVILY_API_KEY en el Worker.', 'setup');
@@ -512,11 +573,14 @@ export async function runConnector(
     case 'tavily':
       return searchTavily(ctx);
     case 'rss': {
-      const feeds = ctx.config.custom
+      const base = ctx.config.custom
         ? [{ name: ctx.config.name, url: ctx.config.url || '', language: ctx.config.languages[0] || '*' }]
         : BUILTIN_RSS_FEEDS.filter((f) =>
             ctx.config.languages.includes('*') || ctx.config.languages.includes(f.language),
           );
+      // Ventana rotativa por consulta: el catálogo completo es mayor que
+      // el presupuesto de subpeticiones; la cobertura rota día a día.
+      const feeds = feedWindow(base, ctx.query, Math.floor(Date.now() / 86_400_000), RSS_WINDOW_PER_QUERY);
       return fanOutFeeds(feeds, ctx);
     }
     case 'rss-category': {
@@ -540,22 +604,30 @@ async function fanOutFeeds(
   const settled = await Promise.allSettled(
     feeds.map((feed) => searchRssFeed(feed, { ...ctx, max: perFeed })),
   );
-  const merged: RawFetch = { items: [] };
+  const merged: RawFetch = { items: [], budgetSkipped: 0 };
   let failures = 0;
+  let budgetSkipped = 0;
   let lastError: ConnectorError | null = null;
   for (const s of settled) {
     if (s.status === 'fulfilled') {
       merged.items.push(...s.value.items.slice(0, perFeed));
+      budgetSkipped += s.value.budgetSkipped || 0;
       if (s.value.quotaHeaders?.remaining !== undefined) merged.quotaHeaders = s.value.quotaHeaders;
     } else {
       failures++;
       if (s.reason instanceof ConnectorError) lastError = s.reason;
     }
   }
-  // Si TODOS los feeds fallan, la fuente reporta error; si sólo
-  // algunos, se devuelven los parciales (regla del módulo).
-  if (merged.items.length === 0 && failures > 0 && failures === feeds.length && lastError) {
-    throw lastError;
+  merged.budgetSkipped = budgetSkipped;
+  if (merged.items.length === 0) {
+    // Sin resultados: si fue el presupuesto (no un fallo de la fuente) se
+    // dice con claridad; si hubo fallos de red reales, se informa el último.
+    if (budgetSkipped > 0 && failures === 0) {
+      throw new ConnectorError(BUDGET_MSG, 'budget');
+    }
+    if (failures > 0 && failures === feeds.length && lastError) {
+      throw lastError;
+    }
   }
   merged.items = merged.items.slice(0, ctx.max);
   return merged;

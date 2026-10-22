@@ -77,13 +77,23 @@ configuración.
 | Fuente | Clave | Ofrece | Límites / notas (verbatim en la UI) | Cuota por defecto |
 |---|---|---|---|---|
 | **GDELT DOC 2.0** | no | `artlist` global con fecha, idioma, país, socialimage | recomienda ~1 consulta/15 s; `maxrecords` ≤ 250; no publica cuota diaria | `official` (nota) |
-| **RSS/Atom built-in** | no | 47 feeds verificados uno a uno con peticiones reales: internacionales (Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, BBC, DW, France 24, ONU), españoles (El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka…) y temáticos (defensa, energía, espacio, marítimo): título, enlace, fecha, fragmento, autor, imagen | feeds públicos sin cuota documentada | `internal` |
+| **RSS/Atom built-in** | no | 47 feeds verificados uno a uno con peticiones reales: internacionales (Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, BBC, DW, France 24, ONU), españoles (El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka…) y temáticos (defensa, energía, espacio, marítimo): título, enlace, fecha, fragmento, autor, imagen. **Por petición se consulta una ventana rotativa de 12** (la cobertura rota día a día) | feeds públicos sin cuota documentada | `internal` |
 | **RSS por categoría** | no | Fuentes «RSS · Defensa y fuerzas armadas / Tecnología e innovación / Energía y clima / Guerra marítima y costera» con feeds especializados propios de cada una (mismo parser y mismas garantías) | feeds públicos sin cuota documentada; se activan/desactivan por fuente | `internal` |
 | **OpenAlex** | no | publicaciones académicas + abstract reconstruido + autores | «polite pool» ~100.000 req/día declaradas; sin saldo en cabeceras | `official` |
 | **Wikidata SPARQL** | no | entidades estructuradas + enlace Wikipedia | pide User-Agent; límites de tasa no documentados con exactitud | `unknown` |
 | **Tavily** | `TAVILY_API_KEY` (secreto ya existente del proyecto) | búsqueda web de noticias con fecha de publicación | plan gratuito con límite diario no publicado | `unknown` |
 
-Todo conector: timeout 12 s, mensajes legibles sin secretos, y
+Todo conector: timeout 12 s (GDELT 25 s, que es lento de forma
+consistente), mensajes legibles sin secretos, y
+
+**Presupuesto de subpeticiones** (verificado empíricamente en producción:
+el plan gratuito permite 50 subpeticiones por request): toda la búsqueda
+comparte un presupuesto de 45 (`SUBREQUEST_BUDGET` en `connectors.ts`).
+Cada feed consume 1; `rss-world` usa una ventana rotativa de 12 por
+consulta para no comerse el presupuesto solo, y si una fuente llega con
+el presupuesto agotado lo dice con claridad («Límite de subpeticiones…
+esta fuente se pospuso») sin marcar la fuente como errónea. Con el
+catálogo completo activo una búsqueda normal gasta ~42 subpeticiones.
 `Promise.allSettled`-style por fuente: **un fallo jamás bloquea a las
 demás** (`OsintSourceResult` informa `ok/error/skipped` por fuente).
 
@@ -187,7 +197,7 @@ OSINT_RSS_ALLOWLIST=bbc.co.uk,dw.com,france24.com,un.org
 ## 7. Pruebas
 
 ```bash
-npx tsx test/osint-logic.test.ts   # 32 pruebas: dedupe, scoring, SSRF, RSS/Atom, adaptación antiplagio, tokens Google
+npx tsx test/osint-logic.test.ts   # 35 pruebas: dedupe, scoring, SSRF, RSS/Atom, presupuesto de subpeticiones, adaptación antiplagio, tokens Google
 npm run lint                       # tsc (incluye worker/ y test/)
 ```
 

@@ -47,12 +47,13 @@ export const BUILTIN_SOURCES: OsintSourceConfig[] = [
     // Cada feed built-in se declara en worker/osint/connectors.ts con su URL oficial.
     docs: 'https://www.bbc.co.uk/feeds/rss | https://www.theguardian.com/world/rss | https://www.aljazeera.com/xml/rss/all.xml | https://feeds.elpais.com/ (listado completo en connectors.ts)',
     description:
-      'Feeds RSS públicos verificados uno a uno (internacionales, españoles y temáticos: The Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka, NASA, Naval News, OilPrice…). Se pueden añadir feeds propios desde la pestaña de fuentes.',
+      'Feeds RSS públicos verificados uno a uno (internacionales, españoles y temáticos: The Guardian, Al Jazeera, Bloomberg, Axios, NPR, EFE, El País, El Mundo, ABC, La Vanguardia, Europa Press, RTVE, Xataka, NASA, Naval News, OilPrice…). Por petición se consulta una ventana rotativa de 12 feeds (la cobertura rota día a día) para respetar el límite de subpeticiones. Se pueden añadir feeds propios desde la pestaña de fuentes.',
     categories: ['*'],
     languages: ['en', 'es'],
     regions: ['*'],
     authMethod: 'none',
-    quotaNote: 'Feeds públicos sin cuota documentada; el límite interno evita refrescos abusivos.',
+    quotaNote:
+      'Feeds públicos sin cuota documentada; ventana rotativa de 12 feeds por petición (límite de subpeticiones del plan gratuito).',
     quotaKind: 'internal',
     internalDailyLimit: 240,
   },

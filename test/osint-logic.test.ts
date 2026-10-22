@@ -26,7 +26,7 @@ import {
   isDomainAllowlisted,
   SsrfError,
 } from '../worker/osint/ssrf';
-import { parseFeed } from '../worker/osint/connectors';
+import { feedWindow, parseFeed, searchRssFeed, SUBREQUEST_BUDGET, takeSubrequest, BUDGET_MSG, type ConnectorContext } from '../worker/osint/connectors';
 import {
   buildRewritePrompt,
   buildTranslationPrompt,
@@ -304,7 +304,39 @@ test('el filtro de búsqueda del feed es por tokens (sin consulta devuelve todo)
 });
 
 /* ------------------------------------------------------------------ */
-console.log('\n[8] Traducción automática de hallazgos');
+console.log('\n[7b] Presupuesto de subpeticiones y ventana de feeds');
+
+test('takeSubrequest consume el presupuesto compartido y agota a cero', () => {
+  const ctx = { subrequests: { remaining: 2 } } as unknown as ConnectorContext;
+  assert.equal(takeSubrequest(ctx), true);
+  assert.equal(takeSubrequest(ctx), true);
+  assert.equal(takeSubrequest(ctx), false, 'agotado → nada más sale');
+  assert.equal(takeSubrequest({} as unknown as ConnectorContext), true, 'sin presupuesto → sin límite');
+  assert.match(BUDGET_MSG, /Límite de subpeticiones/);
+  assert.ok(SUBREQUEST_BUDGET < 50, 'el presupuesto deja margen bajo el tope real del plan gratuito');
+});
+
+test('feedWindow: determinista, respeta el tamaño y devuelve subconjuntos', () => {
+  const feeds = Array.from({ length: 47 }, (_, i) => `f${i}`);
+  const w1 = feedWindow(feeds, 'naval', 20_700, 12);
+  assert.equal(w1.length, 12);
+  assert.deepEqual(w1, feedWindow(feeds, 'naval', 20_700, 12), 'mismos datos → misma ventana');
+  assert.ok(w1.every((f) => feeds.includes(f)), 'sólo feeds del catálogo');
+  feedWindow(feeds, 'otra consulta', 20_700, 12).forEach((f) => assert.ok(feeds.includes(f)));
+  assert.equal(feedWindow(['a', 'b'], 'q', 1, 12).length, 2, 'catálogo ≤ tamaño → se devuelve entero');
+});
+
+test('con el presupuesto agotado, searchRssFeed no toca la red', async () => {
+  const ctx = {
+    subrequests: { remaining: 0 },
+    max: 5,
+  } as unknown as ConnectorContext;
+  const out = await searchRssFeed({ name: 'x', url: 'https://example.com/feed.xml', language: 'en' }, ctx);
+  assert.deepEqual(out, { items: [], budgetSkipped: 1 });
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\n[8] Adaptación de hallazgos (traducción + reescritura)');
 
 test('el prompt incluye el texto a traducir, la meta JSON y la consigna de fidelidad', () => {
   const { system, user } = buildTranslationPrompt({
