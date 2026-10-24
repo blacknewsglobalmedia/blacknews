@@ -32,7 +32,7 @@ export const Footer: React.FC<FooterProps> = ({
       <footer className="w-full bg-black text-neutral-400 text-xs sm:text-sm pt-14 pb-[calc(var(--bn-nav-h)_+_4rem)] lg:pb-24 border-t border-white/10 font-['Lexend',sans-serif]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Editorial Core Principles */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12 mb-12 border-b border-white/10">
+          <div data-assemble className="grid grid-cols-1 md:grid-cols-3 gap-8 pb-12 mb-12 border-b border-white/10">
             <div>
               <div className="text-xs font-sans uppercase tracking-wider text-white font-semibold mb-2.5 flex items-center gap-2">
                 <Scale className="w-4 h-4 text-neutral-300" />
@@ -76,7 +76,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
 
           {/* Main Footer Navigation & Brand */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-12">
+          <div data-assemble className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-12">
             {/* Brand Column */}
             <div className="md:col-span-4">
               <div className="font-headline text-2xl sm:text-3xl font-semibold text-white tracking-tight mb-3 flex items-baseline">
@@ -147,7 +147,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
 
           {/* Bottom copyright & Legal links */}
-          <div className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-sans text-neutral-400 font-light">
+          <div data-assemble className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-sans text-neutral-400 font-light">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-neutral-300">
                 BLACKNEWS v{APP_VERSION} · {BUILD_STAMP_LABEL}

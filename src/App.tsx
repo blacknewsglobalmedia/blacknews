@@ -69,6 +69,7 @@ import {
   listPendingReportDeletes,
   retryPendingReportSync,
   mergeReports,
+  firestoreDoc,
 } from "./utils/reportSync";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import {
@@ -94,15 +95,10 @@ interface BeforeInstallPromptEvent extends Event {
 const OWNER_EMAIL = "blacknewsglobalmedia@gmail.com";
 
 /**
- * Firestore rechaza `undefined` (a diferencia de JSON.stringify). Filtra los
- * campos undefined antes de cualquier setDoc — p. ej. paymentReceiptUrl o
- * rejectionReason ausentes.
+ * Firestore rechaza `undefined` (a diferencia de JSON.stringify). El filtro
+ * canónico (recursivo) vive en utils/reportSync y se reutiliza aquí para
+ * informes (ver handlePublishReport), anuncios y ajustes.
  */
-function firestoreDoc(obj: object): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined),
-  );
-}
 
 // Test accounts created during development: removed from the team and purged from any
 // stored roster so they can never show up (or be signed in) again.
@@ -1108,7 +1104,10 @@ export default function App() {
     // reintenta solo (ver utils/reportSync).
     markReportUnsynced(newReport.id);
     try {
-      await setDoc(doc(db, "reports", newReport.id), newReport);
+      // firestoreDoc: Firestore rechaza `undefined` (p. ej. countries sin
+      // países); sin filtrar, la subida entera fallaba y el informe quedaba
+      // solo en este dispositivo.
+      await setDoc(doc(db, "reports", newReport.id), firestoreDoc(newReport));
       markReportSynced(newReport.id);
       showToast(`¡"${newReport.title.slice(0, 38)}..." publicado en portada!`);
     } catch (err) {
@@ -1131,7 +1130,7 @@ export default function App() {
     } catch {}
     markReportUnsynced(updatedReport.id);
     try {
-      await setDoc(doc(db, "reports", updatedReport.id), updatedReport);
+      await setDoc(doc(db, "reports", updatedReport.id), firestoreDoc(updatedReport));
       markReportSynced(updatedReport.id);
       showToast(`¡Informe "${updatedReport.title.slice(0, 32)}..." actualizado!`);
     } catch (err) {
@@ -1667,7 +1666,6 @@ export default function App() {
               onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
               meter={readMeter}
             />
-
             {/* Respiro tipográfica entre el mapa y la parrilla de posts */}
             <QuoteOfTheDay />
 
@@ -1697,7 +1695,6 @@ export default function App() {
                   : undefined
               }
             />
-
             {/* Personalización: tira con lo último de los temas del lector */}
             <PersonalBriefing
               reports={reportsList}
@@ -1707,7 +1704,6 @@ export default function App() {
 
             {/* Audio bajo demanda: episodios subidos desde el estudio */}
             <PodcastSection episodes={podcastsList} />
-
             {/* In-Feed Leaderboard Horizontal Banner (los suscriptores no ven publicidad) */}
             {!isSubscribed && (
               <AdBanner

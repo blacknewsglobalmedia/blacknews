@@ -4,10 +4,12 @@ import {
   CLOCK_CITIES,
   ClockCity,
   REFERENCE_TZ,
+  datePartsIn,
   timeIn,
   visitorClockCity,
 } from "../utils/clock";
 import { CountryFlag, codeFromFlagEmoji } from "./CountryFlag";
+import { MiniWorldMap } from "./MiniWorldMap";
 
 /**
  * Barra inferior tipo marquee, pegada al borde de la ventana (baja con el
@@ -42,6 +44,12 @@ export function WorldClockBar() {
     // La hora del visitante, justo detrás de la hora oficial de referencia.
     return [CLOCK_CITIES[0], visitor, ...CLOCK_CITIES.slice(1)];
   }, []);
+
+  // Día/noche por hora local de la ciudad (para los pines del atlas)
+  const isDaylight = (c: ClockCity): boolean => {
+    const hh = datePartsIn(c.tz, now).hh;
+    return hh >= 6 && hh < 19;
+  };
 
   const strip = (
     <span className="flex items-center shrink-0">
@@ -102,6 +110,29 @@ export function WorldClockBar() {
                   />
                 </span>
               </div>
+
+              {/* Atlas vivo: un punto por ciudad; encendido si allí es de día */}
+              <div className="mb-3">
+                <MiniWorldMap
+                  pins={cities.flatMap((c) =>
+                    c.coords
+                      ? [{ lon: c.coords[0], lat: c.coords[1], lit: isDaylight(c) }]
+                      : [],
+                  )}
+                  className="w-full h-auto max-h-40 sm:max-h-52"
+                />
+                <div className="flex items-center justify-center gap-4 text-[9px] uppercase tracking-widest text-neutral-600 mt-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                    de día
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-600" />
+                    de noche
+                  </span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-0.5">
                 {cities.map((city) => {
                   const isReference = city.tz === REFERENCE_TZ;

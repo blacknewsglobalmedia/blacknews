@@ -11,6 +11,7 @@ import { Report, CategoryId } from '../types/news';
 import { CountryFlag } from './SocialPostGenerator';
 import { findCountryByName, matchCountryInText } from '../data/countries';
 import { OptimizedPicture } from './OptimizedPicture';
+import { MiniWorldMap } from './MiniWorldMap';
 
 interface VisualPostsSectionProps {
   reports: Report[];
@@ -122,16 +123,16 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10 space-y-6 sm:space-y-8">
         
         {/* Newspaper Section Header */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-4 border-b border-white/10">
+        <div data-assemble className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-4 border-b border-white/10">
           <div>
             <div className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold mb-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-white inline-block" />
               <span>EDICIÓN VISUAL</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-['Lexend']">
+            <h2 data-piece className="text-xl sm:text-2xl font-bold tracking-tight text-white font-['Lexend']">
               Despachos de Portada
             </h2>
-            <p className="text-xs sm:text-sm text-neutral-400 font-light mt-0.5 max-w-2xl leading-relaxed">
+            <p data-piece className="text-xs sm:text-sm text-neutral-400 font-light mt-0.5 max-w-2xl leading-relaxed">
               Cobertura gráfica, análisis geopolítico y seguimiento de mercados en tiempo real.
             </p>
           </div>
@@ -195,6 +196,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
               return (
                 <article
                   key={report.id}
+                  data-assemble="card"
                   onClick={() => onReadReport(report)}
                   className="group relative bg-black rounded-2xl overflow-hidden border border-white/15 hover:border-white/40 transition-all duration-300 shadow-2xl flex flex-col justify-between cursor-pointer aspect-[4/5]"
                   style={{ backgroundColor: '#000000' }}
@@ -228,7 +230,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                   </div>
 
                   {/* Top Text Content Area */}
-                  <div className="p-5 sm:p-6 z-20 relative select-none">
+                  <div data-piece className="p-5 sm:p-6 z-20 relative select-none">
                     
                     {/* Header Row: Category · Flag + Country · Line */}
                     <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
@@ -264,7 +266,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                   </div>
 
                   {/* Media Container: Occupies bottom half with smooth gradient fade into black */}
-                  <div className="absolute inset-0 top-[44%] overflow-hidden z-0">
+                  <div data-piece className="absolute inset-0 top-[44%] overflow-hidden z-0">
                     <OptimizedPicture
                       image={report.optimizedImage || report.image}
                       alt={report.title}
@@ -288,6 +290,13 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                         BlackNews
                       </span>
                     </div>
+
+                    {/* Mini atlas LED: los países del informe encendidos
+                        (decorativo; ≥sm para no robarle sitio al pie) */}
+                    <MiniWorldMap
+                      countries={[...(report.countries ?? []), country.name]}
+                      className="hidden sm:block shrink-0 w-20 lg:w-24 h-9 opacity-95"
+                    />
 
                     {/* Right Side: Compact Photo Caption / Personaje (ONLY IF THERE IS ONE, at the same height) */}
                     {report.imageCaption && report.imageCaption.trim() ? (

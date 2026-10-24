@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { OptimizedImageSet } from '../types/news';
+import { TerminalBar, useTerminalGate } from './TerminalBar';
 
 // Precomputed mapping for stock news images if available
 let stockImagesMap: Record<string, OptimizedImageSet> = {};
@@ -40,6 +41,36 @@ export const OptimizedPicture: React.FC<OptimizedPictureProps> = ({
   onClick
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
+
+  /* Barra de carga tipo terminal sobre la imagen mientras carga:
+     - solo con el EFECTO activo (useTerminalGate);
+     - espera 250 ms: si la imagen está en caché, ni se llega a pintar;
+     - si la imagen nunca llega, la barra se retira igual (fail-open). */
+  const gateOn = useTerminalGate();
+  const [showBar, setShowBar] = useState(false);
+  const [gaveUp, setGaveUp] = useState(false);
+  const [fading, setFading] = useState(false);
+  const [gone, setGone] = useState(false);
+  // La malla LED se enciende en cuanto la imagen llega (o nos rendimos).
+  const lit = isLoaded || gaveUp;
+
+  useEffect(() => {
+    if (!fading || gone) return;
+    const id = window.setTimeout(() => setGone(true), 340);
+    return () => window.clearTimeout(id);
+  }, [fading, gone]);
+
+  useEffect(() => {
+    if (!gateOn || isLoaded) return;
+    const id = window.setTimeout(() => setShowBar(true), 250);
+    return () => window.clearTimeout(id);
+  }, [gateOn, isLoaded]);
+
+  useEffect(() => {
+    if (!showBar || isLoaded || gaveUp) return;
+    const id = window.setTimeout(() => setGaveUp(true), 12000);
+    return () => window.clearTimeout(id);
+  }, [showBar, isLoaded, gaveUp]);
 
   // Resolve whether image is an OptimizedImageSet or a string lookup
   let optimizedData: OptimizedImageSet | null = null;
@@ -117,11 +148,34 @@ export const OptimizedPicture: React.FC<OptimizedPictureProps> = ({
           {...(priority ? { fetchPriority: 'high' } : {})}
           decoding="async"
           onLoad={() => setIsLoaded(true)}
+          onError={() => setGone(true)}
           className={`w-full h-full object-cover transition-all duration-500 ease-out ${
             isLoaded ? 'opacity-100 filter-none' : blurDataUrl ? 'opacity-0' : 'opacity-100'
           } ${imgClassName}`}
         />
       </picture>
+
+      {/* Loader terminal [░▒▓…] + malla LED: apagada mientras carga, se
+          enciende con la imagen y ambos se retiran tras COMPLETE */}
+      {gateOn && showBar && !gone && (
+        <div
+          className={`absolute inset-0 z-10 bg-black/55 pointer-events-none transition-opacity duration-300 ${
+            fading ? 'opacity-0' : ''
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`bn-led absolute inset-0 [--led-step:9px]${lit ? ' lit' : ''}`}
+          />
+          <span className="absolute inset-0 flex items-center justify-center">
+            <TerminalBar
+              ready={isLoaded || gaveUp}
+              onSettled={() => setFading(true)}
+              className="text-[11px]"
+            />
+          </span>
+        </div>
+      )}
     </div>
   );
 };

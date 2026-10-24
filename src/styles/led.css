@@ -1,0 +1,61 @@
+/* ── Mallas de puntos LED ────────────────────────────────────────────────
+   El lenguaje del mapa de cobertura (tierra en puntos #2e2e2e + marcadores
+   encendidos) llevado al resto de la interfaz. Todo decorativo: capas con
+   pointer-events: none, respeto de prefers-reduced-motion y ninguna
+   información dependiente de los puntos. */
+
+/* Malla reutilizable: paso (--led-step) y color (--led-c) por variable. */
+.bn-led {
+  background-image: radial-gradient(
+    circle at center,
+    var(--led-c, #2e2e2e) 0 1px,
+    transparent 1.6px
+  );
+  background-size: var(--led-step, 14px) var(--led-step, 14px);
+}
+/* Encendido: mismos puntos, en blanco (el padre controla el retiro). */
+.bn-led.lit { --led-c: #ffffff; }
+
+/* ── Pared LED del hero: malla con desvanecido en los bordes ──
+   Va en un contenedor `relative isolate` con z-index negativo para quedar
+   detrás del texto sin depender del orden de capas de los ancestros. */
+.bn-led-wall {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  --led-step: 18px; --led-c: #262626;
+  background-image: radial-gradient(circle at center, var(--led-c, #262626) 0 1px, transparent 1.6px);
+  background-size: var(--led-step, 18px) var(--led-step, 18px);
+  -webkit-mask-image: radial-gradient(74% 70% at 50% 40%, #000 25%, transparent 76%);
+          mask-image: radial-gradient(74% 70% at 50% 40%, #000 25%, transparent 76%);
+}
+
+/* ── Panel marcador: cifras sobre malla fina con un reflejo superior ── */
+.bn-led-panel {
+  position: relative; overflow: hidden;
+  background-color: rgba(255, 255, 255, .025);
+  background-image: radial-gradient(circle at center, #2b2b2b 0 1px, transparent 1.6px);
+  background-size: 10px 10px;
+}
+.bn-led-panel::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(130% 100% at 15% 0%, rgba(255, 255, 255, .07), transparent 55%);
+}
+/* Halo de fósforo suave para el número del marcador. */
+.bn-led-glow { text-shadow: 0 0 12px rgba(255, 255, 255, .4), 0 0 30px rgba(255, 255, 255, .15); }
+
+/* ── Texto en matriz de puntos: glifo blanco perforado por la malla ──
+   Capa superior de puntos negros sobre base blanca recortada al texto; en
+   el fondo negro los agujeros desaparecen y el texto luce malla LED. Si el
+   navegador no soporta background-clip: text, el color sólido del fallback
+   mantiene el texto legible (fail-open). */
+.bn-dottext { color: #ffffff; }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .bn-dottext {
+    color: transparent;
+    background-image:
+      radial-gradient(circle at center, #000000 0 1.15px, transparent 1.45px),
+      linear-gradient(#ffffff, #ffffff);
+    background-size: 5px 5px, auto;
+    -webkit-background-clip: text;
+            background-clip: text;
+  }
+}

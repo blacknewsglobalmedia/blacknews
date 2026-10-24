@@ -15,31 +15,33 @@ export interface ClockCity {
   name: string;
   /** Zona IANA, p. ej. "Europe/Madrid". */
   tz: string;
+  /** Coordenadas del atlas [lon, lat] para el mapa del panel. */
+  coords?: [number, number];
 }
 
 /** Ciudades mostradas en la barra marquee y en su panel (Uruguay primero). */
 export const CLOCK_CITIES: ClockCity[] = [
-  { flag: "🇺🇾", name: "MONTEVIDEO", tz: "America/Montevideo" },
-  { flag: "🇦🇷", name: "BUENOS AIRES", tz: "America/Argentina/Buenos_Aires" },
-  { flag: "🇧🇷", name: "SÃO PAULO", tz: "America/Sao_Paulo" },
-  { flag: "🇨🇱", name: "SANTIAGO", tz: "America/Santiago" },
-  { flag: "🇨🇴", name: "BOGOTÁ", tz: "America/Bogota" },
-  { flag: "🇲🇽", name: "CIUDAD DE MÉXICO", tz: "America/Mexico_City" },
-  { flag: "🇺🇸", name: "NUEVA YORK", tz: "America/New_York" },
-  { flag: "🇪🇸", name: "MADRID", tz: "Europe/Madrid" },
-  { flag: "🇫🇷", name: "PARÍS", tz: "Europe/Paris" },
-  { flag: "🇩🇪", name: "BERLÍN", tz: "Europe/Berlin" },
-  { flag: "🇬🇧", name: "LONDRES", tz: "Europe/London" },
-  { flag: "🇨🇭", name: "ZÚRICH", tz: "Europe/Zurich" },
-  { flag: "🇮🇹", name: "ROMA", tz: "Europe/Rome" },
-  { flag: "🇷🇺", name: "MOSCÚ", tz: "Europe/Moscow" },
-  { flag: "🇦🇪", name: "DUBÁI", tz: "Asia/Dubai" },
-  { flag: "🇮🇳", name: "NUEVA DELHI", tz: "Asia/Kolkata" },
-  { flag: "🇨🇳", name: "PEKÍN", tz: "Asia/Shanghai" },
-  { flag: "🇯🇵", name: "TOKIO", tz: "Asia/Tokyo" },
-  { flag: "🇰🇷", name: "SEÚL", tz: "Asia/Seoul" },
-  { flag: "🇿🇦", name: "JOHANNESBURGO", tz: "Africa/Johannesburg" },
-  { flag: "🇦🇺", name: "SÍDNEY", tz: "Australia/Sydney" },
+  { flag: "🇺🇾", name: "MONTEVIDEO", tz: "America/Montevideo", coords: [-56.16, -34.9] },
+  { flag: "🇦🇷", name: "BUENOS AIRES", tz: "America/Argentina/Buenos_Aires", coords: [-58.38, -34.6] },
+  { flag: "🇧🇷", name: "SÃO PAULO", tz: "America/Sao_Paulo", coords: [-46.63, -23.55] },
+  { flag: "🇨🇱", name: "SANTIAGO", tz: "America/Santiago", coords: [-70.65, -33.45] },
+  { flag: "🇨🇴", name: "BOGOTÁ", tz: "America/Bogota", coords: [-74.07, 4.71] },
+  { flag: "🇲🇽", name: "CIUDAD DE MÉXICO", tz: "America/Mexico_City", coords: [-99.13, 19.43] },
+  { flag: "🇺🇸", name: "NUEVA YORK", tz: "America/New_York", coords: [-74.0, 40.71] },
+  { flag: "🇪🇸", name: "MADRID", tz: "Europe/Madrid", coords: [-3.7, 40.42] },
+  { flag: "🇫🇷", name: "PARÍS", tz: "Europe/Paris", coords: [2.35, 48.86] },
+  { flag: "🇩🇪", name: "BERLÍN", tz: "Europe/Berlin", coords: [13.4, 52.52] },
+  { flag: "🇬🇧", name: "LONDRES", tz: "Europe/London", coords: [-0.13, 51.51] },
+  { flag: "🇨🇭", name: "ZÚRICH", tz: "Europe/Zurich", coords: [8.54, 47.37] },
+  { flag: "🇮🇹", name: "ROMA", tz: "Europe/Rome", coords: [12.5, 41.9] },
+  { flag: "🇷🇺", name: "MOSCÚ", tz: "Europe/Moscow", coords: [37.62, 55.75] },
+  { flag: "🇦🇪", name: "DUBÁI", tz: "Asia/Dubai", coords: [55.27, 25.2] },
+  { flag: "🇮🇳", name: "NUEVA DELHI", tz: "Asia/Kolkata", coords: [77.21, 28.61] },
+  { flag: "🇨🇳", name: "PEKÍN", tz: "Asia/Shanghai", coords: [116.4, 39.9] },
+  { flag: "🇯🇵", name: "TOKIO", tz: "Asia/Tokyo", coords: [139.69, 35.68] },
+  { flag: "🇰🇷", name: "SEÚL", tz: "Asia/Seoul", coords: [126.98, 37.57] },
+  { flag: "🇿🇦", name: "JOHANNESBURGO", tz: "Africa/Johannesburg", coords: [28.05, -26.2] },
+  { flag: "🇦🇺", name: "SÍDNEY", tz: "Australia/Sydney", coords: [151.21, -33.87] },
 ];
 
 const MONTHS = [

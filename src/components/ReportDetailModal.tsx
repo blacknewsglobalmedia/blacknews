@@ -23,6 +23,7 @@ import { RichText } from './RichText';
 import { PostInteractions } from './PostInteractions';
 import { readTimeOf } from '../utils/readTime';
 import { getReadPct, setReadPct } from '../utils/readProgress';
+import { DotProgress, DOT_TONE_WHITE } from './DotProgress';
 import { Highlight, getHighlights, addHighlight, removeHighlight } from '../utils/highlights';
 import { CommentMeter } from '../utils/commentMeter';
 
@@ -81,6 +82,8 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [progress, setProgress] = useState(0);
+  /** Capítulo activo para el rail lateral de puntos. */
+  const [activeSec, setActiveSec] = useState(0);
   const [resumePct, setResumePct] = useState<number | null>(null);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [selPill, setSelPill] = useState<{ text: string; x: number; y: number; below: boolean } | null>(null);
@@ -142,6 +145,12 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
     return () => window.clearTimeout(timer);
   }, [isOpen, report?.id]);
 
+  // Al cambiar de informe, el rail vuelve al primer capítulo (hook: siempre
+  // antes del return anticipado de abajo)
+  useEffect(() => {
+    setActiveSec(0);
+  }, [report?.id]);
+
   if (!isOpen || !report) return null;
 
   const toggleSpeech = () => {
@@ -172,6 +181,20 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
     } catch {}
   };
 
+  // Salto a un capítulo desde el rail lateral de puntos (no es hook: puede
+  // vivir tras el return anticipado de abajo).
+  const goToSection = (secIdx: number) => {
+    const container = scrollRef.current;
+    const el = container?.querySelector<HTMLElement>(`[data-sec="${secIdx}"]`);
+    if (!container || !el) return;
+    const top =
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      72; // barra lectora fija
+    container.scrollTo({ top, behavior: 'smooth' });
+  };
+
   const handleScroll = () => {
     const container = scrollRef.current;
     const art = articleRef.current;
@@ -180,6 +203,17 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
     const pct = max > 0 ? Math.min(1, Math.max(0, container.scrollTop / max)) : 0;
     pctRef.current = pct;
     setProgress((prev) => (Math.abs(prev - pct) < 0.004 ? prev : pct));
+    // Capítulo activo para el rail (nodos [data-sec] en orden del documento)
+    const heads = container.querySelectorAll<HTMLElement>('[data-sec]');
+    if (heads.length > 0) {
+      const box = container.getBoundingClientRect();
+      const mark = box.top + box.height * 0.35;
+      let current = 0;
+      heads.forEach((n, i) => {
+        if (n.getBoundingClientRect().top <= mark) current = i;
+      });
+      setActiveSec((prev) => (prev === current ? prev : current));
+    }
     const now = Date.now();
     if (now - lastSaveRef.current > 500) {
       lastSaveRef.current = now;
@@ -266,15 +300,21 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
   // Términos del glosario ya resaltados en este render (1ª aparición por informe)
   const seenTerms = new Set<string>();
 
+  // Capítulos (títulos del informe) para el rail lateral de navegación
+  const chapters = report.sections
+    .map((s, idx) =>
+      s.type === 'heading' && s.text ? { idx, text: s.text } : null,
+    )
+    .filter((x): x is { idx: number; text: string } => x !== null);
+
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="fixed inset-0 z-50 overflow-y-auto bg-black flex flex-col justify-start font-['Lexend',sans-serif]">
       {/* Top Reader Bar: Minimalist & Refined */}
       <div className="sticky top-0 z-30 w-full bg-black/95 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between">
-        {/* Barra de progreso de lectura */}
-        <div
-          className="absolute top-0 left-0 h-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)] transition-[width] duration-150 ease-out"
-          style={{ width: `${Math.round(progress * 100)}%` }}
-        />
+        {/* Progreso de lectura: tira de puntos LED sobre el borde superior */}
+        <div className="absolute top-0 inset-x-0 px-4 sm:px-6 pt-1.5 pointer-events-none">
+          <DotProgress ratio={progress} tone={DOT_TONE_WHITE} label="Progreso de lectura" />
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
@@ -446,6 +486,40 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
         </div>
       )}
 
+      {/* Rail de secciones: puntos = capítulos del informe (solo ≥xl) */}
+      {chapters.length > 1 && (
+        <nav
+          aria-label="Secciones del informe"
+          className="hidden xl:flex fixed right-4 top-1/2 -translate-y-1/2 z-40 flex-col items-center gap-3"
+        >
+          {chapters.map((c, i) => {
+            const isCurrent = i === activeSec;
+            const isRead = i < activeSec;
+            return (
+              <button
+                key={c.idx}
+                type="button"
+                onClick={() => goToSection(c.idx)}
+                title={c.text}
+                aria-label={c.text}
+                aria-current={isCurrent ? 'true' : undefined}
+                className="group flex items-center justify-center w-5 h-5 cursor-pointer"
+              >
+                <span
+                  className={`rounded-full transition-all duration-200 ${
+                    isCurrent
+                      ? 'w-2.5 h-2.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)] map-pulse'
+                      : isRead
+                        ? 'w-1.5 h-1.5 bg-white/70'
+                        : 'w-1.5 h-1.5 bg-neutral-700 group-hover:bg-neutral-400'
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {/* Main Article Container */}
       <article
         ref={articleRef}
@@ -563,6 +637,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
               return (
                 <h2
                   key={idx}
+                  data-sec={idx}
                   className="font-headline text-2xl sm:text-3xl font-normal text-white tracking-tight pt-8 border-t border-white/10"
                 >
                   {sec.text}

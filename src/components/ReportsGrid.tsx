@@ -2,6 +2,7 @@ import React from 'react';
 import { Share2, Bookmark, ArrowUpRight, Newspaper } from 'lucide-react';
 import { Report, CategoryId } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
+import { MiniWorldMap } from './MiniWorldMap';
 import { readTimeOf } from '../utils/readTime';
 import { ResumeBadge } from './ResumeBadge';
 
@@ -130,11 +131,13 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                     return (
                       <article
                         key={report.id}
+                        data-assemble="card"
                         className="flex flex-col justify-between group"
                       >
                         <div>
                           {/* Image in FULL COLOR with OptimizedPicture */}
                           <div
+                            data-piece
                             className="w-full aspect-[16/9] rounded-lg overflow-hidden relative cursor-pointer mb-5 shadow-lg"
                             onClick={() => onReadReport(report)}
                           >
@@ -146,13 +149,18 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                               className="w-full h-full rounded-lg"
                               imgClassName="group-hover:scale-[1.015] transition-transform duration-500 ease-out"
                             />
-                            <div className="absolute top-2.5 left-2.5 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
+                            <div data-piece className="absolute top-2.5 left-2.5 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
                               {report.category}
                             </div>
+                            {/* Mini atlas LED: países del informe encendidos */}
+                            <MiniWorldMap
+                              countries={report.countries}
+                              className="absolute bottom-2 right-2 z-10 w-20 lg:w-24 h-9 opacity-90 pointer-events-none"
+                            />
                           </div>
 
                           {/* Metadata */}
-                          <div className="flex items-center gap-2 text-xs font-sans text-neutral-400 font-medium mb-2.5">
+                          <div data-piece className="flex items-center gap-2 text-xs font-sans text-neutral-400 font-medium mb-2.5">
                             <span>{report.publishedAt}</span>
                             <span>·</span>
                             <span>{readTimeOf(report)}</span>
@@ -161,6 +169,7 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
 
                           {/* Title with Editorial Serif */}
                           <h3
+                            data-piece
                             onClick={() => onReadReport(report)}
                             className="font-headline text-2xl sm:text-[1.7rem] font-normal text-white tracking-tight leading-snug hover:text-neutral-200 transition-colors cursor-pointer mb-3"
                           >
@@ -243,11 +252,13 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                     return (
                       <article
                         key={report.id}
+                        data-assemble="card"
                         className="flex flex-col justify-between group"
                       >
                         <div>
                           {/* Image with OptimizedPicture */}
                           <div
+                            data-piece
                             className="w-full aspect-[16/9] rounded-lg overflow-hidden relative cursor-pointer mb-4 shadow-sm"
                             onClick={() => onReadReport(report)}
                           >
@@ -259,18 +270,24 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                               className="w-full h-full rounded-lg"
                               imgClassName="group-hover:scale-[1.015] transition-transform duration-500 ease-out"
                             />
-                            <div className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm text-white px-2 py-0.5 text-[10px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
+                            <div data-piece className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm text-white px-2 py-0.5 text-[10px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
                               {report.category}
                             </div>
+                            {/* Mini atlas LED: países del informe encendidos */}
+                            <MiniWorldMap
+                              countries={report.countries}
+                              className="absolute bottom-2 right-2 z-10 w-16 lg:w-20 h-8 opacity-90 pointer-events-none"
+                            />
                           </div>
 
                           {/* Metadata */}
-                          <div className="text-xs font-sans text-neutral-400 font-medium mb-2">
+                          <div data-piece className="text-xs font-sans text-neutral-400 font-medium mb-2">
                             <ResumeBadge reportId={report.id} /> {readTimeOf(report)} · {report.publishedAt}
                           </div>
 
                           {/* Title with Editorial Serif */}
                           <h3
+                            data-piece
                             onClick={() => onReadReport(report)}
                             className="font-headline text-lg sm:text-[1.28rem] font-normal text-white tracking-tight leading-snug hover:text-neutral-200 transition-colors cursor-pointer mb-2"
                           >

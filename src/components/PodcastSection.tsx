@@ -1,15 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Play, Pause } from "lucide-react";
 import type { PodcastEpisode } from "../types/podcast";
+import { DotProgress, DOT_IDLE } from "./DotProgress";
 
 interface PodcastSectionProps {
   episodes: PodcastEpisode[];
 }
-
-/** Puntos sin marcar: el mismo gris de la tierra del atlas (#2e2e2e). */
-const DOT_IDLE = "#2e2e2e";
-/** Puntos del progreso de reproducción (legible también en móvil). */
-const PROGRESS_DOTS = 40;
 
 /** h:mm:ss si pasa de la hora; en otro caso m:ss. */
 function formatTime(totalSec: number): string {
@@ -20,64 +16,6 @@ function formatTime(totalSec: number): string {
   const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
   return `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
 }
-
-/**
- * Constelación de puntos al estilo del mapa de cobertura: los reproducidos
- * se encienden en esmeralda, el punto de cabeza late con el mismo halo
- * pulsante del atlas y el resto espera en gris tierra. El control real es un
- * range nativo invisible encima (arrastrar, clic y teclado funcionan).
- */
-const DotProgress: React.FC<{
-  ratio: number;
-  active: boolean;
-  onSeek: (fraction: number) => void;
-}> = ({ ratio, active, onSeek }) => {
-  const step = 1 / (PROGRESS_DOTS - 1);
-  return (
-    <div className="relative flex-1 h-6 flex items-center min-w-0">
-      <div
-        aria-hidden
-        className="flex w-full items-center justify-between"
-      >
-        {Array.from({ length: PROGRESS_DOTS }).map((_, i) => {
-          const frac = i * step;
-          const played = frac <= ratio + step / 2;
-          const isHead = played && frac + step > ratio + step / 2;
-          return (
-            <span
-              key={i}
-              className="relative flex items-center justify-center shrink-0"
-            >
-              {isHead && active && (
-                <span className="absolute w-3 h-3 rounded-full bg-emerald-400/40 map-pulse" />
-              )}
-              <span
-                className={`rounded-full ${
-                  isHead
-                    ? "w-[5px] h-[5px] bg-emerald-400"
-                    : played
-                      ? "w-1 h-1 bg-emerald-400/75"
-                      : "w-1 h-1"
-                }`}
-                style={played ? undefined : { background: DOT_IDLE }}
-              />
-            </span>
-          );
-        })}
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={1000}
-        step={1}
-        value={Math.round(Math.min(1, Math.max(0, ratio)) * 1000)}
-        onChange={(e) => onSeek(Number(e.target.value) / 1000)}
-        aria-label="Progreso del episodio"
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-      />
-    </div>
-  );
-};
 
 /**
  * «Podcast» de portada: episodios subidos desde el estudio (pestaña Podcast).
@@ -262,6 +200,7 @@ export const PodcastSection: React.FC<PodcastSectionProps> = ({ episodes }) => {
                 ratio={ratio}
                 active={playing && currentId === featured.id}
                 onSeek={seekFeatured}
+                label="Progreso del episodio"
               />
               <span className="text-[11px] font-mono text-neutral-600 tabular-nums">
                 {formatTime(featuredDuration)}

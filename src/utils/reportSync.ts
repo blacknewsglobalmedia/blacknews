@@ -22,6 +22,29 @@ const UNSYNCED_KEY = "blacknews_unsynced_report_ids";
 const PENDING_DELETES_KEY = "blacknews_pending_report_deletes";
 const REPORTS_KEY = "blacknews_reports";
 
+/**
+ * Firestore rechaza `undefined` (a diferencia de JSON.stringify): lo filtra
+ * a cualquier profundidad antes de un setDoc. Sin esto, campos opcionales
+ * sin definir — p. ej. `countries` o `optimizedImage` de un despacho sin
+ * países ni imagen optimizada — rompían la subida entera y el informe se
+ * quedaba solo en el navegador del redactor.
+ */
+export function firestoreDoc(obj: object): Record<string, unknown> {
+  const strip = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(strip);
+    if (value instanceof Date) return value;
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, strip(v)]),
+      );
+    }
+    return value;
+  };
+  return strip(obj) as Record<string, unknown>;
+}
+
 function readIdList(key: string): string[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || "[]");
@@ -103,7 +126,7 @@ export async function retryPendingReportSync(): Promise<void> {
       continue;
     }
     try {
-      await setDoc(doc(db, "reports", id), report);
+      await setDoc(doc(db, "reports", id), firestoreDoc(report));
       markReportSynced(id);
       console.info(`[BLACKNEWS] Informe ${id} sincronizado con la nube`);
     } catch (err) {

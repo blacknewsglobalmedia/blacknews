@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import type { Report } from "../types/news";
+import { READ_POS_EVENT, readDays } from "../utils/readProgress";
 
 const STORAGE_KEY = "blacknews_briefing_topics";
 const MAX_TOPICS = 3;
@@ -40,6 +41,15 @@ export const PersonalBriefing: React.FC<PersonalBriefingProps> = ({
   // Abierto a edición sólo al entrar sin temas: después se lee la tira.
   const [picking, setPicking] = useState(topics.length === 0);
 
+  // Huella de lectura: días guardados; se refresca al volver del lector
+  // (setReadPct reemite READ_POS_EVENT en cada guardado).
+  const [days, setDays] = useState<string[]>(() => readDays());
+  useEffect(() => {
+    const sync = () => setDays(readDays());
+    window.addEventListener(READ_POS_EVENT, sync);
+    return () => window.removeEventListener(READ_POS_EVENT, sync);
+  }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(topics));
@@ -60,6 +70,18 @@ export const PersonalBriefing: React.FC<PersonalBriefingProps> = ({
     topics.length > 0
       ? reports.filter((r) => topics.includes(r.category)).slice(0, MAX_ITEMS)
       : [];
+
+  // Últimos 30 días terminando en hoy; encendido = día con lectura guardada
+  const daySet = new Set(days);
+  const footprint: { iso: string; on: boolean }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    footprint.push({ iso, on: daySet.has(iso) });
+  }
+  const readCount = footprint.filter((f) => f.on).length;
 
   return (
     <section className="border-t border-white/10 bg-black font-sans">
@@ -154,6 +176,33 @@ export const PersonalBriefing: React.FC<PersonalBriefingProps> = ({
             )}
           </>
         )}
+
+        {/* Huella de lectura: los últimos 30 días en malla de puntos */}
+        <div
+          role="img"
+          aria-label={`Huella de lectura: ${readCount} de los últimos 30 días con actividad`}
+          className="mt-6 pt-4 border-t border-white/5 flex flex-wrap items-center gap-x-4 gap-y-2"
+        >
+          <span className="text-[10px] uppercase tracking-[0.25em] text-neutral-600 font-semibold">
+            Huella de lectura
+          </span>
+          <div aria-hidden="true" className="flex gap-[5px] flex-wrap">
+            {footprint.map((f) => (
+              <span
+                key={f.iso}
+                title={f.on ? "Leíste ese día" : undefined}
+                className={`w-1.5 h-1.5 rounded-full ${
+                  f.on
+                    ? "bg-white/75 shadow-[0_0_6px_rgba(255,255,255,0.4)]"
+                    : "bg-[#2e2e2e]"
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-[10px] font-mono text-neutral-600">
+            {readCount}/30 días
+          </span>
+        </div>
       </div>
     </section>
   );

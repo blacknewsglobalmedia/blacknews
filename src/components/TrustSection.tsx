@@ -45,6 +45,32 @@ const initials = (name: string): string => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+/** Meses cortos (es-ES) para leer fechas «04 oct 2026 · …». */
+const MSHORT = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+const MONTH_IDX: Record<string, number> = Object.fromEntries(
+  MSHORT.map((m, i) => [m, i]),
+);
+
+const isoLocal = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * Día de publicación (ISO local): primero del id `rep-custom-<ms>` y si no,
+ * de la fecha visible («04 oct 2026 · …»). Sin fecha fiable no se cuenta.
+ */
+const reportIso = (r: Report): string | null => {
+  const ms = /^rep-custom-(\d{13})$/.exec(r.id)?.[1];
+  if (ms) return isoLocal(new Date(Number(ms)));
+  const m = /^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/.exec(r.publishedAt ?? "");
+  if (!m) return null;
+  const month = MONTH_IDX[m[2].toLowerCase()];
+  if (month === undefined) return null;
+  return isoLocal(new Date(Number(m[3]), month, Number(m[1])));
+};
+
 /** Paquete de confianza: manifiesto editorial, redacción y transparencia. */
 export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
   const team = useMemo(() => {
@@ -57,6 +83,35 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
     });
     return Array.from(seen.values()).slice(0, 6);
   }, [reports]);
+
+  // Ritmo de publicación: cuatro semanas terminando en la semana actual
+  // (rejilla lunes-first; los días que aún no llegaron quedan huecos).
+  const heat = useMemo(() => {
+    const counts = new Map<string, number>();
+    reports.forEach((r) => {
+      const iso = reportIso(r);
+      if (iso) counts.set(iso, (counts.get(iso) ?? 0) + 1);
+    });
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    const start = new Date(monday);
+    start.setDate(monday.getDate() - 21);
+    const cells: { iso: string; count: number; future: boolean }[] = [];
+    for (let i = 0; i < 35; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const iso = isoLocal(d);
+      cells.push({
+        iso,
+        count: counts.get(iso) ?? 0,
+        future: d.getTime() > today.getTime(),
+      });
+    }
+    return cells;
+  }, [reports]);
+  const heatTotal = heat.reduce((sum, c) => (c.future ? sum : sum + c.count), 0);
 
   return (
     <section className="border-t border-white/10 bg-black font-sans">
@@ -76,7 +131,7 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
           {/* MANIFIESTO */}
-          <div>
+          <div data-assemble>
             <div className="border-b border-white/10 pb-3 mb-5 text-[11px] uppercase tracking-[0.2em] text-neutral-500 font-semibold">
               MANIFIESTO
             </div>
@@ -100,7 +155,7 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
           </div>
 
           {/* REDACCIÓN */}
-          <div>
+          <div data-assemble>
             <div className="border-b border-white/10 pb-3 mb-5 text-[11px] uppercase tracking-[0.2em] text-neutral-500 font-semibold">
               LA REDACCIÓN
             </div>
@@ -136,7 +191,7 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
           </div>
 
           {/* TRANSPARENCIA */}
-          <div>
+          <div data-assemble>
             <div className="border-b border-white/10 pb-3 mb-5 text-[11px] uppercase tracking-[0.2em] text-neutral-500 font-semibold">
               CÓMO NOS FINANCIAMOS
             </div>
@@ -152,6 +207,49 @@ export const TrustSection: React.FC<TrustSectionProps> = ({ reports }) => {
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+
+        {/* Ritmo de publicación: cuatro semanas en malla de puntos */}
+        <div data-assemble className="mt-12 pt-8 border-t border-white/10">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-4">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500 font-semibold">
+              Ritmo de publicación
+            </div>
+            <div className="text-[11px] font-mono text-neutral-600">
+              {heatTotal} informes en 4 semanas · punto encendido = día con
+              publicación
+            </div>
+          </div>
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 w-fit">
+            {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
+              <span key={d} className="text-[9px] font-mono text-neutral-600 text-center">
+                {d}
+              </span>
+            ))}
+            {heat.map((cell) =>
+              cell.future ? (
+                <span key={cell.iso} className="w-2.5 h-2.5" />
+              ) : (
+                <span
+                  key={cell.iso}
+                  title={
+                    cell.count > 0
+                      ? `${Number(cell.iso.slice(8, 10))} ${MSHORT[Number(cell.iso.slice(5, 7)) - 1]} · ${cell.count} informe${cell.count > 1 ? "s" : ""}`
+                      : "sin publicaciones"
+                  }
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    cell.count >= 3
+                      ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+                      : cell.count === 2
+                        ? "bg-white/85"
+                        : cell.count === 1
+                          ? "bg-white/55"
+                          : "bg-[#2e2e2e]"
+                  }`}
+                />
+              ),
+            )}
           </div>
         </div>
       </div>

@@ -105,6 +105,7 @@ export const OpenFrontsStrip: React.FC = () => {
             return (
               <li
                 key={f.name}
+                data-assemble
                 className="shrink-0 w-[240px] rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors px-4 py-3"
               >
                 <div className="flex items-center gap-2">

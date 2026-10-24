@@ -1,0 +1,58 @@
+:root { --assemble-accent: #52525b; }
+
+.asm-rel { position: relative; }
+
+/* ── Fondo temporal del bloque (solo durante el armado) ── */
+html.bn-assemble-on [data-assemble]::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: #050505; border: 1px solid #161616;
+  opacity: 0; transform: scale(.985); z-index: -1; pointer-events: none;
+  transition: opacity .5s, transform .5s cubic-bezier(.2,.8,.2,1);
+}
+html.bn-assemble-on [data-assemble].asm-run { isolation: isolate; }
+html.bn-assemble-on [data-assemble].asm-run::before { opacity: 1; transform: none; }
+
+/* ── Piezas ── */
+html.bn-assemble-on [data-assemble] [data-piece]:not(.in) {
+  opacity: 0; transform: translateY(6px) scale(.94); filter: blur(4px);
+}
+html.bn-assemble-on [data-piece].asm-anim {
+  transition: opacity .45s, transform .55s cubic-bezier(.2,.9,.25,1.2), filter .45s;
+}
+/* medición sin transformaciones (dimensiones reales) */
+html.bn-assemble-on [data-piece].asm-measure {
+  transform: none !important; filter: none !important; transition: none !important;
+}
+
+/* ── Tarjetas fuera de las 6 primeras: solo fade ── */
+html.bn-assemble-on .asm-fade { opacity: 0; transition: opacity .4s ease; }
+html.bn-assemble-on .asm-fade.in { opacity: 1; }
+html.bn-assemble-on .asm-fade [data-piece] { opacity: 1; transform: none; filter: none; }
+
+/* ── Contornos con medidas ── */
+.asm-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.ghost { position: absolute; border: 1px dashed var(--assemble-accent); opacity: 0; transition: opacity .25s; }
+.ghost.on { opacity: .9; }
+.ghost.off { opacity: 0; transition: opacity .5s; }
+.ghost i { position: absolute; width: 6px; height: 6px; background: #000; border: 1px solid var(--assemble-accent); }
+.ghost i:nth-child(1) { left: -4px; top: -4px; }
+.ghost i:nth-child(2) { right: -4px; top: -4px; }
+.ghost i:nth-child(3) { left: -4px; bottom: -4px; }
+.ghost i:nth-child(4) { right: -4px; bottom: -4px; }
+.ghost span {
+  position: absolute; left: 0; top: -17px; white-space: nowrap;
+  font: 10px/1 ui-monospace, Menlo, monospace; color: var(--assemble-accent);
+}
+
+/* ── Escritura tipo código (titular y bajada de la noticia principal) ── */
+.asm-decode { color: var(--assemble-accent); }
+/* Señal "caliente": banda de escritura y cursor en blanco con halo de
+   fósforo — el punto activo se lee como un terminal encendido. */
+.asm-hot {
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, .65), 0 0 18px rgba(255, 255, 255, .28);
+}
+.asm-cursor { animation: asm-blink .7s steps(1, end) infinite; }
+@keyframes asm-blink { 50% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) { .asm-layer { display: none; } }

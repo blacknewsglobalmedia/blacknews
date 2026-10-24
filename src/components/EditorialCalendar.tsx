@@ -393,6 +393,59 @@ export const EditorialCalendar: React.FC<EditorialCalendarProps> = ({
         </div>
       </div>
 
+      {/* ── El año en puntos: cada día del año visible en la malla ────
+          Decorativa: la rejilla de abajo sigue siendo la interfaz de
+          selección; aquí solo se ve el pulso del año de un vistazo. */}
+      <div className="bg-neutral-950/70 border border-white/10 rounded-2xl p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-3">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
+            El año en puntos · {cursor.year}
+          </span>
+          <span className="text-[10px] text-neutral-600 font-mono">
+            punto encendido = día con acontecimiento
+          </span>
+        </div>
+        <div aria-hidden="true" className="space-y-1 overflow-x-auto pb-1">
+          {MONTHS_SHORT.map((label, m) => {
+            const days = new Date(Date.UTC(cursor.year, m + 1, 0)).getUTCDate();
+            return (
+              <div key={label} className="flex items-center gap-1.5 w-max">
+                <span className="w-7 shrink-0 text-[9px] font-mono text-neutral-600">
+                  {label}
+                </span>
+                <div className="flex gap-[3px]">
+                  {Array.from({ length: days }, (_, i) => {
+                    const iso = `${cursor.year}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+                    const evs = eventsOn(iso);
+                    const on = evs.length > 0;
+                    const isToday = iso === now;
+                    return (
+                      <span
+                        key={iso}
+                        title={
+                          on
+                            ? `${i + 1} ${label}: ${evs.map((e) => e.title).join(' · ')}`
+                            : undefined
+                        }
+                        className={`w-[6px] h-[6px] rounded-full shrink-0 ${
+                          on
+                            ? 'bg-white shadow-[0_0_5px_rgba(255,255,255,0.45)]'
+                            : 'bg-[#2e2e2e]'
+                        } ${
+                          isToday
+                            ? 'outline outline-1 outline-offset-1 outline-emerald-400'
+                            : ''
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_20rem] gap-6 items-start">
         {/* ── Rejilla mensual ────────────────────────────────────────── */}
         <div className="bg-neutral-950/70 border border-white/10 rounded-2xl overflow-hidden">

@@ -34,6 +34,7 @@ import {
   ROLE_CHIP_CLASS,
   canOpenStudioTab,
 } from "../types/studio";
+import { AssembleToggle } from "./AssembleToggle";
 
 /** Atajo del menú móvil hacia una sección concreta del panel. */
 interface PanelShortcut {
@@ -231,7 +232,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   );
 
   return (
-    <header className="bn-safe-top w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
+    <header data-assemble data-step="150" className="bn-safe-top w-full bg-black border-b border-white/10 sticky top-0 z-40 select-none">
       {/* Top micro-strip: clean & uncrowded (se pliega al compactar) */}
       <div className={`${compact ? "hidden" : ""} max-w-7xl mx-auto px-4 sm:px-6 h-7 flex items-center justify-between text-[11px] font-sans tracking-wide text-neutral-400 border-b border-white/5 uppercase font-medium`}>
         <div className="flex items-center gap-2.5">
@@ -269,6 +270,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             <ImageOff className="w-3 h-3" />
             <span className="hidden sm:inline">LIGERO</span>
           </button>
+          <span className="text-neutral-700">·</span>
+          <AssembleToggle />
           <span className="text-neutral-700 hidden sm:inline">·</span>
           <button
             onClick={onShareSite}
@@ -284,7 +287,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           the content container width, so nothing can spill past the side margins */}
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 transition-[height] duration-200 ${compact ? "h-11 sm:h-12" : "h-14 sm:h-16"}`}>
         {/* Left: Brand with Editorial Authority */}
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center shrink-0" data-piece>
           <button
             onClick={() => handleCategoryClick("TODAS")}
             className={`font-headline font-semibold tracking-tight text-white hover:text-neutral-200 transition-all flex items-baseline cursor-pointer ${compact ? "text-lg sm:text-xl" : "text-2xl sm:text-[1.85rem]"}`}
@@ -299,6 +302,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* Panel: en móvil vive en el menú hamburguesa (menos cabecera que saturar) */}
           {canAccessEditorialStudio && (
             <button
+              data-piece
               onClick={onOpenStudio}
               className={`hidden sm:flex px-3 py-1.5 text-xs font-sans font-medium uppercase tracking-wider items-center gap-1.5 transition-colors cursor-pointer rounded-md border ${
                 isStudioOpen
@@ -325,6 +329,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           {/* User Account / Google Chip (solo ≥sm; en móvil está en el menú) */}
           {onOpenGoogleAuth && (
             <button
+              data-piece
               onClick={onOpenGoogleAuth}
               className="hidden sm:flex items-center gap-1.5 py-1.5 px-2.5 rounded-md border border-white/15 hover:border-white text-neutral-300 hover:text-white text-xs font-sans font-medium transition-colors cursor-pointer"
               title={accountTitle}
@@ -340,6 +345,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Search Button */}
           <button
+            data-piece
             onClick={onOpenSearch}
             className="p-2.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
             aria-label="Buscar"
@@ -383,6 +389,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       {/* Desktop category strip: strictly contained within max-w-7xl width.
           Scrolls horizontally if categories exceed available width without breaking layout. */}
       <nav
+        data-piece
         className="hidden lg:block border-t border-white/5 w-full overflow-hidden"
         aria-label="Secciones editoriales"
       >

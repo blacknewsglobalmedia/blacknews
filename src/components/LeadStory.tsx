@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Share2, Bookmark, ArrowRight, Sparkles, TrendingUp } from 'lucide-react';
 import { Report } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
 import { readTimeOf } from '../utils/readTime';
 import { ResumeBadge } from './ResumeBadge';
+import { useDecodeText } from '../lib/decode';
+import { useAssemble } from '../lib/assemble';
+import { TerminalBar, BAR_TOTAL_MS } from './TerminalBar';
 
 interface LeadStoryProps {
   report: Report;
@@ -20,6 +23,42 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
   isBookmarked,
   onToggleBookmark,
 }) => {
+  // Escritura tipo código (░▒▌) del titular y la bajada: cada uno empieza
+  // cuando su pieza recibe `.in` en la cascada del bloque de apertura.
+  const asmOn = useAssemble();
+  const [booting, setBooting] = useState(
+    () => asmOn && !matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  const [barDone, setBarDone] = useState(false);
+  // Duración real de la escritura del titular (misma fórmula que decode.ts):
+  // la bajada espera además ese tiempo, de modo que su escritura comienza
+  // cuando el título ya está completo.
+  const titleDurMs = Math.min(1400, 450 + report.title.length * 3);
+  // El titular espera a que la barra de carga termine (mismo reloj: ambos
+  // arrancan al recibir `.in`). Las constantes —nunca condicionales— evitan
+  // re-ejecutar el efecto del decode en mitad de la escritura.
+  const titleDec = useDecodeText<HTMLHeadingElement>(report.title, {
+    startDelayMs: BAR_TOTAL_MS,
+  });
+  const leadDec = useDecodeText<HTMLParagraphElement>(report.subtitle, {
+    startDelayMs: BAR_TOTAL_MS + titleDurMs,
+  });
+  // Secuencia estricta por estado, no por tiempos: la bajada no existe en
+  // pantalla hasta que el titular termina de escribirse (`view === null` tras
+  // armarse). Cubre también el apagado del EFECTO y el fallo de seguridad.
+  const deckBlocked = booting || (titleDec.armed && titleDec.view !== null);
+  // La barra se retira cuando COMPLETE coincide con el turno del titular
+  // (`armed`), o al instante si se apaga el EFECTO. La red de seguridad cubre
+  // el caso de que el turno nunca llegue: entonces el titular sale plano.
+  useEffect(() => {
+    if (!booting) return;
+    if (!asmOn || (barDone && titleDec.armed)) {
+      setBooting(false);
+      return;
+    }
+    const fail = window.setTimeout(() => setBooting(false), 3000);
+    return () => clearTimeout(fail);
+  }, [booting, asmOn, barDone, titleDec.armed]);
   // Datos reales del artículo para las columnas laterales de la imagen.
   // Cada bloque se oculta si el informe no trae ese dato (nada de muestra).
   const sections = report.sections || [];
@@ -39,10 +78,10 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
 
   return (
     <section className="w-full bg-black pb-12 sm:pb-16 pt-6 sm:pt-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6" data-assemble data-step="150">
         
         {/* Folio Header Line: Elegant & Natural Editorial */}
-        <div className="flex flex-wrap items-center justify-between pb-3 mb-8 text-xs font-sans uppercase tracking-wider text-neutral-400 gap-2 border-b border-white/10">
+        <div data-piece className="flex flex-wrap items-center justify-between pb-3 mb-8 text-xs font-sans uppercase tracking-wider text-neutral-400 gap-2 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
             <span className="text-white font-semibold tracking-widest">PRIMERA PLANA · APERTURA EDITORIAL</span>
@@ -58,20 +97,84 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
         </div>
 
         {/* Gran Titular de Portada con Serif Editorial High-End */}
-        <div className="pb-10 mb-10 text-center flex flex-col items-center">
-          <div className="text-xs font-sans uppercase tracking-widest text-neutral-400 mb-3.5 flex items-center justify-center gap-2 font-medium">
+        <div className="relative isolate pb-10 mb-10 text-center flex flex-col items-center">
+          {/* Pared LED: malla de puntos fija tras el titular (decorativa). */}
+          <span aria-hidden="true" className="bn-led-wall" />
+          <div data-piece className="text-xs font-sans uppercase tracking-widest text-neutral-400 mb-3.5 flex items-center justify-center gap-2 font-medium">
             <span className="w-1 h-1 rounded-full bg-neutral-400 inline-block"></span>
             <span>INFORME DE APERTURA GLOBAL</span>
             <span className="w-1 h-1 rounded-full bg-neutral-400 inline-block"></span>
           </div>
           <h1
+            data-piece
+            ref={titleDec.ref}
             onClick={() => onRead(report)}
-            className="font-headline text-3xl sm:text-5xl md:text-6xl lg:text-[4.2rem] font-normal text-white tracking-tight leading-[1.08] hover:text-neutral-200 transition-colors cursor-pointer text-balance max-w-5xl mx-auto"
+            className={`font-headline text-3xl sm:text-5xl md:text-6xl lg:text-[4.2rem] font-normal text-white tracking-tight leading-[1.08] hover:text-neutral-200 transition-colors cursor-pointer text-balance max-w-5xl mx-auto${
+              booting ? ' relative' : ''
+            }`}
           >
-            {report.title}
+            {booting ? (
+              <>
+                {/* Reserva el alto final del titular sin mostrar texto: la
+                    barra se solapa encima y no hay salto de layout al escribir. */}
+                <span aria-hidden="true" className="invisible">
+                  {report.title}
+                </span>
+                <span className="sr-only">{report.title}</span>
+                {titleDec.armed && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    <TerminalBar
+                      run
+                      onSettled={() => setBarDone(true)}
+                      className="text-xs sm:text-sm"
+                    />
+                  </span>
+                )}
+              </>
+            ) : titleDec.view ? (
+              <>
+                <span aria-hidden="true">
+                  {titleDec.view.done}
+                  <span className="asm-cursor asm-hot font-mono">{titleDec.view.cursor}</span>
+                  <span className="asm-hot font-mono">{titleDec.view.active}</span>
+                  <span className="text-neutral-700 font-mono">{titleDec.view.quiet}</span>
+                </span>
+                <span className="sr-only">{report.title}</span>
+              </>
+            ) : (
+              report.title
+            )}
           </h1>
-          <p className="font-sans text-base sm:text-lg lg:text-xl text-neutral-300 font-light leading-relaxed mt-5 max-w-3xl mx-auto text-balance">
-            {report.subtitle}
+          <p
+            data-piece
+            ref={leadDec.ref}
+            className="font-sans text-base sm:text-lg lg:text-xl text-neutral-300 font-light leading-relaxed mt-5 max-w-3xl mx-auto text-balance"
+          >
+            {deckBlocked ? (
+              <>
+                {/* Reserva su alto sin mostrar nada (clon invisible): su
+                    sombra codificada solo aparece cuando el título termina. */}
+                <span aria-hidden="true" className="invisible">
+                  {report.subtitle}
+                </span>
+                <span className="sr-only">{report.subtitle}</span>
+              </>
+            ) : leadDec.view ? (
+              <>
+                <span aria-hidden="true">
+                  {leadDec.view.done}
+                  <span className="asm-cursor asm-hot font-mono">{leadDec.view.cursor}</span>
+                  <span className="asm-hot font-mono">{leadDec.view.active}</span>
+                  <span className="text-neutral-700 font-mono">{leadDec.view.quiet}</span>
+                </span>
+                <span className="sr-only">{report.subtitle}</span>
+              </>
+            ) : (
+              report.subtitle
+            )}
           </p>
         </div>
 
@@ -108,18 +211,21 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
                       : 'pt-2'
                   }`}
                 >
-                  <div className="text-3xl sm:text-4xl font-mono font-light text-white tracking-tight tabular-nums">
-                    {statSection.value}
-                  </div>
-                  {statSection.label && (
-                    <div className="text-xs text-neutral-400 mt-1.5 leading-snug">
-                      {statSection.label}
+                  {/* Marcador LED: la cifra sobre malla de puntos con halo */}
+                  <div className="bn-led-panel rounded-sm border border-white/10 px-4 py-3.5">
+                    <div className="relative text-3xl sm:text-4xl font-mono font-light text-white tracking-tight tabular-nums bn-led-glow">
+                      {statSection.value}
                     </div>
-                  )}
+                    {statSection.label && (
+                      <div className="relative text-xs text-neutral-400 mt-1.5 leading-snug">
+                        {statSection.label}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              <div className="text-xs text-neutral-400 font-sans pt-2">
+              <div data-piece className="text-xs text-neutral-400 font-sans pt-2">
                 <span className="text-white font-medium block text-sm">{report.author.name}</span>
                 <span className="text-neutral-500">{report.author.role}</span>
               </div>
@@ -141,6 +247,7 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
             <div>
               {/* Imagen Responsiva AVIF/WebP con bordes sutilmente redondeados */}
               <div
+                data-piece
                 className="w-full aspect-[16/9] rounded-lg overflow-hidden relative cursor-pointer group shadow-2xl"
                 onClick={() => onRead(report)}
               >

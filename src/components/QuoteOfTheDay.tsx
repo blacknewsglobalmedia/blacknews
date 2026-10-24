@@ -56,7 +56,7 @@ export const QuoteOfTheDay: React.FC = () => {
             aria-hidden
           />
           <div className="min-w-0">
-            <blockquote className="font-headline text-xl sm:text-2xl lg:text-[28px] leading-snug tracking-tight text-white/90">
+            <blockquote className="bn-dottext font-headline text-xl sm:text-2xl lg:text-[28px] leading-snug tracking-tight">
               <span className="text-neutral-600">«</span>
               {quote.text}
               <span className="text-neutral-600">»</span>

@@ -166,7 +166,7 @@ export const GeoMapSection: React.FC<GeoMapSectionProps> = ({
           </div>
 
           {/* Panel lateral: noticias por país */}
-          <aside className="w-full lg:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-7 pt-6 lg:pt-0">
+          <aside data-assemble className="w-full lg:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 lg:pl-7 pt-6 lg:pt-0">
             <div className="text-[10px] uppercase tracking-[0.25em] text-neutral-600 font-semibold">
               MAPA DE COBERTURA
             </div>
