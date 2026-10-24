@@ -54,7 +54,8 @@ import {
   MapPin,
   Scale,
   CalendarDays,
-  Radar
+  Radar,
+  Search
 } from 'lucide-react';
 import { Report, ReportSection, CategoryId, OptimizedImageSet } from '../types/news';
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from '../data/newsData';
@@ -108,6 +109,8 @@ interface RedactionStudioProps {
   onUpdateExistingReport: (updatedReport: Report) => void;
   currentUser: RedactorProfile;
   allRedactors: RedactorProfile[];
+  /** Correos con doc en el padrón Firestore `users` (chip «NUBE»). */
+  cloudEmails?: string[];
   onApproveRedactor: (id: string) => void;
   onRejectRedactor: (id: string) => void;
   onChangeUserRole: (userId: string, newRole: RedactorRole) => void;
@@ -204,6 +207,7 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onUpdateExistingReport,
   currentUser,
   allRedactors,
+  cloudEmails = [],
   onApproveRedactor,
   onRejectRedactor,
   onChangeUserRole,
@@ -341,6 +345,10 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
   const [lastSavedDraftAt, setLastSavedDraftAt] = useState<string | null>(null);
+
+  // Equipo & Roles: búsqueda y filtro del padrón de registrados
+  const [userQuery, setUserQuery] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | RedactorRole>("ALL");
 
   // OSINT: puentes de importación desde el Centro de Investigación.
   // Un hallazgo importado precompleta el constructor/generador como
@@ -3321,95 +3329,167 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
       )}
 
       {/* TAB CONTENT 3: GESTIÓN DE ROLES Y USUARIOS */}
-      {activeTab === 'users' && permissions.canManageUsers && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 space-y-10">
-          <div className="pb-4 border-b border-white/5">
-            <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 uppercase mb-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-white" />
-              <span>ADMINISTRACIÓN DE PERMISOS</span>
+      {activeTab === 'users' && permissions.canManageUsers && (() => {
+        const q = userQuery.trim().toLowerCase();
+        const filtered = allRedactors.filter(
+          (m) =>
+            (userRoleFilter === 'ALL' || m.role === userRoleFilter) &&
+            (!q ||
+              m.name.toLowerCase().includes(q) ||
+              m.email.toLowerCase().includes(q)),
+        );
+        const cloudCount = allRedactors.filter((m) =>
+          cloudEmails.includes(m.email),
+        ).length;
+        const roleChipLabel: Record<string, string> = {
+          LECTOR: 'LECTOR (SIN EDICIÓN)',
+          REDACTOR: 'REDACTOR (REDACCIÓN)',
+          MODERADOR: 'MODERADOR (MODERACIÓN)',
+          ADMIN: 'ADMIN',
+        };
+        return (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 space-y-10">
+            <div className="pb-4 border-b border-white/5">
+              <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 uppercase mb-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                <span>ADMINISTRACIÓN DE PERMISOS</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-medium text-white tracking-tight uppercase">
+                ASIGNACIÓN DE ROLES A USUARIOS
+              </h2>
+              <p className="text-xs text-neutral-400 mt-1 max-w-2xl">
+                Quien entra con Google se registra solo y aparece aquí desde cualquier dispositivo. Asigna <strong>Lector</strong> (cliente sin edición), <strong>Redactor</strong> (redacta solo lo suyo) o <strong>Moderador</strong> (gestión de portada y roles): el permiso viaja a la nube y le llega al equipo en su próximo acceso.
+              </p>
             </div>
-            <h2 className="text-xl sm:text-2xl font-medium text-white tracking-tight uppercase">
-              ASIGNACIÓN DE ROLES A USUARIOS
-            </h2>
-            <p className="text-xs text-neutral-400 mt-1 max-w-2xl">
-              Cualquier usuario que se registre inicia como <strong>Lector</strong> (sin capacidad de edición). Aquí puedes asignar permisos de <strong>Redactor</strong> a cuentas específicas para que redacten y editen exclusivamente sus propios artículos.
-            </p>
-          </div>
 
-          <div className="divide-y divide-white/5 border border-white/10 p-4 sm:p-6">
-            {allRedactors.map((member) => {
-              const isSelf = member.id === currentUser.id;
-              return (
-                <div key={member.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white text-sm">{member.name}</span>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 border ${
-                        member.role === 'ADMIN'
-                          ? 'border-white text-white font-semibold'
-                          : member.role === 'MODERADOR'
-                          ? 'border-neutral-400 text-neutral-200'
-                          : member.role === 'REDACTOR'
-                          ? 'border-neutral-500 text-neutral-300'
-                          : 'border-neutral-700 text-neutral-500'
-                      }`}>
-                        {member.role === 'LECTOR' ? 'LECTOR (SIN EDICIÓN)' : member.role}
+            {/* Buscador + filtros del padrón */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="search"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Buscar por nombre o correo…"
+                  aria-label="Buscar usuarios registrados"
+                  className="pl-8 pr-3 py-1.5 text-xs bg-neutral-950/60 border border-white/10 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-white/20 w-full sm:w-64"
+                />
+              </div>
+              {(['ALL', 'LECTOR', 'REDACTOR', 'MODERADOR'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setUserRoleFilter(f)}
+                  className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider border rounded-lg transition-colors cursor-pointer ${
+                    userRoleFilter === f
+                      ? 'bg-white text-black border-white font-semibold'
+                      : 'border-white/10 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {f === 'ALL' ? 'Todos' : f}
+                </button>
+              ))}
+              <span className="flex-1" aria-hidden />
+              <span className="text-[11px] font-mono text-neutral-500">
+                {filtered.length}/{allRedactors.length} · {cloudCount} en la nube
+              </span>
+            </div>
+
+            <div className="divide-y divide-white/5 border border-white/10 p-4 sm:p-6">
+              {filtered.length === 0 && (
+                <p className="py-6 text-center text-xs font-mono text-neutral-500">
+                  Sin coincidencias{q ? ` para «${userQuery.trim()}»` : ''}.
+                </p>
+              )}
+              {filtered.map((member) => {
+                const isSelf = member.id === currentUser.id;
+                const inCloud = cloudEmails.includes(member.email);
+                return (
+                  <div key={member.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-white text-sm">{member.name}</span>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 border ${
+                          member.role === 'ADMIN'
+                            ? 'border-white text-white font-semibold'
+                            : member.role === 'MODERADOR'
+                            ? 'border-neutral-400 text-neutral-200'
+                            : member.role === 'REDACTOR'
+                            ? 'border-neutral-500 text-neutral-300'
+                            : 'border-neutral-700 text-neutral-500'
+                        }`}>
+                          {roleChipLabel[member.role] || member.role}
+                        </span>
+                        <span
+                          className={`text-[9px] font-mono px-1.5 py-0.5 border ${
+                            inCloud
+                              ? 'border-emerald-500/40 text-emerald-300/90'
+                              : 'border-white/10 text-neutral-600'
+                          }`}
+                          title={
+                            inCloud
+                              ? 'Registrado en la nube: visible desde cualquier dispositivo'
+                              : 'Solo en este dispositivo (sin sesión Google)'
+                          }
+                        >
+                          {inCloud ? 'NUBE' : 'LOCAL'}
+                        </span>
+                        {isSelf && (
+                          <span className="text-[10px] font-mono text-neutral-400">(TÚ)</span>
+                        )}
+                      </div>
+                      <div className="text-xs font-mono text-neutral-400 mt-0.5">{member.email}</div>
+                      <div className="text-xs text-neutral-500 font-mono mt-0.5">
+                        {member.bureau} · {member.title}
+                      </div>
+                    </div>
+
+                    {/* Role Assignment Actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-mono text-neutral-500 uppercase mr-1">
+                        Asignar Rol:
                       </span>
-                      {isSelf && (
-                        <span className="text-[10px] font-mono text-neutral-400">(TÚ)</span>
-                      )}
-                    </div>
-                    <div className="text-xs font-mono text-neutral-400 mt-0.5">{member.email}</div>
-                    <div className="text-xs text-neutral-500 font-mono mt-0.5">
-                      {member.bureau} · {member.title}
+                      <button
+                        onClick={() => onChangeUserRole(member.id, 'LECTOR')}
+                        className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
+                          member.role === 'LECTOR'
+                            ? 'bg-neutral-800 text-white border-neutral-600'
+                            : 'border-white/10 text-neutral-400 hover:text-white'
+                        }`}
+                        title="Usuario básico sin permisos de edición (cliente)"
+                      >
+                        LECTOR
+                      </button>
+                      <button
+                        onClick={() => onChangeUserRole(member.id, 'REDACTOR')}
+                        className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
+                          member.role === 'REDACTOR'
+                            ? 'bg-white text-black border-white font-semibold'
+                            : 'border-white/10 text-neutral-300 hover:text-white'
+                        }`}
+                        title="Permite redactar y editar solo sus propios artículos"
+                      >
+                        REDACTOR
+                      </button>
+                      <button
+                        onClick={() => onChangeUserRole(member.id, 'MODERADOR')}
+                        className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
+                          member.role === 'MODERADOR'
+                            ? 'bg-white text-black border-white font-semibold'
+                            : 'border-white/10 text-neutral-300 hover:text-white'
+                        }`}
+                        title="Permite gestionar la portada y asignar roles"
+                      >
+                        MODERADOR
+                      </button>
                     </div>
                   </div>
-
-                  {/* Role Assignment Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] font-mono text-neutral-500 uppercase mr-1">
-                      Asignar Rol:
-                    </span>
-                    <button
-                      onClick={() => onChangeUserRole(member.id, 'LECTOR')}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
-                        member.role === 'LECTOR'
-                          ? 'bg-neutral-800 text-white border-neutral-600'
-                          : 'border-white/10 text-neutral-400 hover:text-white'
-                      }`}
-                      title="Usuario básico sin permisos de edición"
-                    >
-                      LECTOR
-                    </button>
-                    <button
-                      onClick={() => onChangeUserRole(member.id, 'REDACTOR')}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
-                        member.role === 'REDACTOR'
-                          ? 'bg-white text-black border-white font-semibold'
-                          : 'border-white/10 text-neutral-300 hover:text-white'
-                      }`}
-                      title="Permite redactar y editar solo sus propios artículos"
-                    >
-                      REDACTOR
-                    </button>
-                    <button
-                      onClick={() => onChangeUserRole(member.id, 'MODERADOR')}
-                      className={`px-2.5 py-1 text-xs font-mono transition-colors cursor-pointer border ${
-                        member.role === 'MODERADOR'
-                          ? 'bg-white text-black border-white font-semibold'
-                          : 'border-white/10 text-neutral-300 hover:text-white'
-                      }`}
-                      title="Permite gestionar la portada y asignar roles"
-                    >
-                      MODERADOR
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB CONTENT 4: DESPACHOS PUBLICADOS */}
       {activeTab === 'my-articles' && (

@@ -68,9 +68,28 @@ service cloud.firestore {
     }
 
     // Perfiles y permisos del equipo (contiene correos → no es público)
+    //
+    // Padrón de registrados (src/utils/userRegistry.ts):
+    //  - el propietario lee el padrón completo y asigna/borra permisos;
+    //  - cada cuenta con Google verificado se da de alta a sí misma al
+    //    entrar — siempre como LECTOR, el propietario asciende después —
+    //    y puede leer/editar solo su propio doc (para recibir el rol
+    //    concedido desde el panel en cualquier dispositivo);
+    //  - el rol solo lo cambia el propietario (el de la cuenta se ignora).
     match /users/{userId} {
-      allow read: if isEditor();
-      allow create, update, delete: if isOwner();
+      allow read: if isOwner()
+        || (isSignedIn() && request.auth.token.email == userId);
+      allow create: if isOwner()
+        || (isVerifiedEmail()
+            && request.auth.token.email == userId
+            && request.resource.data.email == request.auth.token.email
+            && request.resource.data.role == 'LECTOR');
+      allow update: if isOwner()
+        || (isSignedIn()
+            && request.auth.token.email == userId
+            && request.resource.data.email == resource.data.email
+            && request.resource.data.role == resource.data.role);
+      allow delete: if isOwner();
     }
 
     // -----------------------------------------------------------------

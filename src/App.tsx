@@ -71,6 +71,12 @@ import {
   mergeReports,
   firestoreDoc,
 } from "./utils/reportSync";
+import {
+  syncIdentity,
+  writeCloudRole,
+  subscribeToRegistry,
+  mergeCloudRoster,
+} from "./utils/userRegistry";
 import { db, auth, onAuthStateChanged, signOut } from "./firebase";
 import {
   doc,
@@ -778,6 +784,28 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Padrón en la nube: solo el propietario puede leer el conjunto completo
+  // (reglas de `users`). Mantiene el roster al día en vivo — registros
+  // hechos desde otros dispositivos y roles concedidos allí — y alimenta la
+  // lista de «registrados en la nube» de la pestaña Equipo & Roles.
+  const [cloudUserEmails, setCloudUserEmails] = useState<string[]>([]);
+  useEffect(() => {
+    if (currentUser.role !== "ADMIN" || !isOwnerEmail(currentUser.email)) {
+      return;
+    }
+    const unsub = subscribeToRegistry((clouds, emails) => {
+      setCloudUserEmails(emails);
+      setRedactorsList((prev) => {
+        const merged = mergeCloudRoster(prev, clouds);
+        try {
+          localStorage.setItem("blacknews_redactors", JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
+    });
+    return unsub;
+  }, [currentUser.role, currentUser.email]);
+
   // Persistent bookmarks
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(() => {
     try {
@@ -1197,6 +1225,11 @@ export default function App() {
     if (currentUser.id === userId) {
       setCurrentUser((prev) => ({ ...prev, role: safeRole }));
     }
+    // Propaga el rol a la nube para que llegue al dispositivo del usuario
+    // (las reglas solo lo aceptan del propietario; para el resto de cuentas
+    // el cambio se queda en este navegador, sin romper nada).
+    const changed = updated.find((member) => member.id === userId);
+    if (changed) void writeCloudRole(changed);
     showToast(`Permisos actualizados: ${safeRole}`);
   };
 
@@ -1335,12 +1368,45 @@ export default function App() {
         JSON.stringify(nextProfile),
       );
     } catch {}
+    // Padrón en la nube: adopta el rol que el propietario concedió desde
+    // otro dispositivo y registra la cuenta (aparece en Equipo & Roles).
+    // Fail-open: sin permisos/conexión se sigue en local.
+    void (async () => {
+      const cloudRole = await syncIdentity(nextProfile, isOwnerEmail(email));
+      if (!cloudRole || isOwnerEmail(email) || cloudRole === nextProfile.role) {
+        return;
+      }
+      const adopted: RedactorProfile = { ...nextProfile, role: cloudRole };
+      setCurrentUser(adopted);
+      setRedactorsList((prev) => {
+        const merged = prev.map((u) =>
+          u.email.toLowerCase() === adopted.email.toLowerCase()
+            ? { ...u, role: cloudRole }
+            : u,
+        );
+        try {
+          localStorage.setItem("blacknews_redactors", JSON.stringify(merged));
+        } catch {}
+        return merged;
+      });
+      try {
+        localStorage.setItem("blacknews_active_user", JSON.stringify(adopted));
+      } catch {}
+      showToast(`Permisos sincronizados desde la nube: ${cloudRole}`);
+    })();
     showToast(
       `Sesión verificada con Google: ${nextProfile.name} [${nextProfile.role}]`,
     );
     // Con la sesión con permisos de escritura no hace falta esperar al
     // siguiente arranque: se suben ya los posts que fallaron sin sesión.
-    if (isOwnerEmail(email)) void retryPendingReportSync();
+    if (isOwnerEmail(email)) {
+      void retryPendingReportSync();
+      // Y el roster local (asignaciones anteriores al padrón en la nube):
+      // cada miembro queda registrado para poder gestionarlo desde cualquier
+      // dispositivo. Fail-open, uno por uno.
+      void writeCloudRole(nextProfile);
+      redactorsList.forEach((member) => void writeCloudRole(member));
+    }
   };
 
   const handleLogout = async () => {
@@ -1596,6 +1662,7 @@ export default function App() {
             onUpdateExistingReport={handleUpdateExistingReport}
             currentUser={currentUser}
             allRedactors={redactorsList}
+            cloudEmails={cloudUserEmails}
             onApproveRedactor={handleApproveRedactor}
             onRejectRedactor={handleRejectRedactor}
             onChangeUserRole={handleChangeUserRole}
