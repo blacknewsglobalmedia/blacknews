@@ -22,6 +22,7 @@ import { OptimizedPicture } from './OptimizedPicture';
 import { RichText } from './RichText';
 import { PostInteractions } from './PostInteractions';
 import { readTimeOf } from '../utils/readTime';
+import { isFenomenos } from '../data/newsData';
 import { getReadPct, setReadPct } from '../utils/readProgress';
 import { DotProgress, DOT_TONE_WHITE } from './DotProgress';
 import { Highlight, getHighlights, addHighlight, removeHighlight } from '../utils/highlights';
@@ -324,7 +325,11 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
             <span className="hidden sm:inline">VOLVER A LA PORTADA</span>
           </button>
           <span className="text-neutral-700 hidden sm:inline">·</span>
-          <span className="text-xs font-sans text-neutral-400 font-medium hidden md:inline truncate max-w-xs">
+          <span
+            className={`text-xs text-neutral-400 font-medium hidden md:inline truncate max-w-xs ${
+              isFenomenos(report.category) ? 'font-mono uppercase tracking-[0.18em]' : 'font-sans'
+            }`}
+          >
             {report.category}
           </span>
         </div>
@@ -531,7 +536,15 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
       >
         {/* Unboxed Metadata */}
         <div className="flex flex-wrap items-center justify-center gap-2.5 text-xs sm:text-sm font-sans tracking-wide text-neutral-400 uppercase mb-4 font-medium">
-          <span className="text-white font-semibold">{report.category}</span>
+          <span
+            className={`font-semibold ${
+              isFenomenos(report.category)
+                ? 'font-mono uppercase tracking-[0.18em] text-white border border-dashed border-white/50 px-2 py-0.5 rounded-sm'
+                : 'text-white'
+            }`}
+          >
+            {report.category}
+          </span>
           <span>·</span>
           <span>{report.publishedAt}</span>
           <span>·</span>
@@ -825,7 +838,11 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
                 className="group cursor-pointer flex flex-col justify-between p-4 rounded-lg border border-white/10 hover:border-white/30 hover:bg-white/[0.02] transition-colors"
               >
                 <div>
-                  <div className="text-xs text-neutral-400 font-medium mb-2">
+                  <div
+                    className={`text-xs text-neutral-400 font-medium mb-2 ${
+                      isFenomenos(rel.category) ? 'font-mono uppercase tracking-[0.18em]' : undefined
+                    }`}
+                  >
                     {rel.category}
                   </div>
                   <h4 className="font-headline text-base sm:text-lg font-normal text-white group-hover:text-neutral-200 transition-colors line-clamp-2 leading-snug">

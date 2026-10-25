@@ -135,6 +135,59 @@
   box-decoration-break: clone;
 }
 
+/* ── Identidad «expediente» · FENÓMENOS & ANOMALÍAS ──────────────────────
+   Da a la sección un aire de archivo clasificado SIN ocultar nada real:
+   tipografía monoespaciada (en las clases de cada componente), sello y
+   marcas de censura puramente ornamentales. Todo estático: ni keyframes
+   ni transiciones nuevas, así que no entra en conflicto con el sistema
+   assemble ni con prefers-reduced-motion. Fail-open: si estas clases no
+   existen, la interfaz se ve simplemente sin el adorno. */
+
+/* Sello del cuaderno: contorno punteado, ligeramente torcido, sin eventos. */
+.bn-file-stamp {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px dashed rgba(255, 255, 255, 0.55);
+  padding: 3px 8px;
+  transform: rotate(-1.2deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Subrayado «cortado» del chip de navegación activo (en vez de barra
+   continua blanca): tramos con huecos, como una línea redactada. */
+.bn-file-underline {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.9) 0 5px,
+    transparent 5px 9px
+  );
+}
+
+/* Marcas de censura decorativas: tres barras (como palabras tachadas)
+   que acompañan al nombre de la sección SIN cubrirlo nunca. Heredan el
+   color del texto y van siempre antes del rótulo, con aria-hidden. */
+.bn-redact {
+  display: inline-block;
+  height: 0.7em;
+  width: 2.2em;
+  margin-right: 0.5em;
+  vertical-align: -0.03em;
+  opacity: 0.7;
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-size: 0.8em 100%, 0.5em 100%, 0.6em 100%;
+  background-position: 0 0, 1em 0, 1.6em 0;
+}
+
 /* Marcadores del mapa: sin rectángulo de foco (Chrome dibuja el anillo
    de foco de <g tabindex> como caja, fea sobre el mapa) */
 svg g[tabindex]:focus {

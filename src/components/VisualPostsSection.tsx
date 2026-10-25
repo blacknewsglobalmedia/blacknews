@@ -10,6 +10,7 @@ import {
 import { Report, CategoryId } from '../types/news';
 import { CountryFlag } from './SocialPostGenerator';
 import { findCountryByName, matchCountryInText } from '../data/countries';
+import { isFenomenos } from '../data/newsData';
 import { OptimizedPicture } from './OptimizedPicture';
 import { MiniWorldMap } from './MiniWorldMap';
 
@@ -167,6 +168,7 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
           {categories.map((cat) => {
             const active = filterCategory === cat;
+            const isFen = isFenomenos(cat);
             return (
               <button
                 key={cat}
@@ -174,9 +176,13 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                   setFilterCategory(cat);
                   setCurrentPage(0);
                 }}
-                className={`px-3 py-2.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-lg border ${
+                className={`px-3 py-2.5 text-xs font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-lg border ${
+                  isFen ? 'font-mono' : 'font-sans'
+                } ${
                   active
-                    ? 'text-black bg-white font-bold border-white shadow-md'
+                    ? isFen
+                      ? 'text-white bg-white/5 font-bold border-dashed border-white/50'
+                      : 'text-black bg-white font-bold border-white shadow-md'
                     : 'text-neutral-400 hover:text-white bg-neutral-950/60 border-white/10 hover:border-white/20'
                 }`}
               >
@@ -234,7 +240,11 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                     
                     {/* Header Row: Category · Flag + Country · Line */}
                     <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-                      <span className="text-[10px] sm:text-[11px] font-bold tracking-[0.14em] uppercase text-white font-['Lexend'] shrink-0">
+                      <span
+                        className={`text-[10px] sm:text-[11px] font-bold tracking-[0.14em] uppercase text-white shrink-0 ${
+                          isFenomenos(report.category) ? 'font-mono tracking-[0.2em]' : "font-['Lexend']"
+                        }`}
+                      >
                         {report.category}
                       </span>
 

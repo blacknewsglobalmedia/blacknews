@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import type { Report } from "../types/news";
+import { isFenomenos } from "../data/newsData";
 import { READ_POS_EVENT, readDays } from "../utils/readProgress";
 
 const STORAGE_KEY = "blacknews_briefing_topics";
@@ -120,8 +121,12 @@ export const PersonalBriefing: React.FC<PersonalBriefingProps> = ({
                     type="button"
                     onClick={() => toggleTopic(c)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                      isFenomenos(c) ? "font-mono tracking-wider" : "font-sans"
+                    } ${
                       on
-                        ? "bg-white text-black font-bold"
+                        ? isFenomenos(c)
+                          ? "bg-white/5 text-white font-bold border border-dashed border-white/50"
+                          : "bg-white text-black font-bold"
                         : "text-neutral-400 hover:text-white border border-white/10 hover:border-white/25"
                     }`}
                   >
@@ -140,7 +145,9 @@ export const PersonalBriefing: React.FC<PersonalBriefingProps> = ({
               {topics.map((t) => (
                 <span
                   key={t}
-                  className="text-[10px] uppercase tracking-[0.18em] text-emerald-400/80 font-semibold"
+                  className={`text-[10px] uppercase tracking-[0.18em] text-emerald-400/80 font-semibold ${
+                    isFenomenos(t) ? "font-mono" : undefined
+                  }`}
                 >
                   {t}
                 </span>

@@ -4,6 +4,7 @@ import { Report, CategoryId } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
 import { MiniWorldMap } from './MiniWorldMap';
 import { readTimeOf } from '../utils/readTime';
+import { isFenomenos } from '../data/newsData';
 import { ResumeBadge } from './ResumeBadge';
 
 interface ReportsGridProps {
@@ -60,26 +61,41 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
         
         {/* Newspaper Section Ribbon & Category Selector */}
         <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-10 gap-4 border-b border-white/10">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <Newspaper className="w-4 h-4 text-white" />
-            <h2 className="font-sans text-base sm:text-lg font-semibold text-white tracking-wide uppercase">
+            <h2
+              className={`text-base sm:text-lg font-semibold text-white tracking-wide uppercase ${
+                isFenomenos(selectedCategory) ? 'font-mono tracking-[0.18em]' : 'font-sans'
+              }`}
+            >
               {selectedCategory === 'TODAS'
                 ? 'SECCIONES & CUADERNOS DE REDACCIÓN'
                 : `CUADERNO: ${selectedCategory}`}
             </h2>
+            {/* Sello del expediente: puramente decorativo, sin eventos */}
+            {isFenomenos(selectedCategory) && (
+              <span className="bn-file-stamp" aria-hidden="true">
+                Expediente abierto
+              </span>
+            )}
           </div>
 
           {/* Minimal Category Selector: purely typographical with pill-less design */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             {categories.map((cat) => {
               const active = selectedCategory === cat;
+              const isFen = isFenomenos(cat);
               return (
                 <button
                   key={cat}
                   onClick={() => onSelectCategory(cat)}
-                  className={`px-3 py-2.5 text-xs font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-md ${
+                  className={`px-3 py-2.5 text-xs font-medium uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap rounded-md ${
+                    isFen ? 'font-mono' : 'font-sans'
+                  } ${
                     active
-                      ? 'text-white bg-white/10 font-semibold'
+                      ? isFen
+                        ? 'text-white bg-white/5 font-semibold border border-dashed border-white/50'
+                        : 'text-white bg-white/10 font-semibold'
                       : 'text-neutral-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
@@ -149,7 +165,17 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                               className="w-full h-full rounded-lg"
                               imgClassName="group-hover:scale-[1.015] transition-transform duration-500 ease-out"
                             />
-                            <div data-piece className="absolute top-2.5 left-2.5 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
+                            <div
+                              data-piece
+                              className={`absolute top-2.5 left-2.5 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider rounded-md ${
+                                isFenomenos(report.category)
+                                  ? 'font-mono border border-dashed border-white/50'
+                                  : 'font-sans border border-white/15'
+                              }`}
+                            >
+                              {isFenomenos(report.category) && (
+                                <span className="bn-redact" aria-hidden="true"></span>
+                              )}
                               {report.category}
                             </div>
                             {/* Mini atlas LED: países del informe encendidos */}
@@ -270,7 +296,17 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                               className="w-full h-full rounded-lg"
                               imgClassName="group-hover:scale-[1.015] transition-transform duration-500 ease-out"
                             />
-                            <div data-piece className="absolute top-2 left-2 bg-black/85 backdrop-blur-sm text-white px-2 py-0.5 text-[10px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
+                            <div
+                              data-piece
+                              className={`absolute top-2 left-2 bg-black/85 backdrop-blur-sm text-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-md ${
+                                isFenomenos(report.category)
+                                  ? 'font-mono border border-dashed border-white/50'
+                                  : 'font-sans border border-white/15'
+                              }`}
+                            >
+                              {isFenomenos(report.category) && (
+                                <span className="bn-redact" aria-hidden="true"></span>
+                              )}
                               {report.category}
                             </div>
                             {/* Mini atlas LED: países del informe encendidos */}
@@ -355,8 +391,10 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
               <div className="pt-10 border-t border-white/10">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-neutral-950/60 border border-white/10 rounded-xl p-6 sm:p-8">
                   <div className="max-w-3xl">
-                    <div className="text-xs font-sans uppercase tracking-widest text-neutral-400 mb-2 font-semibold">
-                      INVESTIGACIÓN DESTACADA · {configuredDossier.category}
+                    <div className="text-xs uppercase tracking-widest text-neutral-400 mb-2 font-semibold">
+                      <span className={isFenomenos(configuredDossier.category) ? 'font-mono' : 'font-sans'}>
+                        INVESTIGACIÓN DESTACADA · {configuredDossier.category}
+                      </span>
                     </div>
                     <h3
                       onClick={() => onReadReport(configuredDossier)}
@@ -406,8 +444,11 @@ export const ReportsGrid: React.FC<ReportsGridProps> = ({
                       className="p-5 border border-white/10 rounded-lg hover:border-white/30 hover:bg-white/[0.02] transition-colors cursor-pointer group flex flex-col justify-between"
                     >
                       <div>
-                        <div className="text-xs font-sans text-neutral-400 font-medium mb-1.5">
-                          {report.category} · {readTimeOf(report)} <ResumeBadge reportId={report.id} />
+                        <div className="text-xs text-neutral-400 font-medium mb-1.5">
+                          <span className={isFenomenos(report.category) ? 'font-mono uppercase tracking-wider' : undefined}>
+                            {report.category}
+                          </span>{' '}
+                          · {readTimeOf(report)} <ResumeBadge reportId={report.id} />
                         </div>
                         <h4 className="font-headline text-base font-normal text-white group-hover:text-neutral-200 transition-colors line-clamp-2 leading-snug">
                           {report.title}

@@ -3,6 +3,7 @@ import { Share2, Bookmark, ArrowRight, Sparkles, TrendingUp } from 'lucide-react
 import { Report } from '../types/news';
 import { OptimizedPicture } from './OptimizedPicture';
 import { readTimeOf } from '../utils/readTime';
+import { isFenomenos } from '../data/newsData';
 import { ResumeBadge } from './ResumeBadge';
 import { useDecodeText } from '../lib/decode';
 import { useAssemble } from '../lib/assemble';
@@ -259,7 +260,16 @@ export const LeadStory: React.FC<LeadStoryProps> = ({
                   className="rounded-lg w-full h-full"
                   imgClassName="group-hover:scale-[1.015] transition-transform duration-500 ease-out"
                 />
-                <div className="absolute top-3 left-3 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-sans font-medium uppercase tracking-wider rounded-md border border-white/15">
+                <div
+                  className={`absolute top-3 left-3 bg-black/85 backdrop-blur-sm text-white px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider rounded-md ${
+                    isFenomenos(report.category)
+                      ? 'font-mono border border-dashed border-white/50'
+                      : 'font-sans border border-white/15'
+                  }`}
+                >
+                  {isFenomenos(report.category) && (
+                    <span className="bn-redact" aria-hidden="true"></span>
+                  )}
                   {report.category}
                 </div>
               </div>

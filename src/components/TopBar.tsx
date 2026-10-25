@@ -24,7 +24,7 @@ import {
   FileText,
   Image as ImageIcon,
 } from "lucide-react";
-import { CATEGORIES } from "../data/newsData";
+import { CATEGORIES, isFenomenos } from "../data/newsData";
 import { dateIn, REFERENCE_TZ } from "../utils/clock";
 import { CategoryId } from "../types/news";
 import { RedactorProfile, GUEST_USER_ID, RedactorRole } from "../types/auth";
@@ -397,19 +397,27 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className={`flex items-center gap-5 xl:gap-7 text-xs font-sans font-medium tracking-wide overflow-x-auto no-scrollbar scroll-smooth w-full justify-start xl:justify-center transition-[height] duration-200 ${compact ? "h-8" : "h-10"}`}>
             {categories.map((cat) => {
               const isActive = selectedCategory === cat.id && !isStudioOpen;
+              const isFen = isFenomenos(cat.id);
               return (
                 <button
                   key={cat.id}
                   onClick={() => handleCategoryClick(cat.id)}
                   className={`h-full flex items-center transition-colors cursor-pointer relative whitespace-nowrap shrink-0 ${
+                    isFen ? "font-mono tracking-wider" : ""
+                  } ${
                     isActive
                       ? "text-white font-semibold"
                       : "text-neutral-400 hover:text-white"
                   }`}
                 >
+                  {isFen && <span className="bn-redact" aria-hidden="true"></span>}
                   {cat.label}
                   {isActive && (
-                    <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
+                    <span
+                      className={`absolute bottom-0 left-0 w-full h-[1.5px] rounded-full ${
+                        isFen ? "bn-file-underline" : "bg-white"
+                      }`}
+                    ></span>
                   )}
                 </button>
               );
@@ -429,20 +437,28 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           {categories.map((cat) => {
             const isActive = selectedCategory === cat.id && !isStudioOpen;
+            const isFen = isFenomenos(cat.id);
             return (
               <button
                 key={cat.id}
                 data-active={isActive}
                 onClick={() => handleCategoryClick(cat.id)}
-                className={`h-full flex items-center shrink-0 whitespace-nowrap text-[11px] font-sans font-medium uppercase tracking-wider transition-colors cursor-pointer relative ${
+                className={`h-full flex items-center shrink-0 whitespace-nowrap text-[11px] font-medium uppercase transition-colors cursor-pointer relative ${
+                  isFen ? "font-mono tracking-wider" : "font-sans font-medium tracking-wider"
+                } ${
                   isActive
                     ? "text-white font-semibold"
                     : "text-neutral-400 hover:text-white"
                 }`}
               >
+                {isFen && <span className="bn-redact" aria-hidden="true"></span>}
                 {cat.label}
                 {isActive && (
-                  <span className="absolute bottom-0 left-0 w-full h-[1.5px] bg-white rounded-full"></span>
+                  <span
+                    className={`absolute bottom-0 left-0 w-full h-[1.5px] rounded-full ${
+                      isFen ? "bn-file-underline" : "bg-white"
+                    }`}
+                  ></span>
                 )}
               </button>
             );
@@ -533,18 +549,26 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {categories.map((cat) => {
                 const isActive = selectedCategory === cat.id && !isStudioOpen;
+                const isFen = isFenomenos(cat.id);
                 return (
                   <button
                     key={cat.id}
                     onClick={() => handleCategoryClick(cat.id)}
-                    className={`py-2 px-3 text-left text-xs font-medium uppercase tracking-wider transition-colors flex items-center justify-between cursor-pointer border ${
+                    className={`py-2 px-3 text-left text-xs uppercase transition-colors flex items-center justify-between cursor-pointer border ${
+                      isFen ? "font-mono tracking-wider" : "font-sans tracking-wider"
+                    } ${
                       isActive
-                        ? "border-white bg-white text-black font-semibold"
+                        ? isFen
+                          ? "border-dashed border-white bg-white/5 text-white font-semibold"
+                          : "border-white bg-white text-black font-semibold"
                         : "border-white/5 text-neutral-300 hover:border-white/30 hover:text-white"
                     }`}
                   >
-                    <span>{cat.label}</span>
-                    <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                    <span className="flex items-center min-w-0">
+                      {isFen && <span className="bn-redact" aria-hidden="true"></span>}
+                      <span className="truncate">{cat.label}</span>
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 opacity-60 shrink-0" />
                   </button>
                 );
               })}

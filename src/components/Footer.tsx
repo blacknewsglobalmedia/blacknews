@@ -8,6 +8,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { CategoryId } from "../types/news";
+import { isFenomenos } from "../data/newsData";
 import { APP_VERSION, BUILD_STAMP_LABEL } from "../version";
 import { scrollToTop } from "../utils/scroll";
 
@@ -116,8 +117,13 @@ export const Footer: React.FC<FooterProps> = ({
                   <button
                     key={cat}
                     onClick={() => onSelectCategory(cat)}
-                    className="text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-2 font-sans"
+                    className={`text-left text-xs sm:text-sm text-neutral-400 hover:text-white transition-colors cursor-pointer py-2 ${
+                      isFenomenos(cat) ? 'font-mono uppercase tracking-wider' : 'font-sans'
+                    }`}
                   >
+                    {isFenomenos(cat) && (
+                      <span className="bn-redact" aria-hidden="true"></span>
+                    )}
                     → {cat}
                   </button>
                 ))}

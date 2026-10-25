@@ -1,5 +1,16 @@
 import { Report, FlashNews } from '../types/news';
 
+// Sección con identidad visual propia («expediente»): la interfaz la
+// distingue con tipografía monoespaciada, bordes punteados, sello y marcas
+// de censura SOLO decorativas (nunca tapan texto ni condicionan contenido).
+// Es atmósfera, no filtrado: si el nombre cambia, la sección simplemente
+// pierde el tratamiento y se ve como las demás (fail-open).
+export const FENOMENOS_SECTION = 'FENÓMENOS & ANOMALÍAS';
+
+// Predicado reutilizable en componentes (navegación, cuaderno, lector...).
+export const isFenomenos = (cat?: string | null): boolean =>
+  cat === FENOMENOS_SECTION;
+
 // Catálogo canónico de secciones: ÚNICA fuente de verdad para la navegación,
 // el formulario de redacción, el generador de posts, el gestor de categorías
 // y la portada. Cualquier lista de categorías debe derivar de aquí.
@@ -12,7 +23,7 @@ export const CATEGORIES = [
   'DERECHO & PROPIEDAD',
   'ENERGÍA & INDUSTRIA',
   'INVESTIGACIÓN',
-  'FENÓMENOS & ANOMALÍAS',
+  FENOMENOS_SECTION,
   'EDITORIAL',
 ] as const;
 
