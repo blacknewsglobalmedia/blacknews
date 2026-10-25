@@ -8,6 +8,7 @@ import { TopBar } from "./components/TopBar";
 import { BreakingTicker } from "./components/BreakingTicker";
 import { LeadStory } from "./components/LeadStory";
 import { VisualPostsSection } from "./components/VisualPostsSection";
+import { FenomenosSection } from "./components/FenomenosSection";
 import { AdBanner } from "./components/AdBanner";
 import { ReportsGrid } from "./components/ReportsGrid";
 import { ReportDetailModal } from "./components/ReportDetailModal";
@@ -1798,9 +1799,15 @@ export default function App() {
                   : undefined
               }
             />
-            {/* Personalización: tira con lo último de los temas del lector */}
-            <PersonalBriefing
+            {/* Bloque fijo de portada: sección FENÓMENOS & ANOMALÍAS */}
+            <FenomenosSection
               reports={reportsList}
+              onReadReport={handleOpenReport}
+              onSelectCategory={setSelectedCategory}
+            />
+
+            {/* Personalización: tira con lo último de los temas del lector */}
+            <PersonalBriefing              reports={reportsList}
               categories={categoriesList}
               onReadReport={handleOpenReport}
             />
