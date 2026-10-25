@@ -12,6 +12,7 @@ export const CATEGORIES = [
   'DERECHO & PROPIEDAD',
   'ENERGÍA & INDUSTRIA',
   'INVESTIGACIÓN',
+  'FENÓMENOS & ANOMALÍAS',
   'EDITORIAL',
 ] as const;
 
@@ -26,6 +27,8 @@ export const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'DERECHO & PROPIEDAD': 'Legislación, tribunales, contratos y garantías individuales.',
   'ENERGÍA & INDUSTRIA': 'Energía, materias primas, infraestructura y producción.',
   'INVESTIGACIÓN': 'Reportajes de fondo y análisis extensos (antes «Dossiers»).',
+  'FENÓMENOS & ANOMALÍAS':
+    'Avistamientos, fenómenos inexplicables, misterios históricos y casos sin resolver.',
   'EDITORIAL': 'Columnas de opinión y posiciones del medio.',
 };
 

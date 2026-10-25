@@ -294,7 +294,21 @@ export default function App() {
   );
 
   // Persistent categories catalog
+  //
+  // `CATALOG_VERSION` sube cada vez que el catálogo canónico (CATEGORIES)
+  // gana secciones nuevas: así las listas ya guardadas en cada navegador
+  // adoptan la novedad UNA sola vez y las secciones que el editor borre
+  // después a mano no resucitan en cada carga.
+  const CATALOG_VERSION = 2;
   const [categoriesList, setCategoriesList] = useState<string[]>(() => {
+    const markVersion = () => {
+      try {
+        localStorage.setItem(
+          "blacknews_categories_version",
+          String(CATALOG_VERSION),
+        );
+      } catch {}
+    };
     try {
       const saved = localStorage.getItem("blacknews_categories");
       if (saved) {
@@ -318,6 +332,7 @@ export default function App() {
             try {
               localStorage.setItem("blacknews_categories", JSON.stringify(fresh));
             } catch {}
+            markVersion();
             return fresh;
           }
           // Lista personalizada: aplica renombres y descarta duplicados.
@@ -325,17 +340,38 @@ export default function App() {
             .map((c: string) => OLD_CATEGORY_ALIASES[c] ?? c)
             .filter((c: string, i: number, arr: string[]) => arr.indexOf(c) === i);
           if (renamed.length > 0) {
-            const next = JSON.stringify(renamed);
-            if (next !== saved) {
+            // Migración única: agrega las secciones nuevas del catálogo vigente
+            // (p. ej. FENÓMENOS & ANOMALÍAS) sin tocar el resto de la lista.
+            let version = 0;
+            try {
+              version =
+                Number(localStorage.getItem("blacknews_categories_version")) || 0;
+            } catch {}
+            let merged = renamed;
+            if (version < CATALOG_VERSION) {
+              const missing = CATEGORIES.filter((c) => !renamed.includes(c));
+              if (missing.length > 0) {
+                // EDITORIAL se queda al final, como en el catálogo canónico.
+                const idx = renamed.indexOf("EDITORIAL");
+                merged =
+                  idx >= 0
+                    ? [...renamed.slice(0, idx), ...missing, ...renamed.slice(idx)]
+                    : [...renamed, ...missing];
+              }
+            }
+            const next = JSON.stringify(merged);
+            if (next !== saved || version < CATALOG_VERSION) {
               try {
                 localStorage.setItem("blacknews_categories", next);
               } catch {}
+              markVersion();
             }
-            return renamed;
+            return merged;
           }
         }
       }
     } catch {}
+    markVersion();
     return [...CATEGORIES];
   });
 
