@@ -41,21 +41,3 @@
 }
 /* Halo de fósforo suave para el número del marcador. */
 .bn-led-glow { text-shadow: 0 0 12px rgba(255, 255, 255, .4), 0 0 30px rgba(255, 255, 255, .15); }
-
-/* ── Texto en matriz de puntos: glifo blanco perforado por la malla ──
-   Capa superior de puntos negros sobre base blanca recortada al texto; en
-   el fondo negro los agujeros desaparecen y el texto luce malla LED. Si el
-   navegador no soporta background-clip: text, el color sólido del fallback
-   mantiene el texto legible (fail-open). */
-.bn-dottext { color: #ffffff; }
-@supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .bn-dottext {
-    color: transparent;
-    background-image:
-      radial-gradient(circle at center, #000000 0 1.15px, transparent 1.45px),
-      linear-gradient(#ffffff, #ffffff);
-    background-size: 5px 5px, auto;
-    -webkit-background-clip: text;
-            background-clip: text;
-  }
-}
