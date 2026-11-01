@@ -38,6 +38,7 @@ import {
   FolderUp,
   FileDown,
   User,
+  AlertTriangle,
 } from "lucide-react";
 import { Report } from "../types/news";
 import type { OsintPostImport } from "../types/osint";
@@ -52,9 +53,15 @@ import {
   type CountryItem,
 } from "../data/countries";
 import { CountryFlag, loadFlagImage, isRegionalFlagEmoji } from "./CountryFlag";
+// signal-ui: negra, Lexend, ASCII, LED — componentes sin dependencias.
+import { GlitchText, Led, Transmission, Scanlines } from "./signal-ui";
 // Cierre de marca (opcional, apagado por defecto): se añade al final de los
 // vídeos exportados y de la vista previa. Vite lo sirve como asset estático.
 import outroVideoSrc from "../assets/videos/Blacknews.mp4";
+// Aviso de contenido sensible (opcional): se añade tras un frame opcional antes del clip.
+// Al activarse, el preview de redes toma como miniatura el primer frame (portada con titular).
+// Vite lo sirve como asset estático.
+import warningVideoSrc from "../assets/videos/Blacknews-Advertencia.mp4";
 // Cama musical del podcast: se mezcla por debajo de la voz a volumen muy bajo.
 // Sólo entra al bundle el MP3 (2,2 MB); el WAV maestro vive fuera de git.
 import podcastSoundtrack from "../assets/audio/BlackNews_Soundtrack.mp3";
@@ -828,6 +835,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [outroActive, setOutroActive] = useState(false);
   const outroActiveRef = useRef(false);
 
+  // ─── Aviso de contenido sensible (opcional): Blacknews-Advertencia.mp4 ───
+  // Se inserta como fase previa antes del clip. El usuario puede elegir un
+  // frame opcional (portada con titular) que las redes toman como miniatura.
+  const [contentWarning, setContentWarning] = useState(false);
+  const [warningFrameOrigin, setWarningFrameOrigin] = useState<"cover" | "first" | "last">("cover");
+  const [warningFrameDur] = useState(3); // segundos del frame previo
+  const [warningDuration, setWarningDuration] = useState(0); // actualizado al cargar el mp4
+  const warningDurFallback = 16.02; // duración aproximada de Advertencia.mp4
+  // true mientras el aviso ocupa la vista previa antes del clip.
+  const [warningActive, setWarningActive] = useState(false);
+  const warningActiveRef = useRef(false);
+  const warningRef = useRef<HTMLVideoElement>(null);
+  // Muestra del aviso de contenido sensible: se rellena con el MP4 importado.
+  const warningVideoSrcValue = warningVideoSrc;
+
   // Filters & Appearance
   const [filter, setFilter] = useState<MediaFilter>("bw-high");
   const [isMuted, setIsMuted] = useState(true);
@@ -863,6 +885,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [trimStart, setTrimStart] = useState<number>(0);
   const [trimEnd, setTrimEnd] = useState<number>(0);
+
+  // ── Normalización de texto: Sentence Case (Sc) para título y bajada ───
+  const toSentenceCase = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/(^\s*|[.!?]+\s+)([a-z])/g, (_, p1, p2) => p1 + p2.toUpperCase())
+      .replace(/^[a-z]/, (c) => c.toUpperCase());
 
   // ── Desplazamiento manual en la vista previa ──
   // La barra de posición y el contador se escriben en el DOM desde un rAF
@@ -6823,6 +6852,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return true;
   };
 
+  // ─── Aviso de contenido sensible en la vista previa ───────────────────────
+  // Se dispara al empezar la reproducción del clip si el aviso está activado.
+  // Frame opcional (portada/primer/último) → cartel → clip.
+  const endPreviewWarning = () => {
+    if (!warningActiveRef.current) return;
+    warningActiveRef.current = false;
+    setWarningActive(false);
+    // Al terminar el aviso, arranca el clip desde trimStart.
+    const main = activeMediaEl();
+    if (main) {
+      if (trimEnd > trimStart) main.currentTime = trimStart;
+      main.play().catch(() => {});
+    }
+    setIsVideoPlaying(true);
+  };
+  const startPreviewWarning = (): boolean => {
+    if (warningActiveRef.current) return true;
+    const el = warningRef.current;
+    if (!el || el.readyState < 1) return false;
+    warningActiveRef.current = true;
+    setWarningActive(true);
+    el.muted = isMuted;
+    try {
+      el.currentTime = 0;
+    } catch {}
+    el.play().catch(() => {});
+    activeMediaEl()?.pause();
+    setIsVideoPlaying(true);
+    return true;
+  };
+
   // ── Desplazamiento manual en la vista previa ──
   // Barra de posición y botones ±: la búsqueda cierra el sello si estaba en
   // pantalla y respeta el estado de reproducción. Fuera del rango de recorte
@@ -7938,7 +7998,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 placeholder="Titular en impacto directo..."
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm sm:text-base font-bold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
               />
-              <span className="text-[11px] text-neutral-500 font-light block">
+              <div className="flex items-center justify-between gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTitle((t) => toSentenceCase(t))}
+                  className="text-[10px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  title="Sentence Case — primera letra de cada oración en mayúscula"
+                >
+                  Sc
+                </button>
+                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400" : "text-neutral-500"} font-light`}>
+                  {title.length}/120
+                </span>
+              </div>
+              <span className="text-[11px] text-neutral-500 font-light block mt-1">
                 Presiona Enter para romper la línea exactamente donde quieras
                 equilibrar el texto.
               </span>
@@ -7999,6 +8072,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 placeholder="Detalle o contexto clave que complementa el titular..."
                 className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
               />
+              <div className="flex items-center justify-between gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDescription((d) => toSentenceCase(d))}
+                  className="text-[10px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  title="Sentence Case — primera letra de cada oración en mayúscula"
+                >
+                  Sc
+                </button>
+                <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400" : "text-neutral-500"} font-light`}>
+                  {description.length}/150
+                </span>
+              </div>
             </div>
 
             {/* Espaciado e interlineado · plegado por defecto: es la parte
@@ -9411,6 +9497,77 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {videoOutro ? "Activado" : "Apagado"}
                   </button>
                 </div>
+
+                {/* Aviso de contenido sensible (opcional): frame previo + cartel
+                    Blacknews-Advertencia.mp4 antes del clip. Con él activado,
+                    las redes toman como miniatura el primer frame (portada con
+                    titular), así que el cartel de advertencia nunca se ve en
+                    el preview de subida. Sólo disponible con vídeo. */}
+                {exportsVideo && (
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-neutral-200 block">
+                        Aviso de contenido sensible
+                      </span>
+                      <span className="text-[11px] text-neutral-400 font-light">
+                        {warningFrameDur} s de portada + {warningDuration.toFixed(1)} s de cartel
+                        antes del clip. El frame opcional es la miniatura que
+                        ven las redes: el cartel no se muestra en el preview.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={contentWarning}
+                      onClick={() => setContentWarning((v) => !v)}
+                      className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        contentWarning
+                          ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
+                          : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
+                      }`}
+                      title="Inserta un frame de portada y el cartel de advertencia antes del clip"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {contentWarning ? "Activado" : "Apagado"}
+                    </button>
+                  </div>
+                )}
+                {contentWarning && (
+                  <div className="mt-2 space-y-2">
+                    <div className="text-[11px] text-neutral-400 font-light">
+                      Frame opcional que se muestra antes del cartel:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          ["cover", "Portada con titular"],
+                          ["first", "Primer fotograma"],
+                          ["last", "Último fotograma"],
+                        ] as const
+                      ).map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setWarningFrameOrigin(v)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-colors cursor-pointer ${
+                            warningFrameOrigin === v
+                              ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
+                              : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10.5px] text-neutral-500 font-light">
+                      Con «Portada con titular» se reutiliza la composición de la
+                      portada (fondo, categoría y titular). Con «Primer/Último
+                      fotograma» se coge un frame real del clip en trimStart o
+                      trimEnd. Es el frame que las redes toman como miniatura,
+                      así que elige el que mejor refleje el post.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -10293,6 +10450,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   const dur =
                     Math.round((e.currentTarget.duration || 0) * 10) / 10;
                   if (dur > 0) setOutroDuration(dur);
+                }}
+                onEnded={endPreviewOutro}
+                onError={endPreviewOutro}
+              />
+            )}
+
+            {/* Aviso de contenido sensible antes del clip */}
+            {exportsVideo && contentWarning && (
+              <video
+                ref={warningRef}
+                src={warningVideoSrcValue}
+                className="absolute inset-0 w-full h-full object-contain bg-black pointer-events-none select-none"
+                style={{
+                  zIndex: 50,
+                  opacity: warningActive ? 1 : 0,
+                  transition: "opacity 150ms linear",
+                }}
+                playsInline
+                preload="auto"
+                muted={isMuted}
+                onLoadedMetadata={(e) => {
+                  const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
+                  if (dur > 0) setWarningDuration(dur);
                 }}
                 onEnded={endPreviewOutro}
                 onError={endPreviewOutro}
