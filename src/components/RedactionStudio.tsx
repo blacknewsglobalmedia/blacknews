@@ -12,7 +12,6 @@ import {
   Sparkles, 
   Image as ImageIcon,
   User,
-  UserCheck,
   UserX,
   Users,
   FileText,
@@ -114,7 +113,6 @@ interface RedactionStudioProps {
   onApproveRedactor: (id: string) => void;
   onRejectRedactor: (id: string) => void;
   onChangeUserRole: (userId: string, newRole: RedactorRole) => void;
-  onRegisterRedactor: (newCandidate: Omit<RedactorProfile, 'id' | 'role' | 'requestedAt' | 'avatarInitials'>) => void;
   publishedReports: Report[];
   onDeleteReport: (id: string) => void;
   layoutConfig: FrontPageLayoutConfig;
@@ -211,7 +209,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   onApproveRedactor,
   onRejectRedactor,
   onChangeUserRole,
-  onRegisterRedactor,
   publishedReports,
   onDeleteReport,
   layoutConfig,
@@ -272,14 +269,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
   const [previewMode, setPreviewMode] = useState(false);
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [selectedOptimizedImage, setSelectedOptimizedImage] = useState<OptimizedImageSet | undefined>(undefined);
-
-  // Registration Form State
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regBureau, setRegBureau] = useState('');
-  const [regTitle, setRegTitle] = useState('');
-  const [regBio, setRegBio] = useState('');
-  const [regSubmitted, setRegSubmitted] = useState(false);
 
   // Article Builder Form State
   const [title, setTitle] = useState('');
@@ -783,20 +772,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
 
   const handleRemoveTakeaway = (index: number) => {
     setTakeawayInputs(takeawayInputs.filter((_, i) => i !== index));
-  };
-
-  // Registration Submit
-  const handleSubmitRegistration = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!regName.trim() || !regEmail.trim()) return;
-    onRegisterRedactor({
-      name: regName.trim(),
-      email: regEmail.trim(),
-      bureau: regBureau.trim() || 'Corresponsalía',
-      title: regTitle.trim() || 'Analista / Redactor',
-      bio: regBio.trim(),
-    });
-    setRegSubmitted(true);
   };
 
   // Publish or Save edited report
@@ -1458,20 +1433,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
             <span>Plantilla JSON</span>
           </button>
           )}
-          {isReader && (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('register');
-                setIsMobileSidebarOpen(false);
-              }}
-              className="w-full py-2 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-white/5"
-              title="Solicitar acreditación como redactor"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Solicitar acreditación</span>
-            </button>
-          )}
 
           <button
             type="button"
@@ -1504,7 +1465,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
               {activeTab === 'categories' && 'GESTIÓN DE CATEGORÍAS'}
               {activeTab === 'users' && 'EQUIPO & ROLES'}
               {activeTab === 'policies' && 'POLÍTICAS Y NORMATIVA'}
-              {activeTab === 'register' && 'SOLICITUD DE ACREDITACIÓN'}
               {activeTab === 'history' && 'MI HISTORIAL'}
               {activeTab === 'saved' && 'MIS GUARDADOS'}
               {activeTab === 'profile' && 'MI PERFIL'}
@@ -2271,16 +2231,16 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
                 <Lock className="w-7 h-7 text-neutral-300" />
               </div>
               <h3 className="text-base font-bold uppercase tracking-wider text-white mb-2">
-                CUENTA DE USUARIO BÁSICO (LECTOR)
+                HERRAMIENTAS DE REDACCIÓN
               </h3>
               <p className="text-sm text-neutral-400 leading-relaxed max-w-lg mx-auto mb-6 font-light">
-                Los usuarios registrados no tienen permisos de redacción ni edición por defecto. Cuando la administración habilite específicamente tu cuenta como <strong>Redactor</strong>, podrás redactar y editar exclusivamente tus propios artículos.
+                El espacio de redacción está reservado a las cuentas de edición habilitadas por la redacción.
               </p>
               <button
-                onClick={() => setActiveTab('register')}
+                onClick={onBackToNews}
                 className="px-5 py-2.5 bg-white text-black font-bold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-xl"
               >
-                SOLICITAR HABILITACIÓN DE CUENTA
+                VOLVER A PORTADA
               </button>
             </div>
           ) : (
@@ -3577,114 +3537,6 @@ export const RedactionStudio: React.FC<RedactionStudioProps> = ({
         </div>
       )}
 
-      {/* TAB CONTENT 5: SOLICITUD DE ACREDITACIÓN (PARA LECTORES) */}
-      {activeTab === 'register' && (
-        <div className="max-w-xl mx-auto px-4 sm:px-6 pt-10">
-          {regSubmitted ? (
-            <div className="p-8 text-center border border-white/10">
-              <CheckCircle className="w-8 h-8 text-white mx-auto mb-3" />
-              <h2 className="text-lg font-medium text-white uppercase tracking-wider mb-2">
-                SOLICITUD REGISTRADA CON ÉXITO
-              </h2>
-              <p className="text-xs text-neutral-400 leading-relaxed max-w-md mx-auto mb-6">
-                Tu solicitud ha sido enviada. Cuando un administrador habilite tu cuenta, tendrás permisos de redactor para publicar y editar exclusivamente tus propios artículos.
-              </p>
-              <button
-                onClick={() => setRegSubmitted(false)}
-                className="px-4 py-2 border border-white/20 text-xs font-mono uppercase text-white hover:border-white transition-colors cursor-pointer"
-              >
-                ENVIAR OTRA SOLICITUD
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmitRegistration} className="space-y-5 border border-white/10 p-6 sm:p-8">
-              <div>
-                <h2 className="text-base font-medium text-white uppercase tracking-wider mb-1">
-                  SOLICITUD DE PERMISOS DE REDACTOR
-                </h2>
-                <p className="text-xs text-neutral-400 leading-relaxed">
-                  Por política del medio, todos los usuarios inician como lectores básicos sin capacidad de edición. Si deseas que se te asigne una cuenta de redactor para publicar despachos, completa los datos a continuación:
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-neutral-400 uppercase mb-1">
-                  NOMBRE COMPLETO *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  placeholder="Nombre y apellidos"
-                  className="w-full bg-black border-b border-white/20 pb-1 text-sm text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-neutral-400 uppercase mb-1">
-                  CORREO ELECTRÓNICO REGISTRADO *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="tu_cuenta@gmail.com"
-                  className="w-full bg-black border-b border-white/20 pb-1 text-sm text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-mono text-neutral-400 uppercase mb-1">
-                    CIUDAD / CORRESPONSALÍA
-                  </label>
-                  <input
-                    type="text"
-                    value={regBureau}
-                    onChange={(e) => setRegBureau(e.target.value)}
-                    placeholder="Ej: Madrid"
-                    className="w-full bg-black border-b border-white/20 pb-1 text-xs text-white focus:outline-none focus:border-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-mono text-neutral-400 uppercase mb-1">
-                    ESPECIALIDAD O CARGO
-                  </label>
-                  <input
-                    type="text"
-                    value={regTitle}
-                    onChange={(e) => setRegTitle(e.target.value)}
-                    placeholder="Ej: Analista de Mercados"
-                    className="w-full bg-black border-b border-white/20 pb-1 text-xs text-white focus:outline-none focus:border-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-neutral-400 uppercase mb-1">
-                  ENFOQUE O PROPUESTA EDITORIAL
-                </label>
-                <textarea
-                  rows={3}
-                  value={regBio}
-                  onChange={(e) => setRegBio(e.target.value)}
-                  placeholder="Temas que deseas cubrir y trayectoria..."
-                  className="w-full bg-black border border-white/10 p-2 text-xs text-white focus:outline-none focus:border-white resize-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-white text-black font-medium text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer"
-              >
-                ENVIAR SOLICITUD A LA ADMINISTRACIÓN
-              </button>
-            </form>
-          )}
-        </div>
-      )}
       </main>
 
       {/* Modal para importar artículos desde JSON */}

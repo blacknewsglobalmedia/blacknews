@@ -18,7 +18,6 @@ export type StudioTab =
   | 'osint'
   | 'users'
   | 'my-articles'
-  | 'register'
   | 'policies'
   | 'history'
   | 'saved'
@@ -82,8 +81,6 @@ export const canOpenStudioTab = (
       // Centro de Investigación OSINT: exclusivo de administradores.
       // El frontend oculta la pestaña; el Worker vuelve a verificar en backend.
       return role === 'ADMIN';
-    case 'register':
-      return role === 'LECTOR';
     default:
       // profile · history · saved · ads: espacio personal de cualquier rol
       return true;

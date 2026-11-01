@@ -20,7 +20,6 @@ import {
   History,
   BookmarkCheck,
   Megaphone,
-  UserCheck,
   FileText,
   Image as ImageIcon,
 } from "lucide-react";
@@ -81,7 +80,6 @@ const PANEL_SHORTCUTS: Record<RedactorRole, PanelShortcut[]> = {
     { tab: "saved", label: "Guardados", icon: BookmarkCheck },
     { tab: "profile", label: "Mi perfil", icon: User },
     { tab: "ads", label: "Mi publicidad", icon: Megaphone },
-    { tab: "register", label: "Acreditación", icon: UserCheck },
   ],
 };
 

@@ -778,26 +778,24 @@ export default function App() {
           name,
           isOwnerEmail(email) ? "Zúrich / Central" : "Lector Registrado",
           isOwnerEmail(email) ? "Administrador" : "Usuario Básico",
-          true,
         );
       } else {
         // Sin sesión de Firebase (la observer resuelve el estado inicial
-        // desde la persistencia local, así que null es definitivo). Si el
-        // perfil restaurado venía de un inicio de sesión con Google
-        // verificado, la sesión caducó o se cerró en otra parte: antes el
-        // panel seguía "logueado" mientras los módulos que exigen token
-        // real (p. ej. OSINT) recibían 401. Sincronizamos: se cierra la
-        // sesión local para que el usuario pueda volver a entrar con el
-        // popup de Google. Los perfiles manuales (sin Google) no se tocan.
+        // desde la persistencia local, así que null es definitivo): la
+        // sesión caducó o se cerró en otra parte. Antes el panel seguía
+        // "logueado" mientras los módulos que exigen token real (p. ej.
+        // OSINT) recibían 401, y los perfiles manuales heredados entraban
+        // solo por escribir el mismo correo. Hoy el acceso pasa solo por
+        // Google, así que cualquier perfil guardado sin sesión se purga.
         try {
           const saved = localStorage.getItem("blacknews_active_user");
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && parsed.isGoogleAccount && parsed.email) {
+            if (parsed && parsed.email && parsed.id !== GUEST_USER_ID) {
               setCurrentUser(GUEST_USER);
               localStorage.removeItem("blacknews_active_user");
               showToast(
-                "Sesión de Google cerrada o caducada: vuelve a entrar con «Acceder con cuenta Google» para conservar tus permisos.",
+                "Sesión cerrada o caducada: vuelve a entrar con «Acceder con cuenta Google».",
               );
             }
           }
@@ -1281,47 +1279,13 @@ export default function App() {
     showToast("Permisos revocados a usuario Lector");
   };
 
-  const handleRegisterRedactor = (
-    candidate: Omit<
-      RedactorProfile,
-      "id" | "role" | "requestedAt" | "avatarInitials"
-    >,
-  ) => {
-    const initials = candidate.name
-      .split(" ")
-      .map((w) => w[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-
-    // Regular registrations are always basic readers without editing capabilities
-    const newProfile: RedactorProfile = {
-      ...candidate,
-      id: `usr-${Date.now()}`,
-      role: "LECTOR",
-      requestedAt: "30 Sep 2026",
-      avatarInitials: initials || "US",
-      isGoogleAccount: false,
-    };
-
-    const updated = [...redactorsList, newProfile];
-    setRedactorsList(updated);
-    try {
-      localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
-    } catch {}
-    setCurrentUser(newProfile);
-    showToast("Cuenta registrada como Lector básico. Solicitud enviada.");
-  };
-
-  // Google Login and Registration Handler.
-  // `verified` is true ONLY when the session comes from a real Firebase Google sign-in:
-  // that is the single flow capable of restoring or granting editorial roles.
+  // Google Login Handler. El acceso pasa exclusivamente por el popup de
+  // Google: no hay registro manual, así que toda sesión viene verificada.
   const handleLoginWithGoogle = (
     email: string,
     name: string,
     bureau: string = "Lector Registrado",
     title: string = "Usuario Básico",
-    verified: boolean = false,
   ) => {
     const initials =
       name
@@ -1334,40 +1298,6 @@ export default function App() {
     const existing = redactorsList.find(
       (u) => u.email.toLowerCase() === email.toLowerCase(),
     );
-
-    // Manual (unverified) registration: always a basic reader, never inherits editorial roles
-    if (!verified) {
-      const readerProfile: RedactorProfile =
-        existing && existing.role === "LECTOR"
-          ? existing
-          : {
-              id: `usr-manual-${Date.now()}`,
-              name,
-              email,
-              role: "LECTOR",
-              bureau: "Lector Registrado",
-              title: "Usuario Básico",
-              avatarInitials: initials,
-              requestedAt: "30 Sep 2026",
-              isGoogleAccount: false,
-            };
-
-      if (!existing) {
-        const updated = [readerProfile, ...redactorsList];
-        setRedactorsList(updated);
-        try {
-          localStorage.setItem("blacknews_redactors", JSON.stringify(updated));
-        } catch {}
-      }
-
-      setCurrentUser(readerProfile);
-      showToast(
-        existing && existing.role !== "LECTOR"
-          ? "Permisos editoriales en pausa: verifica tu identidad con Google para activarlos."
-          : "Cuenta registrada como Lector básico. Solicitud enviada.",
-      );
-      return;
-    }
 
     // Verified Google session: only the owner email becomes/keeps ADMIN
     const nextProfile: RedactorProfile = existing
@@ -1703,7 +1633,6 @@ export default function App() {
             onApproveRedactor={handleApproveRedactor}
             onRejectRedactor={handleRejectRedactor}
             onChangeUserRole={handleChangeUserRole}
-            onRegisterRedactor={handleRegisterRedactor}
             publishedReports={reportsList}
             onDeleteReport={handleDeleteReport}
             layoutConfig={layoutConfig}

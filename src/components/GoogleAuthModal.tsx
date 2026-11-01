@@ -1,14 +1,43 @@
 import React, { useState } from 'react';
-import { X, Check, LogOut, PenTool, User } from 'lucide-react';
-import { RedactorProfile, ROLE_PERMISSIONS, GUEST_USER_ID } from '../types/auth';
+import { X, LogOut, PenTool, User } from 'lucide-react';
+import { RedactorProfile, GUEST_USER_ID } from '../types/auth';
 import { auth, googleProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
+
+/** Roles en cristiano: el usuario ve etiquetas, nunca los códigos internos. */
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: 'Administrador',
+  MODERADOR: 'Moderador',
+  REDACTOR: 'Redactor',
+  LECTOR: 'Lector',
+};
+
+/**
+ * Qué puede hacer cada cuenta, en una frase natural. Sustituye a la antigua
+ * matriz de capacidades (Redactar/Editar/Gestión…), que exponía la tabla
+ * interna de permisos sin decirle nada útil al usuario.
+ */
+const ROLE_SUMMARY: Record<string, string> = {
+  ADMIN: 'Acceso completo a la redacción, la portada y la gestión del equipo.',
+  MODERADOR: 'Gestión de la portada y de las cuentas de la redacción.',
+  REDACTOR: 'Redacta y edita sus propios artículos en la red.',
+};
+
+/**
+ * Lo que incluye la cuenta lectora, en una sola línea: la cifra en tipografía
+ * de titular y la etiqueta en versalitas, sin párrafos explicativos.
+ */
+const READER_PERKS = [
+  { value: '10', label: 'Artículos', tabular: true },
+  { value: '50', label: 'Lecturas', tabular: true },
+  { value: 'Panel', label: 'de publicidad', tabular: false },
+];
 
 interface GoogleAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: RedactorProfile;
-  onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string, verified?: boolean) => void;
+  onLoginWithGoogle: (email: string, name: string, bureau?: string, title?: string) => void;
   onLogout: () => void;
   onOpenStudio?: () => void;
 }
@@ -21,15 +50,10 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
   onLogout,
   onOpenStudio,
 }) => {
-  const [customEmail, setCustomEmail] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [isCustomFormOpen, setIsCustomFormOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
   if (!isOpen) return null;
-
-  const permissions = ROLE_PERMISSIONS[currentUser.role];
 
   // Real Google Sign-in with Firebase
   const handleRealFirebaseGoogleSignIn = async () => {
@@ -47,8 +71,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         email,
         name,
         isOwner ? 'Zúrich / Central' : 'Lector Registrado',
-        isOwner ? 'Administrador' : 'Usuario Básico',
-        true
+        isOwner ? 'Administrador' : 'Usuario Básico'
       );
       onClose();
     } catch (err: any) {
@@ -61,22 +84,6 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
     } finally {
       setIsConnecting(false);
     }
-  };
-
-  const handleCustomGoogleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customEmail.trim() || !customName.trim()) return;
-
-    // Manual registration never grants editorial permissions: it always creates a LECTOR
-    // account. ADMIN is only reachable through the verified Google sign-in above.
-    onLoginWithGoogle(
-      customEmail.trim(),
-      customName.trim(),
-      'Lector Registrado',
-      'Usuario Básico',
-      false
-    );
-    onClose();
   };
 
   const googleIconSvg = (
@@ -138,7 +145,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                     ? 'border-neutral-600 text-neutral-300'
                     : 'border-neutral-700 text-neutral-400'
                 }`}>
-                  {currentUser.role === 'LECTOR' ? 'LECTOR (BÁSICO)' : currentUser.role}
+                  {ROLE_LABEL[currentUser.role] ?? currentUser.role}
                 </span>
               </div>
               <div className="text-xs font-sans text-neutral-400 mt-1 font-light break-all">
@@ -147,54 +154,57 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                   : currentUser.email}
               </div>
             </div>
-            {currentUser.isGoogleAccount && (
-              <span className="text-xs font-sans font-medium text-white flex items-center gap-1">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                GOOGLE
-              </span>
-            )}
           </div>
 
-          {/* Permisos de la cuenta activa */}
+          {/* Qué puede hacer la cuenta, en una frase */}
           <div className="mt-4 pt-3 border-t border-white/5 space-y-2 text-xs font-sans text-neutral-400">
             {currentUser.role === 'LECTOR' ? (
-              <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
-                <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: guardas hasta <strong className="text-white font-medium">10 artículos</strong>, revisas tus últimas <strong className="text-white font-medium">50 lecturas</strong> y envías publicidades pagadas desde tu panel. Las herramientas editoriales de la redacción se reservan a las cuentas de edición habilitadas.
-                </p>
+              <div className="bg-neutral-950 border border-white/10 rounded-lg overflow-hidden">
+                {/* Cifras del lector: una sola línea, cifra blanca + etiqueta micro */}
+                <ul className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 px-3.5 py-3">
+                  {READER_PERKS.map((perk, i) => (
+                    <React.Fragment key={perk.value}>
+                      {i > 0 && (
+                        <span className="text-neutral-700" aria-hidden>
+                          ·
+                        </span>
+                      )}
+                      <li className="flex items-baseline gap-1.5 whitespace-nowrap">
+                        <span
+                          className={`font-headline text-sm leading-none uppercase text-white ${
+                            perk.tabular ? 'tabular-nums' : ''
+                          }`}
+                        >
+                          {perk.value}
+                        </span>
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                          {perk.label}
+                        </span>
+                      </li>
+                    </React.Fragment>
+                  ))}
+                </ul>
                 {onOpenStudio && currentUser.id !== GUEST_USER_ID && (
-                  <button
-                    onClick={() => {
-                      onClose();
-                      onOpenStudio();
-                    }}
-                    className="mt-3 w-full py-2.5 px-4 bg-emerald-500 text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    <span>ABRIR MI PANEL</span>
-                  </button>
+                  <div className="p-3 border-t border-white/5">
+                    <button
+                      onClick={() => {
+                        onClose();
+                        onOpenStudio();
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-500 text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>ABRIR MI PANEL</span>
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
               <div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className={permissions.canWritePosts ? 'text-white' : 'text-neutral-600'}>●</span>
-                    <span>Redactar: {permissions.canWritePosts ? 'SÍ' : 'NO'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={permissions.canEditOwnPosts ? 'text-white' : 'text-neutral-600'}>●</span>
-                    <span>Editar artículos: {permissions.canEditOwnPosts ? 'SÍ' : 'NO'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={permissions.canManageLayout ? 'text-white' : 'text-neutral-600'}>●</span>
-                    <span>Gestión Portada: {permissions.canManageLayout ? 'SÍ' : 'NO'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={permissions.canManageUsers ? 'text-white' : 'text-neutral-600'}>●</span>
-                    <span>Gestión Roles: {permissions.canManageUsers ? 'SÍ' : 'NO'}</span>
-                  </div>
-                </div>
+                <p className="text-xs text-neutral-400 leading-relaxed font-light">
+                  {ROLE_SUMMARY[currentUser.role] ??
+                    'Cuenta habilitada para las herramientas de la redacción.'}
+                </p>
 
                 {/* Direct button to open internal panel right from the modal */}
                 {onOpenStudio && (
@@ -206,7 +216,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                     className="w-full py-2.5 px-4 bg-white text-black font-semibold text-xs uppercase tracking-wider rounded-md hover:bg-neutral-200 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                   >
                     <PenTool className="w-3.5 h-3.5" />
-                    <span>IR AL PANEL INTERNO DE REDACCIÓN</span>
+                    <span>IR AL PANEL DE REDACCIÓN</span>
                   </button>
                 )}
               </div>
@@ -221,9 +231,9 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         )}
 
         {/* Real Firebase Google Auth Popup Button */}
-        <div className="mb-5">
+        <div>
           <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 font-medium">
-            INICIAR SESIÓN CON GOOGLE
+            ENTRAR CON TU CUENTA
           </div>
           <button
             onClick={handleRealFirebaseGoogleSignIn}
@@ -234,83 +244,28 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             <span>{isConnecting ? 'CONECTANDO CON GOOGLE...' : 'ACCEDER CON CUENTA GOOGLE'}</span>
           </button>
           <p className="text-[11px] font-sans text-neutral-400 text-center mt-2 font-light">
-            Tu correo se usa únicamente para identificar tu sesión. Los permisos de
-            edición se asignan de forma manual desde la redacción.
+            Abre tu cuenta con un clic. Guardamos tus artículos y lecturas en tu navegador.
           </p>
         </div>
 
-        {/* Custom Google Account Login / Register Toggle */}
-        {!isCustomFormOpen ? (
-          <button
-            onClick={() => setIsCustomFormOpen(true)}
-            className="w-full py-2.5 text-xs font-sans font-medium text-neutral-400 hover:text-white uppercase tracking-wider text-center transition-colors cursor-pointer border-t border-white/5 pt-3"
-          >
-            + Registrar otra cuenta de correo o Gmail
-          </button>
-        ) : (
-          <form onSubmit={handleCustomGoogleSubmit} className="pt-3 border-t border-white/5 space-y-3">
-            <div className="text-xs font-sans font-semibold uppercase tracking-wider text-neutral-200">
-              REGISTRO DE USUARIO
-            </div>
-            <div>
-              <label className="block text-xs font-sans text-neutral-400 mb-1">
-                NOMBRE COMPLETO
-              </label>
-              <input
-                type="text"
-                required
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                placeholder="Nombre y apellido"
-                className="w-full bg-black border-b border-white/20 px-1 py-2.5 text-base text-white focus:outline-none focus:border-white font-sans"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-sans text-neutral-400 mb-1">
-                CORREO ELECTRÓNICO (GMAIL)
-              </label>
-              <input
-                type="email"
-                required
-                value={customEmail}
-                onChange={(e) => setCustomEmail(e.target.value)}
-                placeholder="correo@gmail.com"
-                className="w-full bg-black border-b border-white/20 px-1 py-2.5 text-base text-white focus:outline-none focus:border-white font-sans"
-              />
-            </div>
-            <p className="text-xs font-sans text-neutral-500 font-light">
-              * El registro manual siempre crea una cuenta <strong className="text-neutral-400">Lector</strong> sin permisos de edición. Los permisos de redacción se habilitan individualmente por la administración de la red.
-            </p>
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="submit"
-                className="flex-1 py-2.5 bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-neutral-200 transition-colors cursor-pointer rounded-md"
-              >
-                INGRESAR / REGISTRAR
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCustomFormOpen(false)}
-                className="px-3 py-2.5 text-xs font-sans text-neutral-400 hover:text-white cursor-pointer"
-              >
-                CANCELAR
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Logout action */}
-        <div className="pt-5 border-t border-white/10 mt-5 flex items-center justify-between">
-          <button
-            onClick={() => {
-              onLogout();
-              onClose();
-            }}
-            className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium py-2 -my-1"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>CERRAR SESIÓN</span>
-          </button>
+        {/* Logout action: solo tiene sentido con una cuenta dentro */}
+        <div
+          className={`pt-5 border-t border-white/10 mt-5 flex items-center ${
+            currentUser.id === GUEST_USER_ID ? 'justify-end' : 'justify-between'
+          }`}
+        >
+          {currentUser.id !== GUEST_USER_ID && (
+            <button
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium py-2 -my-1"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>CERRAR SESIÓN</span>
+            </button>
+          )}
           <button
             onClick={onClose}
             className="text-xs font-sans text-neutral-400 hover:text-white transition-colors cursor-pointer font-medium py-2 -my-1"
