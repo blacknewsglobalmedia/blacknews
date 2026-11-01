@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Search,
   Bookmark,
@@ -35,6 +35,7 @@ import {
   canOpenStudioTab,
 } from "../types/studio";
 import { AssembleToggle } from "./AssembleToggle";
+import { CategoryStrip } from "./CategoryStrip";
 
 /** Atajo del menú móvil hacia una sección concreta del panel. */
 interface PanelShortcut {
@@ -132,7 +133,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     isMobileMenuOpenProp ?? internalMobileMenuOpen;
   const setIsMobileMenuOpen =
     onMobileMenuOpenChange ?? setInternalMobileMenuOpen;
-  const stripRef = useRef<HTMLDivElement>(null);
 
   // Cabecera compacta al bajar el scroll: se pliega la micro-tira, la barra
   // principal encoge y las categorías bajan de alto — casi la mitad de altura
@@ -156,15 +156,8 @@ export const TopBar: React.FC<TopBarProps> = ({
     };
   }, []);
 
-  // Tira de categorías (móvil/tablet): la sección activa se centra sola
-  useEffect(() => {
-    const active = stripRef.current?.querySelector<HTMLElement>(
-      '[data-active="true"]',
-    );
-    if (active) {
-      active.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    }
-  }, [selectedCategory]);
+  // Tira de categorías: la sección activa se centra sola dentro de la tira
+  // (CategoryStrip lo resuelve para escritorio y móvil).
 
   const rawList =
     propCategories && propCategories.length > 0
@@ -387,42 +380,22 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Desktop category strip: strictly contained within max-w-7xl width.
-          Scrolls horizontally if categories exceed available width without breaking layout. */}
+          Scrolls horizontally if categories exceed available width without breaking layout,
+          with edge fades + arrows so no section ever stays cut off. */}
       <nav
         data-piece
         className="hidden lg:block border-t border-white/5 w-full overflow-hidden"
         aria-label="Secciones editoriales"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
-          <div className={`flex items-center gap-5 xl:gap-7 text-xs font-sans font-medium tracking-wide overflow-x-auto no-scrollbar scroll-smooth w-full justify-start xl:justify-center transition-[height] duration-200 ${compact ? "h-8" : "h-10"}`}>
-            {categories.map((cat) => {
-              const isActive = selectedCategory === cat.id && !isStudioOpen;
-              const isFen = isFenomenos(cat.id);
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => handleCategoryClick(cat.id)}
-                  className={`h-full flex items-center transition-colors cursor-pointer relative whitespace-nowrap shrink-0 ${
-                    isFen ? "font-mono tracking-wider" : ""
-                  } ${
-                    isActive
-                      ? "text-white font-semibold"
-                      : "text-neutral-400 hover:text-white"
-                  }`}
-                >
-                  {isFen && <span className="bn-redact" aria-hidden="true"></span>}
-                  {cat.label}
-                  {isActive && (
-                    <span
-                      className={`absolute bottom-0 left-0 w-full h-[1.5px] rounded-full ${
-                        isFen ? "bn-file-underline" : "bg-white"
-                      }`}
-                    ></span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <CategoryStrip
+            variant="desktop"
+            categories={categories}
+            selectedCategory={selectedCategory}
+            isStudioOpen={isStudioOpen}
+            onSelect={handleCategoryClick}
+            compact={compact}
+          />
         </div>
       </nav>
 
@@ -431,39 +404,14 @@ export const TopBar: React.FC<TopBarProps> = ({
         className="lg:hidden border-t border-white/5 w-full overflow-hidden"
         aria-label="Secciones editoriales"
       >
-        <div
-          ref={stripRef}
-          className={`flex items-center gap-4 px-4 overflow-x-auto no-scrollbar scroll-smooth w-full transition-[height] duration-200 ${compact ? "h-8" : "h-10"}`}
-        >
-          {categories.map((cat) => {
-            const isActive = selectedCategory === cat.id && !isStudioOpen;
-            const isFen = isFenomenos(cat.id);
-            return (
-              <button
-                key={cat.id}
-                data-active={isActive}
-                onClick={() => handleCategoryClick(cat.id)}
-                className={`h-full flex items-center shrink-0 whitespace-nowrap text-[11px] font-medium uppercase transition-colors cursor-pointer relative ${
-                  isFen ? "font-mono tracking-wider" : "font-sans font-medium tracking-wider"
-                } ${
-                  isActive
-                    ? "text-white font-semibold"
-                    : "text-neutral-400 hover:text-white"
-                }`}
-              >
-                {isFen && <span className="bn-redact" aria-hidden="true"></span>}
-                {cat.label}
-                {isActive && (
-                  <span
-                    className={`absolute bottom-0 left-0 w-full h-[1.5px] rounded-full ${
-                      isFen ? "bn-file-underline" : "bg-white"
-                    }`}
-                  ></span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <CategoryStrip
+          variant="mobile"
+          categories={categories}
+          selectedCategory={selectedCategory}
+          isStudioOpen={isStudioOpen}
+          onSelect={handleCategoryClick}
+          compact={compact}
+        />
       </nav>
 
       {/* Slide-out / Dropdown Mobile & Tablet Menu */}
