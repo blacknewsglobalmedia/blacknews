@@ -958,6 +958,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       return "";
     }
   });
+  const [openRouterKey, setOpenRouterKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem("blacknews_openrouter_key") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [openRouterModel, setOpenRouterModel] = useState<string>("openai/gpt-4o-mini");
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   /** La barra flotante del asistente: cerrada sólo se ve el botón de
@@ -1048,6 +1056,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   );
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
   const [groqKeySaved, setGroqKeySaved] = useState(false);
+  const [openRouterKeySaved, setOpenRouterKeySaved] = useState(false);
 
   // El tema sobrevive a un refresco. Va fuera del borrador para que el JSON
   // que la redacción comparte no arrastre el texto de partida.
@@ -2211,6 +2220,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   };
 
+  const callOpenRouterDirect = async (topic: string): Promise<{ success: boolean; data?: unknown; error?: string }> => {
+    const key = openRouterKey.trim();
+    if (!key) return { success: false, error: "no_key" };
+    const model = openRouterModel.trim() || "openai/gpt-4o-mini";
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages: [{ role: "system", content: getClientSystemPrompt() }, { role: "user", content: `Redacta sobre: ${topic}` }], temperature: 0.6, response_format: { type: "json_object" } }),
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!res.ok) return { success: false, error: `OpenRouter respondió ${res.status}.` };
+      const raw = await res.json().catch(() => null);
+      const text = raw?.choices?.[0]?.message?.content;
+      if (!text) return { success: false, error: "OpenRouter no devolvió texto." };
+      const parsed = JSON.parse(text);
+      return { success: true, data: { content: parsed.content ?? parsed, tweetBody: parsed.tweetBody ?? parsed.tweet ?? "", sources: [], searched: false, note: `Modo directo OpenRouter (${model} · gratuito)`, model: `${model} (OpenRouter)` } };
+    } catch { return { success: false, error: "No se pudo conectar con OpenRouter." }; }
+  };
+
   const handleGenerateAi = async () => {
     if (aiBusy) return;
     const topic = aiTopic.trim();
@@ -2282,13 +2311,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           applyAiResultAndClose(geminiRes.data);
           return;
         }
-        if (geminiRes.error) {
+        if (geminiRes.error && !openRouterKey.trim()) {
           setAiNotice({ kind: "error", text: geminiRes.error });
           return;
         }
       }
 
-      // 4) Si ningún proveedor está disponible, abrir configuración con instrucciones
+      // 4) Fallback directo: OpenRouter (modelos gratuitos como gpt-4o-mini)
+      if (openRouterKey.trim()) {
+        const openRouterRes = await callOpenRouterDirect(topic);
+        if (openRouterRes.success && openRouterRes.data) {
+          applyAiResultAndClose(openRouterRes.data);
+          return;
+        }
+        if (openRouterRes.error) {
+          setAiNotice({ kind: "error", text: openRouterRes.error });
+          return;
+        }
+      }
+
+      // 5) Si ningún proveedor está disponible, abrir configuración con instrucciones
       setShowAiSettings(true);
       scrollAiCardIntoView();
       setAiNotice({
@@ -2357,18 +2399,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // ── Reescritura por tono (usando la misma llamada directa a Groq) ────
   const rewriteTone = async (text: string, tone: string, setText: (v: string) => void) => {
-    if (!groqKey.trim()) {
-      setAiNotice({ kind: "warn", text: `Necesitas una clave de Groq gratuita para reescribir en tono "${tone}".` });
+    if (!groqKey.trim() && !openRouterKey.trim()) {
+      setAiNotice({ kind: "warn", text: `Necesitas una clave de Groq o OpenRouter gratuita para reescribir en tono "${tone}".` });
       return;
     }
     setAiBusy(true);
     try {
       const prompt = `Reescribe EXCLUSIVAMENTE el siguiente texto con el tono indicado (solo el texto, sin explicaciones, sin markdown, sin comillas extra):\n\nTEXTO ORIGINAL:\n${text}\n\nTONO: ${tone}\n\nREGLAS: Sentence Case (Sc), sin puntos suspensivos (...), sin saltos de línea (\\n) en el título ni en la bajada, máximo 120 chars en título y 150 en descripción según corresponda. Solo el texto reescrito.`;
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const useOpenRouter = !groqKey.trim() && openRouterKey.trim();
+      const url = useOpenRouter ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.groq.com/openai/v1/chat/completions";
+      const auth = useOpenRouter ? openRouterKey.trim() : groqKey.trim();
+      const modelName = useOpenRouter ? (openRouterModel.trim() || "openai/gpt-4o-mini") : "llama-3.3-70b-versatile";
+      const res = await fetch(url, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${groqKey.trim()}` },
-        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: getClientSystemPrompt() }, { role: "user", content: prompt }], temperature: 0.7, max_tokens: 300 }),
-        signal: AbortSignal.timeout(45000),
+        headers: { "content-type": "application/json", authorization: `Bearer ${auth}` },
+        body: JSON.stringify({ model: modelName, messages: [{ role: "system", content: getClientSystemPrompt() }, { role: "user", content: prompt }], temperature: 0.7, max_tokens: 300 }),
+        signal: AbortSignal.timeout(useOpenRouter ? 60000 : 45000),
       });
       const raw = await res.json().catch(() => null);
       const rewritten = raw?.choices?.[0]?.message?.content || "";
@@ -7824,6 +7870,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       >
                         {geminiKeySaved ? "✓ Guardada" : "Guardar"}
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Opción 3: OpenRouter (modelos gratuitos: openai/gpt-4o-mini, meta-llama/llama-3.3-70b, google/gemini-2.0-flash-lite) */}
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                        OpenRouter · Gratis
+                      </span>
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-rose-400 hover:text-rose-300 underline font-medium">Obtener clave →</a>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="password" value={openRouterKey} onChange={(e) => { setOpenRouterKey(e.target.value); setOpenRouterKeySaved(false); }} placeholder="sk-or-v1-..." className="flex-1 bg-neutral-900 border border-white/10 focus:border-rose-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none" />
+                      <button type="button" onClick={() => { const k = openRouterKey.trim(); try { if (k) localStorage.setItem("blacknews_openrouter_key", k); else localStorage.removeItem("blacknews_openrouter_key"); } catch {} setOpenRouterKeySaved(true); showToast(k ? "✓ Clave de OpenRouter guardada" : "Clave borrada"); }} className="px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0">{openRouterKeySaved ? "✓ Guardada" : "Guardar"}</button>
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {["openai/gpt-4o-mini","meta-llama/llama-3.3-70b-instruct","google/gemini-2.0-flash-lite"].map((m) => (
+                        <button key={m} type="button" onClick={() => setOpenRouterModel(m)} className={`text-[9px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${openRouterModel === m ? "bg-rose-500/20 text-rose-300 border-rose-400/50 font-bold" : "bg-neutral-900 text-neutral-400 border-white/10 hover:text-white"}`}>{m}</button>
+                      ))}
                     </div>
                   </div>
                 </div>
