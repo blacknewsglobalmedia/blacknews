@@ -62,9 +62,6 @@ import { osintApi } from '../utils/osintApi';
 
 const SAVED_KEY = 'blacknews_osint_saved';
 
-/** Cuenta administrativa del panel (la allowlist del Worker coincide). */
-const ADMIN_EMAIL_HINT = 'blacknewsglobalmedia@gmail.com';
-
 /* ISO 3166-1 → nombre legible (sólo cuando la fuente lo informa). */
 const ISO_NAMES: Record<string, string> = {
   UY: 'Uruguay', AR: 'Argentina', BR: 'Brasil', CL: 'Chile', CO: 'Colombia',
@@ -595,7 +592,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                 /Acceso OSINT no autorizado|Token de Google|sin configurar/i.test(
                   statusError,
                 )
-                  ? `${statusError} → Abre tu avatar en la cabecera y pulsa «Acceder con cuenta Google» (cuenta ${ADMIN_EMAIL_HINT}), o si usas el modo asistente ejecuta en la consola sessionStorage.setItem('BN_OSINT_TOKEN', '…') y recarga.`
+                  ? `${statusError} → Abre tu avatar en la cabecera y pulsa «Acceder con cuenta Google» con una cuenta habilitada por la redacción.`
                   : statusError
               }
             />

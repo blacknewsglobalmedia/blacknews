@@ -239,7 +239,7 @@ export const PoliciesProvider: React.FC<{ children: React.ReactNode }> = ({
           return {
             ok: false,
             error:
-              "Firestore denegó la escritura: se necesita la sesión Google de blacknewsglobalmedia@gmail.com.",
+              "No tienes permisos para publicar: inicia sesión con una cuenta de edición habilitada por la redacción.",
           };
         }
         return {

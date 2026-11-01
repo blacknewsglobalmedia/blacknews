@@ -56,7 +56,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
       if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
         setAuthError('La ventana emergente fue bloqueada por el navegador. Permítela e inténtalo de nuevo con el botón "Acceder con cuenta Google".');
       } else {
-        setAuthError(`Aviso: ${err.message || 'No se pudo abrir la ventana de Google'}. Verifica que el proveedor de Google esté habilitado en la consola de Firebase e inténtalo de nuevo.`);
+        setAuthError('No se pudo abrir la ventana de Google. Revisa que no esté bloqueada por el navegador y vuelve a intentarlo.');
       }
     } finally {
       setIsConnecting(false);
@@ -142,7 +142,9 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
                 </span>
               </div>
               <div className="text-xs font-sans text-neutral-400 mt-1 font-light break-all">
-                {currentUser.email}
+                {currentUser.id === GUEST_USER_ID
+                  ? 'Sesión de invitado · sin correo registrado'
+                  : currentUser.email}
               </div>
             </div>
             {currentUser.isGoogleAccount && (
@@ -158,7 +160,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             {currentUser.role === 'LECTOR' ? (
               <div className="p-3 bg-neutral-950 border border-white/10 text-neutral-300 rounded-lg">
                 <p className="text-xs text-neutral-400 leading-relaxed font-light">
-                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: guardas hasta <strong className="text-white font-medium">10 artículos</strong>, revisas tus últimas <strong className="text-white font-medium">50 lecturas</strong> y envías publicidades pagadas desde tu panel. Las herramientas editoriales de la redacción son para la cuenta del editor, verificada por Firebase.
+                  Cuenta de <strong className="text-white font-medium">Lector Básico</strong>: guardas hasta <strong className="text-white font-medium">10 artículos</strong>, revisas tus últimas <strong className="text-white font-medium">50 lecturas</strong> y envías publicidades pagadas desde tu panel. Las herramientas editoriales de la redacción se reservan a las cuentas de edición habilitadas.
                 </p>
                 {onOpenStudio && currentUser.id !== GUEST_USER_ID && (
                   <button
@@ -221,7 +223,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
         {/* Real Firebase Google Auth Popup Button */}
         <div className="mb-5">
           <div className="text-xs font-sans uppercase tracking-wider text-neutral-400 mb-2 font-medium">
-            INICIAR SESIÓN CON GOOGLE (FIREBASE)
+            INICIAR SESIÓN CON GOOGLE
           </div>
           <button
             onClick={handleRealFirebaseGoogleSignIn}
@@ -232,7 +234,8 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             <span>{isConnecting ? 'CONECTANDO CON GOOGLE...' : 'ACCEDER CON CUENTA GOOGLE'}</span>
           </button>
           <p className="text-[11px] font-sans text-neutral-400 text-center mt-2 font-light">
-            Al iniciar con la cuenta <strong className="text-neutral-300">blacknewsglobalmedia@gmail.com</strong> se activa automáticamente el rol de Administrador.
+            Tu correo se usa únicamente para identificar tu sesión. Los permisos de
+            edición se asignan de forma manual desde la redacción.
           </p>
         </div>
 
@@ -276,7 +279,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
               />
             </div>
             <p className="text-xs font-sans text-neutral-500 font-light">
-              * El registro manual siempre crea una cuenta <strong className="text-neutral-400">Lector</strong> sin permisos de edición. El rol de <strong className="text-neutral-400">Administrador</strong> solo se asigna al iniciar sesión con Google desde <strong className="text-neutral-400">blacknewsglobalmedia@gmail.com</strong>.
+              * El registro manual siempre crea una cuenta <strong className="text-neutral-400">Lector</strong> sin permisos de edición. Los permisos de redacción se habilitan individualmente por la administración de la red.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <button
@@ -306,7 +309,7 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({
             className="text-xs font-sans text-neutral-400 hover:text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer font-medium py-2 -my-1"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>CERRAR SESIÓN (MODO LECTOR)</span>
+            <span>CERRAR SESIÓN</span>
           </button>
           <button
             onClick={onClose}
