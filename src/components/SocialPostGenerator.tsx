@@ -2041,8 +2041,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       "FORMATO JSON EXACTO:",
       '{"content":{"title":"...","description":"...","category":"CATEGORÍA REAL","photoCaption":"","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
       "",
-      "REGLAS DEL TÍTULO (title): Máx. 120 caracteres. Sentence Case (Sc) — primera letra de cada oración en mayúscula, resto en minúsculas. Directo, contundente, informativo. No todo en MAYÚSCULAS COMPLETAS. No emojis. NUNCA termines con '...' ni con puntos suspensivos. NUNCA uses saltos de línea (\\n) ni más de 3 líneas separadas. Si el texto originalmente lleva saltos, quítalos y hazlo una sola línea continua.",
-      "REGLAS DE LA DESCRIPCIÓN (description): Máx. 150 caracteres. 1-2 frases EN UNA sola línea, sin saltos de línea. Datos concretos que NO estén en el titular ni en el tweet. Sentence Case (Sc). NUNCA termines con '...' ni puntos suspensivos. Sin \\n.",
+      "REGLAS DEL TÍTULO (title): Máx. 120 caracteres. Sentence Case (Sc) — primera letra de cada oración en mayúscula, resto en minúsculas. PROFUNDO, DIRECTO, IMPACTANTE, informativo: cultiva un titular que DATA, no que habla. La IA UIÁS USAR AL MÁXIMO LA CANTIDAD DE CARACTERES DISPONIBLE (cerca del 80%+), nunca cadema '...' ni paus accar. NUNCA uses saltos de línea (\\n) ni más de 3 líneas separadas; si el texto original lleva saltos, quítalos y hazlo una sola línea continua. Datos nucleares: cifras, fechas, organismos, nombres de personas/grupos. Cada otro dato se dice en description o tweet.",
+      "REGLAS DE LA DESCRIPCIÓN (description): Máx. 150 caracteres. 1-2 frases EN UNA sola línea, sin saltos de línea. Sentence Case (Sc). Usa datos relevantes: cifras, fechas, organismos, consecuencias. Completa información que NO esté en el titular ni en el tweet, sin exagerar. Usa casi todo el límite (150 chars). Sin puntos suspensivos (...).",
       `CATEGORÍAS VÁLIDAS (elige EXACTAMENTE una, con el nombre exacto del catálogo): ${cats}`,
       "REGLAS DEL TWEET (tweetBody): Una sola línea. Comienza con [🇽💻] » luego titular potente (mayúsculas cuando corresponda por impacto editorial, no por obligación), luego desarrollo breve con datos, fechas, cifras, nombres, organismos y consecuencias. Máx. ~215 de cuerpo. Finaliza con línea en blanco y ■ #BlackNews. Sin hashtags, sin enlaces, sin emojis (excepto la bandera inicial).",
       "LOS TRES CAMPOS SON COMPLEMENTARIOS: ninguna frase ni cifra se repite entre title, description y tweetBody; cada dato se dice una sola vez en un solo campo.",
@@ -8039,11 +8039,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 >
                   Sc
                 </button>
-                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400" : "text-neutral-500"} font-light`}>
+                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400 font-bold" : title.length > 90 ? "text-amber-200" : "text-neutral-400"} font-light`}>
                   {title.length}/120
                 </span>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1">
+                <div className="h-1 bg-neutral-800 rounded-full w-12 overflow-hidden">
+                  <div className={`h-full rounded-full ${title.length > 120 ? "bg-amber-400" : title.length > 90 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (title.length / 120) * 100)}%` }} />
+                </div>
+                <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Tono:</span>
                 {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
                   <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
                 ))}
@@ -8102,14 +8104,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </div>
               </div>
 
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detalle o contexto clave que complementa el titular..."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
-              />
-              <div className="flex items-center justify-between gap-2 mt-1.5">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 <button
                   type="button"
                   onClick={() => setDescription((d) => toSentenceCase(d))}
@@ -8118,15 +8113,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 >
                   Sc
                 </button>
-                <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400" : "text-neutral-500"} font-light`}>
+                <span className={`text-[10px] font-mono ${description.length > 150 ? "text-amber-400 font-bold" : description.length > 120 ? "text-amber-200" : description.length > 100 ? "text-amber-100" : "text-neutral-400"} font-light`}>
                   {description.length}/150
                 </span>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1">
+                <div className="h-1 bg-neutral-800 rounded-full w-16 overflow-hidden">
+                  <div className={`h-full rounded-full ${description.length > 150 ? "bg-amber-400" : description.length > 120 ? "bg-amber-300" : description.length > 100 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (description.length / 150) * 100)}%` }} />
+                </div>
+                <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Tono:</span>
                 {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
                   <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
                 ))}
               </div>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Detalle o contexto clave que complementa el titular..."
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
+              />
             </div>
 
             {/* Espaciado e interlineado · plegado por defecto: es la parte
