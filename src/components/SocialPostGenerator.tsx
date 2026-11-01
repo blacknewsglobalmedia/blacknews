@@ -2041,8 +2041,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       "FORMATO JSON EXACTO:",
       '{"content":{"title":"...","description":"...","category":"CATEGORÍA REAL","photoCaption":"","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
       "",
-      "REGLAS DEL TÍTULO (title): Máx. 120 caracteres. Sentence Case (Sc) — primera letra de cada oración en mayúscula, resto en minúsculas. Directo, contundente, informativo. No todo en MAYÚSCULAS COMPLETAS. No emojis.",
-      "REGLAS DE LA DESCRIPCIÓN (description): Máx. 150 caracteres. 1-2 frases EN UNA sola línea, sin saltos de línea. Datos concretos que NO estén en el titular ni en el tweet. Sentence Case (Sc).",
+      "REGLAS DEL TÍTULO (title): Máx. 120 caracteres. Sentence Case (Sc) — primera letra de cada oración en mayúscula, resto en minúsculas. Directo, contundente, informativo. No todo en MAYÚSCULAS COMPLETAS. No emojis. NUNCA termines con '...' ni con puntos suspensivos. NUNCA uses saltos de línea (\\n) ni más de 3 líneas separadas. Si el texto originalmente lleva saltos, quítalos y hazlo una sola línea continua.",
+      "REGLAS DE LA DESCRIPCIÓN (description): Máx. 150 caracteres. 1-2 frases EN UNA sola línea, sin saltos de línea. Datos concretos que NO estén en el titular ni en el tweet. Sentence Case (Sc). NUNCA termines con '...' ni puntos suspensivos. Sin \\n.",
       `CATEGORÍAS VÁLIDAS (elige EXACTAMENTE una, con el nombre exacto del catálogo): ${cats}`,
       "REGLAS DEL TWEET (tweetBody): Una sola línea. Comienza con [🇽💻] » luego titular potente (mayúsculas cuando corresponda por impacto editorial, no por obligación), luego desarrollo breve con datos, fechas, cifras, nombres, organismos y consecuencias. Máx. ~215 de cuerpo. Finaliza con línea en blanco y ■ #BlackNews. Sin hashtags, sin enlaces, sin emojis (excepto la bandera inicial).",
       "LOS TRES CAMPOS SON COMPLEMENTARIOS: ninguna frase ni cifra se repite entre title, description y tweetBody; cada dato se dice una sola vez en un solo campo.",
@@ -2352,6 +2352,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       showToast("✓ Tweet copiado al portapapeles");
     } catch {
       showToast("No se pudo copiar directamente al portapapeles.");
+    }
+  };
+
+  // ── Reescritura por tono (usando la misma llamada directa a Groq) ────
+  const rewriteTone = async (text: string, tone: string, setText: (v: string) => void) => {
+    if (!groqKey.trim()) {
+      setAiNotice({ kind: "warn", text: `Necesitas una clave de Groq gratuita para reescribir en tono "${tone}".` });
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const prompt = `Reescribe EXCLUSIVAMENTE el siguiente texto con el tono indicado (solo el texto, sin explicaciones, sin markdown, sin comillas extra):\n\nTEXTO ORIGINAL:\n${text}\n\nTONO: ${tone}\n\nREGLAS: Sentence Case (Sc), sin puntos suspensivos (...), sin saltos de línea (\\n) en el título ni en la bajada, máximo 120 chars en título y 150 en descripción según corresponda. Solo el texto reescrito.`;
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${groqKey.trim()}` },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: getClientSystemPrompt() }, { role: "user", content: prompt }], temperature: 0.7, max_tokens: 300 }),
+        signal: AbortSignal.timeout(45000),
+      });
+      const raw = await res.json().catch(() => null);
+      const rewritten = raw?.choices?.[0]?.message?.content || "";
+      if (rewritten) {
+        const cleaned = rewritten.replace(/^["']|["']$/g, "").replace(/^Texto reescrito:\s*/, "").replace(/^Reescrito:\s*/, "");
+        setText(cleaned.trim());
+        showToast(`✓ Reescrito en tono "${tone}"`);
+      }
+    } catch {
+      setAiNotice({ kind: "error", text: "No se pudo reescribir con ese tono. Intenta de nuevo." });
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -8014,6 +8043,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   {title.length}/120
                 </span>
               </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
+                  <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                ))}
+              </div>
               <span className="text-[11px] text-neutral-500 font-light block mt-1">
                 Presiona Enter para romper la línea exactamente donde quieras
                 equilibrar el texto.
@@ -8087,6 +8121,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400" : "text-neutral-500"} font-light`}>
                   {description.length}/150
                 </span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
+                  <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                ))}
               </div>
             </div>
 
