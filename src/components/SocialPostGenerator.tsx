@@ -966,6 +966,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   });
   const [openRouterModel, setOpenRouterModel] = useState<string>("openai/gpt-4o-mini");
+  const [aiModelChoice, setAiModelChoice] = useState<string>("or-gpt");
+
+  useEffect(() => {
+    if (aiModelChoice === "or-gpt") setOpenRouterModel("openai/gpt-4o-mini");
+    else if (aiModelChoice === "or-llama") setOpenRouterModel("meta-llama/llama-3.3-70b-instruct");
+    else if (aiModelChoice === "or-gemini") setOpenRouterModel("google/gemini-2.0-flash-lite");
+  }, [aiModelChoice]);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   /** La barra flotante del asistente: cerrada sólo se ve el botón de
@@ -2291,43 +2298,39 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         workerUnavailable = true;
       }
 
-      // 2) Fallback directo: Groq Cloud (ultra rápido, 14.400 req/día gratis)
-      if (groqKey.trim()) {
+      // 2) Según modelo elegido por el usuario, intentamos primero ese proveedor
+      const preferGroq = aiModelChoice === "groq-llama";
+      const preferGemini = aiModelChoice === "gemini-flash";
+      const preferOpenRouter = aiModelChoice.startsWith("or-");
+
+      if (preferGroq && groqKey.trim()) {
         const groqRes = await callGroqDirect(topic);
-        if (groqRes.success && groqRes.data) {
-          applyAiResultAndClose(groqRes.data);
-          return;
-        }
-        if (groqRes.error && !geminiKey.trim()) {
-          setAiNotice({ kind: "error", text: groqRes.error });
-          return;
-        }
+        if (groqRes.success && groqRes.data) { applyAiResultAndClose(groqRes.data); return; }
       }
-
-      // 3) Fallback directo: Google Gemini (1.500 req/día gratis)
-      if (geminiKey.trim()) {
+      if (preferGemini && geminiKey.trim()) {
         const geminiRes = await callGeminiDirect(topic);
-        if (geminiRes.success && geminiRes.data) {
-          applyAiResultAndClose(geminiRes.data);
-          return;
-        }
-        if (geminiRes.error && !openRouterKey.trim()) {
-          setAiNotice({ kind: "error", text: geminiRes.error });
-          return;
-        }
+        if (geminiRes.success && geminiRes.data) { applyAiResultAndClose(geminiRes.data); return; }
+      }
+      if (preferOpenRouter && openRouterKey.trim()) {
+        const openRouterRes = await callOpenRouterDirect(topic);
+        if (openRouterRes.success && openRouterRes.data) { applyAiResultAndClose(openRouterRes.data); return; }
       }
 
-      // 4) Fallback directo: OpenRouter (modelos gratuitos como gpt-4o-mini)
-      if (openRouterKey.trim()) {
+      // 3) Fallbacks en orden: Groq → Gemini → OpenRouter (si no fue elegido primero)
+      if (!preferGroq && groqKey.trim()) {
+        const groqRes = await callGroqDirect(topic);
+        if (groqRes.success && groqRes.data) { applyAiResultAndClose(groqRes.data); return; }
+        if (groqRes.error && !geminiKey.trim() && !openRouterKey.trim()) { setAiNotice({ kind: "error", text: groqRes.error }); return; }
+      }
+      if (!preferGemini && geminiKey.trim()) {
+        const geminiRes = await callGeminiDirect(topic);
+        if (geminiRes.success && geminiRes.data) { applyAiResultAndClose(geminiRes.data); return; }
+        if (geminiRes.error && !openRouterKey.trim()) { setAiNotice({ kind: "error", text: geminiRes.error }); return; }
+      }
+      if (!preferOpenRouter && openRouterKey.trim()) {
         const openRouterRes = await callOpenRouterDirect(topic);
-        if (openRouterRes.success && openRouterRes.data) {
-          applyAiResultAndClose(openRouterRes.data);
-          return;
-        }
-        if (openRouterRes.error) {
-          setAiNotice({ kind: "error", text: openRouterRes.error });
-          return;
-        }
+        if (openRouterRes.success && openRouterRes.data) { applyAiResultAndClose(openRouterRes.data); return; }
+        if (openRouterRes.error) { setAiNotice({ kind: "error", text: openRouterRes.error }); return; }
       }
 
       // 5) Si ningún proveedor está disponible, abrir configuración con instrucciones
@@ -2406,10 +2409,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     setAiBusy(true);
     try {
       const prompt = `Reescribe EXCLUSIVAMENTE el siguiente texto con el tono indicado (solo el texto, sin explicaciones, sin markdown, sin comillas extra):\n\nTEXTO ORIGINAL:\n${text}\n\nTONO: ${tone}\n\nREGLAS: Sentence Case (Sc), sin puntos suspensivos (...), sin saltos de línea (\\n) en el título ni en la bajada, máximo 120 chars en título y 150 en descripción según corresponda. Solo el texto reescrito.`;
-      const useOpenRouter = !groqKey.trim() && openRouterKey.trim();
+      const preferGroq = aiModelChoice === "groq-llama";
+      const preferOpenRouter = aiModelChoice.startsWith("or-");
+      const useOpenRouter = preferOpenRouter ? openRouterKey.trim() : (!groqKey.trim() && openRouterKey.trim());
       const url = useOpenRouter ? "https://openrouter.ai/api/v1/chat/completions" : "https://api.groq.com/openai/v1/chat/completions";
       const auth = useOpenRouter ? openRouterKey.trim() : groqKey.trim();
-      const modelName = useOpenRouter ? (openRouterModel.trim() || "openai/gpt-4o-mini") : "llama-3.3-70b-versatile";
+      let modelName = useOpenRouter ? (openRouterModel.trim() || "openai/gpt-4o-mini") : "llama-3.3-70b-versatile";
+      if (preferOpenRouter) {
+        if (aiModelChoice === "or-llama") modelName = "meta-llama/llama-3.3-70b-instruct";
+        else if (aiModelChoice === "or-gemini") modelName = "google/gemini-2.0-flash-lite";
+        else modelName = "openai/gpt-4o-mini";
+      }
       const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${auth}` },
@@ -7660,6 +7670,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   : "Redactar con IA"}
             </span>
           </button>
+
+          {/* Selector de modelo visible siempre */}
+          <div className="flex items-center gap-0.5 bg-neutral-900/60 rounded-full border border-white/10 px-1 py-0.5 overflow-x-auto max-w-[55vw] sm:max-w-none">
+            {[
+              { key: "groq-llama", label: "Llama 3.3", sub: "Groq" },
+              { key: "gemini-flash", label: "Flash Lite", sub: "Gemini" },
+              { key: "or-gpt", label: "GPT-4o", sub: "OpenR" },
+              { key: "or-llama", label: "Llama 3.3", sub: "OpenR" },
+              { key: "or-gemini", label: "Flash Lite", sub: "OpenR" },
+            ].map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setAiModelChoice(m.key)}
+                title={`${m.sub} — ${m.label}`}
+                className={`text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-rose-500/20 text-rose-300 border border-rose-400/60 font-bold" : "text-neutral-400 hover:text-white border border-transparent hover:border-white/10"}`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"
