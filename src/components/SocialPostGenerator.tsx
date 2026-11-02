@@ -7954,6 +7954,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copiar Tweet</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const combined = `=== JSON GENERADO ===\n${aiJsonText || "(no disponible)"}\n\n=== TWEET ===\n${aiTweet || "(no disponible)"}\n\n=== PROMPT PARA REUTILIZAR EN IA ===\n${aiTopic.trim() ? `Tema: ${aiTopic.trim()}` : ""}\nCategorías: ${enabledCategories.join(", ")}\nPaíses: ${countryCatalog.map((c) => c.name).join(", ")}`;
+                        try {
+                          await navigator.clipboard.writeText(combined);
+                          showToast("✓ JSON + Tweet + Prompt copiado");
+                        } catch {}
+                      }}
+                      className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Copia el JSON completo, el tweet y el contexto para pegarlo en otra IA"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copiar Todo (JSON+Tweet)</span>
+                    </button>
                   </div>
 
                   <textarea
