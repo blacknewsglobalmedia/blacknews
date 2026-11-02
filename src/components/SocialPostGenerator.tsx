@@ -7644,120 +7644,46 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
         )}
 
-        {/* Barra flotante mejorada: acciones principales + modelo + exportar + config */}
-        <div className="rounded-2xl bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 border border-white/10 shadow-2xl shadow-black/60 p-2.5 flex flex-wrap items-center gap-2">
-          {/* Grupo 1: Generar / Componer */}
-          <button
-            type="button"
-            onClick={() => aiComposerOpen ? handleGenerateAi() : setAiComposerOpen(true)}
-            disabled={aiBusy}
-            title={aiBusy ? "Redactando con IA…" : aiComposerOpen ? "Redactar y autocompletar" : "Abrir asistente IA"}
-            className="h-9 shrink-0 pl-3.5 pr-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/25 disabled:text-emerald-100/60 text-black text-[11px] font-extrabold uppercase tracking-wide transition-colors flex items-center gap-2 cursor-pointer disabled:cursor-wait shadow-lg shadow-emerald-500/10"
-          >
-            <Sparkles className="w-4 h-4 shrink-0" />
-            <span className="truncate">{aiBusy ? "Redactando…" : aiComposerOpen ? "Redactar" : "Generar 4:5"}</span>
-          </button>
+        </aside>
 
-          {/* Grupo 2: Selector de modelo */}
-          <div className="flex items-center gap-1 bg-neutral-950/70 rounded-xl border border-white/10 px-1.5 py-1 overflow-x-auto max-w-[52vw] sm:max-w-md">
-            <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-wider px-1">Modelo:</span>
-            {[
-              { key: "groq-llama", label: "Llama 3.3", sub: "Groq" },
-              { key: "gemini-flash", label: "Flash Lite", sub: "Gemini" },
-              { key: "or-gpt", label: "GPT-4o", sub: "OpenR" },
-              { key: "or-llama", label: "Llama 3.3", sub: "OpenR" },
-              { key: "or-gemini", label: "Flash Lite", sub: "OpenR" },
-            ].map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => setAiModelChoice(m.key)}
-                title={`${m.sub} — ${m.label}`}
-                className={`text-[10px] px-2 py-0.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer border ${aiModelChoice === m.key ? "bg-rose-500/15 text-rose-300 border-rose-400/50 font-bold shadow-sm shadow-rose-400/10" : "bg-neutral-900 text-neutral-400 hover:text-white border-white/5 hover:border-white/15"}`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+        {/* Barra flotante limpia */}
+        <aside className="rounded-2xl bg-neutral-950/95 border border-white/10 backdrop-blur-md shadow-2xl p-2 flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={() => aiComposerOpen ? handleGenerateAi() : setAiComposerOpen(true)} disabled={aiBusy} title={aiBusy ? "Redactando con IA..." : aiComposerOpen ? "Redactar y autocompletar" : "Abrir asistente IA"} className="h-9 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 text-black text-[11px] font-bold uppercase tracking-wide transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/10"><Sparkles className="w-4 h-4" /><span className="truncate">{aiBusy ? "Redactando..." : aiComposerOpen ? "Redactar" : "Generar 4:5"}</span></button>
+          <div className="h-6 w-px bg-white/10 mx-1" />
+          <div className="flex items-center gap-1 bg-neutral-900 rounded-lg border border-white/5 px-2 py-0.5 overflow-x-auto max-w-[42vw] sm:max-w-xs"><span className="text-[9px] text-neutral-500 font-mono shrink-0">Modelo:</span>{[
+            { key: "groq-llama", label: "L3.3" }, { key: "gemini-flash", label: "Flash" }, { key: "or-gpt", label: "GPT-4o" }, { key: "or-llama", label: "L3.3" }, { key: "or-gemini", label: "Flash" },
+          ].map(m => <button key={m.key} type="button" onClick={() => setAiModelChoice(m.key)} className={`text-[10px] px-1.5 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-rose-500/20 text-rose-300 font-semibold" : "text-neutral-400 hover:text-white"}`}>{m.label}</button>)}</div>
+          <div className="h-6 w-px bg-white/10 mx-1" />
+          <button type="button" onClick={async () => { const t = aiTopic.trim() || title || description || "(especifica la noticia)"; const p = `EJEMPLO DE PROMPT — BlackNews 4:5
+Plantilla. Completalo con la noticia de hoy.
 
-          {/* Grupo 3: Copiar / Exportar */}
-          <div className="flex items-center gap-1 bg-neutral-950/70 rounded-xl border border-white/10 px-1.5 py-1">
-            <span className="text-[9px] font-mono text-neutral-500 uppercase tracking-wider px-1">Copiar:</span>
+NOTICIA A REDACTAR:
+Tema: ${t}
+Titulo: ${title || "(vacio)"}
+Bajada: ${description || "(vacio)"}
+Categorias: ${enabledCategories.slice(0,4).join(", ")}...
+Pais: ${selectedCountries.map(c=>c.name).slice(0,2).join(", ")}...
 
-            <button
-              type="button"
-              onClick={async () => {
-                const newsTopic = aiTopic.trim() || title || description || "(especificá la noticia)";
-                const payload = `=== EJEMPLO / PLANTILLA (BlackNews 4:5) ===
-Este es un ejemplo de prompt de redacción para BlackNews. Copialo y completalo con la noticia que quieras redactar hoy.
-
-=== NOTICIA QUE VAMOS A REDACTAR ===
-Tema / titular: ${newsTopic}
-Título actual: ${title || "(vacío)"}
-Descripción / bajada: ${description || "(vacío)"}
-Categorías: ${enabledCategories.join(", ") || "(todas)"}
-Países / región: ${selectedCountries.map((c) => c.name).join(", ") || "(todos)"}
-
-=== SISTEMA DE REDACCIÓN (copiar tal cual o adaptar) ===
+SISTEMA (copiar tal cual):
 ${getClientSystemPrompt()}
 
-=== INSTRUCCIÓN PARA IA ===
-Redactá la noticia usando EXACTAMENTE el contexto de arriba (tema, categorías, países). El completado debe ser con esta noticia, no con un ejemplo genérico. Generá JSON válido con title (máx 120) y description (máx 150), sentence case, sin puntos suspensivos (...), sin saltos de línea. Usa casi todo el límite de caracteres. Impacto, datos concretos, no relleno.`;
-                try { await navigator.clipboard.writeText(payload); showToast("✓ Prompt IA copiado"); } catch {}
-              }}
-              title="Copia sistema + contexto actual"
-              className="text-[10px] px-2 py-0.5 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/20 hover:border-violet-400/40 font-medium transition-colors cursor-pointer"
-            >
-              Prompt
-            </button>
+INSTRUCCION:
+Genera JSON valido: title (max 120), description (max 150), sentence case, sin ..., sin \n, usa casi todo el limite, impacto real.`; try { await navigator.clipboard.writeText(p); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia plantilla + contexto">Prompt</button>
+          <button type="button" onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(()=>{}); showToast("✓ Tweet"); } else showToast("Sin tweet aun"); }} className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium cursor-pointer">Tweet</button>
+          <button type="button" onClick={async () => { const j = aiJsonText ? `=== JSON ===
+${aiJsonText}` : `=== JSON ===
+(aun no generado)`; const t = aiTweet ? `=== TWEET ===
+${aiTweet}` : `=== TWEET ===
+(aun no generado)`; const m = `=== CONTEXT ===
+Noticia: ${aiTopic.trim() || title || description || "(no definida)"}
+Categorias: ${enabledCategories.slice(0,3).join(", ")}...`; try { await navigator.clipboard.writeText(`${j}
 
-            <button
-              type="button"
-              onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(() => {}); showToast("✓ Tweet copiado"); } else { showToast("No hay tweet para copiar"); } }}
-              title="Copia solo el tweet generado"
-              className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-400/40 font-medium transition-colors cursor-pointer"
-            >
-              Tweet
-            </button>
+${t}
 
-            <button
-              type="button"
-              onClick={async () => {
-                const combined = `=== JSON GENERADO ===\n${aiJsonText || "(no disponible)"}\n\n=== TWEET ===\n${aiTweet || "(no disponible)"}\n\n=== PROMPT PARA REUTILIZAR ===\nTema: ${aiTopic.trim() || "(vacío)"}\nCategorías: ${enabledCategories.join(", ") || ""}\nPaíses: ${selectedCountries.map((c) => c.name).join(", ") || ""}`;
-                try { await navigator.clipboard.writeText(combined); showToast("✓ Todo copiado (JSON+Tweet)"); } catch {}
-              }}
-              title="Copia JSON + Tweet + contexto junto"
-              className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-400/40 font-medium transition-colors cursor-pointer"
-            >
-              Todo
-            </button>
-          </div>
-
-          {/* Grupo 4: Config / Claves */}
-          <button
-            type="button"
-            onClick={handleToggleAiSettings}
-            title={groqKey.trim() ? "Groq Llama 3.3 · cambiar clave" : geminiKey.trim() ? "Gemini Flash · cambiar clave" : "Configurar clave de Groq / Gemini / OpenRouter"}
-            aria-label="Claves del asistente IA"
-            className={`h-9 w-9 shrink-0 rounded-xl grid place-items-center transition-colors cursor-pointer border ${groqKey.trim() || geminiKey.trim() || openRouterKey.trim() ? "text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" : "text-amber-400 border-amber-500/30 hover:bg-amber-500/10"}`}
-          >
-            <Zap className="w-4 h-4" />
-          </button>
-
-          {/* Cerrar asistente */}
-          {aiComposerOpen && (
-            <button
-              type="button"
-              onClick={() => setAiComposerOpen(false)}
-              title="Cerrar asistente"
-              aria-label="Cerrar el asistente IA"
-              className="h-9 w-9 shrink-0 rounded-xl grid place-items-center text-neutral-500 hover:text-white bg-neutral-900/60 border border-white/10 hover:bg-neutral-800 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </aside>
+${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium cursor-pointer">Todo</button>
+          <button type="button" onClick={handleToggleAiSettings} title="Claves de IA" className="h-8 w-8 rounded-lg grid place-items-center text-amber-300 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><Zap className="w-3.5 h-3.5" /></button>
+          {aiComposerOpen && <button type="button" onClick={() => setAiComposerOpen(false)} title="Cerrar" className="h-8 w-8 rounded-lg grid place-items-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
+        </aside>
 
       {/* Main Grid: Controls (Left) vs Live Preview (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
