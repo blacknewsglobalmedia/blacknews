@@ -824,10 +824,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [tvShowLive, setTvShowLive] = useState(true);
   // Hora de emisión en el bug superior: opcional (por defecto visible).
   const [tvShowClock, setTvShowClock] = useState(true);
-  // Intro animada del formato TV: es una pasada propia en la que el vídeo
-  // arranca desde su principio en B&N y sin sonido; al terminar la intro el
-  // vídeo vuelve a empezar en color y con sonido. El chyron desaparece tras
-  // la intro y el titular pasa al ticker inferior.
+  // Intro del post: pasada propia en la que el vídeo arranca desde su
+  // principio y sin sonido; al terminar la intro el vídeo vuelve a empezar
+  // desde el principio para no perderse nada. En 16:9 se pintan además las
+  // fases de TV (B&N, chyron animado y su desaparición tras la intro).
   const [tvIntro, setTvIntro] = useState(true);
   const [tvIntroDur, setTvIntroDur] = useState(5); // segundos de intro
   // ─── Transición de texto en 4:5/9:16 ───
@@ -3975,17 +3975,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     outTime?: number,
     // Segundo de CONTENIDO (desde el inicio del clip, sin el desfase de la
     // pasada de intro ni el del cierre): gobierna la transición «texto →
-    // vídeo» del 4:5, que así se mantiene sincronizada con la vista previa.
+    // vídeo» del 4:5 y el 9:16, que así se mantiene sincronizada con la
+    // vista previa.
     contentTime?: number,
   ): Promise<void> => {
     const W = POST_W;
     const H = POST_H;
 
-    // Transición «texto → vídeo» (4:5): pasado `textFadeOutDur` s de contenido
-    // el bloque de texto se desvanece y la foto sube hasta sangrar la tarjeta.
-    // El sello BlackNews de abajo a la izquierda se pinta SIEMPRE, al final.
+    // Transición «texto → vídeo» (4:5 y 9:16): pasado `textFadeOutDur` s de
+    // contenido el bloque de texto se desvanece y la foto sube hasta sangrar
+    // la tarjeta. El sello BlackNews de abajo a la izquierda se pinta
+    // SIEMPRE, al final.
     const fadeP =
-      textFadeOut && postFormat === "4:5" && typeof contentTime === "number"
+      textFadeOut &&
+      (postFormat === "4:5" || postFormat === "9:16") &&
+      typeof contentTime === "number"
         ? clamp01((contentTime - textFadeOutDur) / TEXT_FADE_MOVE)
         : 0;
     const textAlpha = 1 - fadeP;
@@ -6238,10 +6242,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Arranca ya consumido: el primer setRecordingProgress en caliente dispara
       // un re-render del generador y provoca un tirón visible al inicio.
       let lastProgressAt = performance.now();
-      // Reloj de la intro (TV16:9): los primeros tvIntroDur s de salida son
-      // una pasada propia — el clip desde su principio, en B/N y sin sonido —
-      // y al terminar el vídeo vuelve a empezar en color y con sonido. La
-      // salida total suma ese desfase (introPad) a la duración del clip.
+      // Reloj de la intro: los primeros tvIntroDur s de salida son
+      // una pasada propia — el clip desde su principio y sin sonido (en 16:9,
+      // además en B/N con las fases de TV) — y al terminar el vídeo vuelve a
+      // empezar para no perderse nada. La salida total suma ese desfase
+      // (introPad) a la duración del clip.
       const introPad = tvIntro ? tvIntroDur : 0;
       // Duración del tramo de vídeo (sin la intro) y del cierre de marca.
       const clipOutDur = (end - start) / Math.max(videoSpeed, 0.01);
@@ -6593,7 +6598,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               return schedule();
             }
           }
-          // Segundo de salida (intro TV16:9): manda el render y el audio.
+          // Segundo de salida (pasada de intro): manda el render y el audio.
           const outT = outTNow();
           if (tvIntro) {
             const wantMuted = mutedForExport || outT < tvIntroDur;
@@ -6744,7 +6749,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   const updateIntroClock = (v: HTMLVideoElement) => {
     if (isRecordingRef.current) return;
-    if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
+    // Los tres formatos comparten la misma pasada de intro que ya exporta la
+    // ruta de vídeo (silencio durante tvIntroDur y reinicio en trimStart); el
+    // poddcast, en cambio, nunca la suma.
+    if (!tvIntro || mediaType !== "video" || postDesign === "podcast")
+      return;
     if (tvIntroDoneRef.current) {
       // Intro terminada: el vídeo ya reinició; el reloj se queda al final y
       // el elemento se sincroniza con el silencio elegido por el usuario.
@@ -6774,7 +6783,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   useEffect(() => {
-    if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
+    if (!tvIntro || mediaType !== "video" || postDesign === "podcast") return;
     const v = videoRef.current;
     if (!v) return;
     let raf = 0;
@@ -6785,14 +6794,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postFormat, tvIntro, mediaType, trimStart, tvIntroDur]);
+  }, [postFormat, postDesign, tvIntro, mediaType, trimStart, tvIntroDur]);
 
   // Arranque de la intro: el vídeo parte desde su principio y en silencio;
   // al terminar, el reloj de arriba lo reinicia en color y con sonido. Se
-  // rearma al activar la intro, volver al formato 16:9, cambiar la duración
+  // rearma al activar la intro, cambiar de formato, cambiar la duración
   // o cargar otro vídeo: cada activación repite la pasada completa.
   useEffect(() => {
-    if (postFormat !== "16:9" || !tvIntro || mediaType !== "video") return;
+    if (!tvIntro || mediaType !== "video" || postDesign === "podcast") return;
     if (isRecordingRef.current) return;
     tvIntroDoneRef.current = false;
     tvIntroAccumRef.current = 0;
@@ -6812,10 +6821,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (el && !isRecordingRef.current) el.muted = isMutedRef.current;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tvIntro, postFormat, mediaType, mediaSrc, tvIntroDur]);
+  }, [tvIntro, postFormat, postDesign, mediaType, mediaSrc, tvIntroDur]);
 
   // Fase de la intro para la vista previa: con vídeo se sigue el tiempo real;
-  // con imagen se pinta el estado "HOLD" (el mismo que exporta el PNG).
+  // con imagen se pinta el estado "HOLD" (el mismo que exporta el PNG). Sólo
+  // la señal de TV 16:9 lleva chyron y fases animadas; en 4:5 y 9:16 la intro
+  // es la misma pasada muda con reinicio, pero sin overlay de TV.
   const tvPhaseT =
     postFormat === "16:9" && tvIntro
       ? mediaType === "video"
@@ -6829,7 +6840,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // El chyron sólo existe durante la intro: al terminar queda vídeo limpio.
   const tvShowChyron = !tvIntro || tvInIntro;
   // Filtro del media: intro = sin color; tras la intro = color original
-  // (sólo ajuste tonal), como pidió el usuario.
+  // (sólo ajuste tonal), como pidió el usuario. Sólo la señal de TV se
+  // desatura: el export 4:5/9:16 pinta su pasada de intro en color.
   const mediaFilterCss =
     !tvIntro || postFormat !== "16:9"
       ? getFilterCss()
@@ -7198,13 +7210,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaType, videoDuration]);
 
-  // Reloj de la transición «texto → vídeo» (4:5): mientras el vídeo corre, el
-  // bloque de texto se desvanece pasado `textFadeOutDur` s y la foto sube hasta
-  // ocupar la tarjeta entera; al dar la vuelta del lazo el titular vuelve. Con
-  // imagen (sin reloj) el texto queda fijo, igual que en el PNG exportado.
+  // Reloj de la transición «texto → vídeo» (4:5 y 9:16): mientras el vídeo
+  // corre, el bloque de texto se desvanece pasado `textFadeOutDur` s y la foto
+  // sube hasta ocupar la tarjeta entera; al dar la vuelta del lazo el titular
+  // vuelve. Durante la pasada de intro el bloque NO se desvanece (el export
+  // cuenta ese tramo como contenido en 0). Con imagen (sin reloj) el texto
+  // queda fijo, igual que en el PNG exportado.
   useEffect(() => {
     if (
-      postFormat !== "4:5" ||
+      (postFormat !== "4:5" && postFormat !== "9:16") ||
       !textFadeOut ||
       mediaType !== "video" ||
       postDesign === "podcast"
@@ -7217,8 +7231,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       raf = requestAnimationFrame(tick);
       const v = videoRef.current;
       if (!v) return;
-      const t = Math.max(0, v.currentTime - trimStart);
-      const p = clamp01((t - textFadeOutDur) / TEXT_FADE_MOVE);
+      const p =
+        tvIntro && !tvIntroDoneRef.current
+          ? 0
+          : clamp01(
+              (Math.max(0, v.currentTime - trimStart) - textFadeOutDur) /
+                TEXT_FADE_MOVE,
+            );
       // Sólo se re-renderiza cuando el progreso avanza de verdad (los extremos
       // 0 y 1 siempre se aplican, para no quedarse pegados a un paso previo).
       setTextFadeP((prev) =>
@@ -7278,9 +7297,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           if (!v.paused && trimEnd > trimStart) {
             if (v.currentTime >= trimEnd) {
               // Con cierre activo, el final del recorte abre el sello. En la
-              // intro TV16:9 todavía no: la primera pasada es muda y en B/N.
+              // pasada de intro todavía no: esa primera vuelta es muda y, si
+              // el clip es más corto que la intro, se da otra vuelta.
               const introLooming =
-                postFormat === "16:9" && tvIntro && !tvIntroDoneRef.current;
+                tvIntro &&
+                postDesign !== "podcast" &&
+                !tvIntroDoneRef.current;
               if (videoOutro && !introLooming && startPreviewOutro()) return;
               v.currentTime = trimStart;
             } else if (v.currentTime < trimStart) {
@@ -9858,23 +9880,21 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
 
           {/* Selector de formato: el mismo post en 4:5, 9:16 o 16:9 (TV) */}
           <div className="flex flex-wrap items-center justify-end gap-3">
-            {postFormat === "16:9" && (
-              <label
-                className="flex items-center gap-1.5 cursor-pointer select-none"
-                title="Intro animada: el vídeo arranca desde su principio en B&N y sin sonido y, al terminar la intro, vuelve a empezar en color y con sonido"
-              >
-                <input
-                  type="checkbox"
-                  checked={tvIntro}
-                  onChange={(e) => setTvIntro(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-white cursor-pointer"
-                />
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
-                  Intro
-                </span>
-              </label>
-            )}
-            {postFormat === "16:9" && tvIntro && (
+            <label
+              className="flex items-center gap-1.5 cursor-pointer select-none"
+              title="Intro: mientras dure se muestran los primeros segundos del vídeo en silencio (en 16:9, además en B&N con la señal de TV) y, al terminar, el vídeo vuelve a empezar desde el principio para no perderse nada"
+            >
+              <input
+                type="checkbox"
+                checked={tvIntro}
+                onChange={(e) => setTvIntro(e.target.checked)}
+                className="w-3.5 h-3.5 accent-white cursor-pointer"
+              />
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                Intro
+              </span>
+            </label>
+            {tvIntro && (
               <select
                 value={tvIntroDur}
                 onChange={(e) => setTvIntroDur(Number(e.target.value))}
@@ -9886,7 +9906,8 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 <option value={8}>Intro 8 s</option>
               </select>
             )}
-            {postFormat === "4:5" && mediaType === "video" && (
+            {(postFormat === "4:5" || postFormat === "9:16") &&
+              mediaType === "video" && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
                 title="Pasados unos segundos el texto (categoría, titular y bajada) se oculta para mostrar el vídeo de fondo a sangre; el sello BlackNews de abajo a la izquierda se mantiene siempre"
@@ -9902,7 +9923,9 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 </span>
               </label>
             )}
-            {postFormat === "4:5" && mediaType === "video" && textFadeOut && (
+            {(postFormat === "4:5" || postFormat === "9:16") &&
+              mediaType === "video" &&
+              textFadeOut && (
               <select
                 value={textFadeOutDur}
                 onChange={(e) => setTextFadeOutDur(Number(e.target.value))}
