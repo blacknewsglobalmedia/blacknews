@@ -611,6 +611,13 @@ const tvIntroBoxIn = (t: number) => easeOutCubic(t / 0.35);
 const tvIntroExit = (t: number, dur: number) =>
   clamp01((t - (dur - 0.7)) / 0.6);
 
+// ── Transición «texto → vídeo» del formato 4:5 ───────────────────────────────
+// Pasados textFadeOutDur s de contenido, el bloque de texto (categoría,
+// insignia, titular y bajada) se desvanece en este margen de tiempo para que
+// el vídeo de fondo ocupe la tarjeta entera. El sello BlackNews de abajo a la
+// izquierda nunca se toca: se pinta siempre, al final de todo.
+const TEXT_FADE_MOVE = 0.6;
+
 /** Sección plegable del generador.
  *
  *  El contenido se oculta con `hidden` y NO se desmonta: los controles
@@ -823,6 +830,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // la intro y el titular pasa al ticker inferior.
   const [tvIntro, setTvIntro] = useState(true);
   const [tvIntroDur, setTvIntroDur] = useState(5); // segundos de intro
+  // ─── Transición de texto en 4:5/9:16 ───
+  // Al activarla, el texto (categoría, título, descripción) se oculta después
+  // de unos segundos para mostrar el video de fondo, pero el logo BlackNews
+  // SIEMPRE permanece visible en la esquina inferior izquierda.
+  const [textFadeOut, setTextFadeOut] = useState(false);
+  const [textFadeOutDur, setTextFadeOutDur] = useState(3); // segundos antes de ocultar
+  // Progreso (0 → 1) de esa transición en la vista previa: lo mueve el reloj
+  // de reproducción; el lienzo exportado lo calcula a partir de su propio
+  // segundo de contenido (ver renderToCanvas).
+  const [textFadeP, setTextFadeP] = useState(0);
   // Cierre de marca opcional (Blacknews.mp4): APAGADO por defecto. Cuando está
   // activo, la vista previa y el archivo exportado terminan reproduciendo el
   // sello de cierre — a sangre del lienzo, sin chyron ni ticker — y con su
@@ -1429,6 +1446,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       tvShowClock,
       tvIntro,
       tvIntroDur,
+      // Transición «texto → vídeo» del 4:5 (sólo con media de vídeo).
+      textFadeOut,
+      textFadeOutDur,
       appName: `BlackNews ${postFormat} Generator`,
       savedAt: new Date().toISOString(),
       content: {
@@ -1570,6 +1590,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (typeof data.tvIntroDur === "number" && data.tvIntroDur > 0) {
         setTvIntroDur(data.tvIntroDur);
       }
+      if (typeof data.textFadeOut === "boolean")
+        setTextFadeOut(data.textFadeOut);
+      if (typeof data.textFadeOutDur === "number" && data.textFadeOutDur > 0)
+        setTextFadeOutDur(data.textFadeOutDur);
       if (data.typography) {
         if (data.typography.fontSizeTitle)
           setFontSizeTitle(data.typography.fontSizeTitle);
@@ -2495,6 +2519,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     tvShowClock,
     tvIntro,
     tvIntroDur,
+    textFadeOut,
+    textFadeOutDur,
   ]);
 
   // Restore draft on initial load if available
@@ -3947,9 +3973,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // Segundo de la salida para la intro TV (16:9) y el marquee del ticker:
     // faltante = composición estática (marquee en su posición 0).
     outTime?: number,
+    // Segundo de CONTENIDO (desde el inicio del clip, sin el desfase de la
+    // pasada de intro ni el del cierre): gobierna la transición «texto →
+    // vídeo» del 4:5, que así se mantiene sincronizada con la vista previa.
+    contentTime?: number,
   ): Promise<void> => {
     const W = POST_W;
     const H = POST_H;
+
+    // Transición «texto → vídeo» (4:5): pasado `textFadeOutDur` s de contenido
+    // el bloque de texto se desvanece y la foto sube hasta sangrar la tarjeta.
+    // El sello BlackNews de abajo a la izquierda se pinta SIEMPRE, al final.
+    const fadeP =
+      textFadeOut && postFormat === "4:5" && typeof contentTime === "number"
+        ? clamp01((contentTime - textFadeOutDur) / TEXT_FADE_MOVE)
+        : 0;
+    const textAlpha = 1 - fadeP;
 
     // 1) Todo el trabajo asíncrono ANTES de tocar el lienzo: si esperamos fuentes
     //    o banderas despejándolo, el capturador del grabador de video puede leer un
@@ -4050,6 +4089,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 2. Category & Country Header Line (Guaranteed Single Line with Vector Flags)
     ctx.save();
+    // Con el texto en salida la cabecera se desvanece junto al resto del bloque.
+    ctx.globalAlpha = textAlpha;
     ctx.textBaseline = "top";
     const catUpper = category.trim().toUpperCase();
     const maxTextWidth = contentWidth - 65; // Leaves space for at least 45px line
@@ -4191,6 +4232,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // ≤4: bandera + nombre | 5-8: solo banderas en 1 fila | >8: 2 filas de banderas
     if (newsPlacement === "badge" && flagsData.length > 0) {
       ctx.save();
+      ctx.globalAlpha = textAlpha;
       ctx.textBaseline = "top";
       const n = flagsData.length;
       // Con «solo banderas» la insignia nunca muestra nombres: pinta las
@@ -4252,6 +4294,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 3. Title (Lexend Bold)
     ctx.save();
+    ctx.globalAlpha = textAlpha;
     ctx.font = `700 ${fontSizeTitle}px 'Lexend', sans-serif`;
     ctx.fillStyle = "#FFFFFF";
     ctx.textBaseline = "top";
@@ -4270,6 +4313,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // 4. Description (Lexend Medium/Normal)
     if (description.trim()) {
       ctx.save();
+      ctx.globalAlpha = textAlpha;
       ctx.font = `400 ${fontSizeDesc}px 'Lexend', sans-serif`;
       ctx.fillStyle = "#E2E8F0";
       ctx.textBaseline = "top";
@@ -4295,7 +4339,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // formato vertical lo mueve la foto, que así gana altura—.
     const textZoneFloor =
       postFormat === "9:16" ? H * MEDIA_FLOOR_RATIO_9X16 : (520 * H) / 1350;
-    const mediaTopY = Math.round(Math.max(curY, textZoneFloor));
+    // Con el texto en salida la foto sube proporcionalmente hasta ocupar la
+    // tarjeta entera: es cuando se ve el vídeo de fondo a sangre.
+    const mediaTopFull = Math.round(Math.max(curY, textZoneFloor));
+    const mediaTopY = Math.round(mediaTopFull * (1 - fadeP));
     const mediaHeight = H - mediaTopY;
 
     if ((mediaElement || frameOverride) && !isOverlayOnly) {
@@ -4378,8 +4425,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
 
     // Soft Top Gradient Fade to Black (seamless transition from solid black header)
-    if (blendFade) {
+    // Se apaga con la transición: a sangre completa, el velo solo oscurecería el vídeo.
+    if (blendFade && fadeP < 1) {
       ctx.save();
+      ctx.globalAlpha = 1 - fadeP;
       const fadeHeight = Math.min(220, mediaHeight * 0.42);
       const grad = ctx.createLinearGradient(
         0,
@@ -4512,7 +4561,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         );
       } else if (mediaType === "video" && videoRef.current) {
         // Con la intro activa el PNG sale en el estado "HOLD" de la intro
-        // (titular visible sobre la imagen en B&N): es la cara del clip.
+        // (titular visible sobre la imagen en B&N): es la cara del clip. El
+        // póster siempre lleva texto (contentTime 0), nunca el estado de salida.
         await renderToCanvas(
           canvas,
           videoRef.current,
@@ -4520,6 +4570,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           false,
           undefined,
           tvIntro ? tvIntroDur * 0.5 : 0,
+          0,
         );
       } else {
         const img = await loadImageSafely(mediaSrc);
@@ -4530,6 +4581,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           false,
           undefined,
           tvIntro ? tvIntroDur * 0.5 : 0,
+          0,
         );
       }
 
@@ -4956,6 +5008,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           : tvIntro
             ? tvIntroDur * 0.5
             : 0,
+        // Copia = póster: el bloque de texto siempre visible.
+        0,
       );
 
       canvas.toBlob(async (blob) => {
@@ -5542,7 +5596,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         })),
       );
       // Fuentes y overlay base (marquee en su posición 0 / arranque de intro).
-      await renderToCanvas(canvas, undefined, cachedFlags, false, undefined, 0);
+      await renderToCanvas(canvas, undefined, cachedFlags, false, undefined, 0, 0);
       setRecordingProgress(10);
       snap("warmup");
 
@@ -5677,6 +5731,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   rotation: rot,
                 },
                 (slot * targetFrameDurationUs) / 1e6,
+                // Segundo de contenido: sin el desfase de la pasada de intro
+                // (los fotogramas de esa pasada quedan en 0, con texto).
+                Math.max(0, frame.timestamp / 1e6 - introPad),
               );
             }
             paintedOnce = true;
@@ -6053,7 +6110,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           text: countryFormat === "flags-codes" ? c.code : c.name.toUpperCase(),
         })),
       );
-      await renderToCanvas(canvas, bgEl, cachedFlags, false, undefined, 0);
+      await renderToCanvas(canvas, bgEl, cachedFlags, false, undefined, 0, 0);
       setRecordingProgress(10);
 
       video.pause();
@@ -6542,6 +6599,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             const wantMuted = mutedForExport || outT < tvIntroDur;
             if (video.muted !== wantMuted) video.muted = wantMuted;
           }
+          // Segundo de contenido para la transición «texto → vídeo» (4:5):
+          // durante la pasada de intro el texto se queda donde está.
+          const contentT =
+            tvIntro && !introPhase2
+              ? 0
+              : Math.max(
+                  0,
+                  (video.currentTime - start) / Math.max(videoSpeed, 0.01),
+                );
           const tRender = performance.now();
           await renderToCanvas(
             canvas,
@@ -6550,6 +6616,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             false,
             undefined,
             outT,
+            contentT,
           );
           const ms = performance.now() - tRender;
           frameStats.n++;
@@ -7130,6 +7197,42 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaType, videoDuration]);
+
+  // Reloj de la transición «texto → vídeo» (4:5): mientras el vídeo corre, el
+  // bloque de texto se desvanece pasado `textFadeOutDur` s y la foto sube hasta
+  // ocupar la tarjeta entera; al dar la vuelta del lazo el titular vuelve. Con
+  // imagen (sin reloj) el texto queda fijo, igual que en el PNG exportado.
+  useEffect(() => {
+    if (
+      postFormat !== "4:5" ||
+      !textFadeOut ||
+      mediaType !== "video" ||
+      postDesign === "podcast"
+    ) {
+      setTextFadeP(0);
+      return;
+    }
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const v = videoRef.current;
+      if (!v) return;
+      const t = Math.max(0, v.currentTime - trimStart);
+      const p = clamp01((t - textFadeOutDur) / TEXT_FADE_MOVE);
+      // Sólo se re-renderiza cuando el progreso avanza de verdad (los extremos
+      // 0 y 1 siempre se aplican, para no quedarse pegados a un paso previo).
+      setTextFadeP((prev) =>
+        p === prev
+          ? prev
+          : p === 0 || p === 1 || Math.abs(p - prev) >= 0.02
+            ? p
+            : prev,
+      );
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postFormat, textFadeOut, mediaType, trimStart, textFadeOutDur, postDesign]);
 
   // Estilo compartido de los botones de salto de la fila de transporte:
   // minimalista, sin bordes duros, sólo contraste al pasar el cursor.
@@ -9783,6 +9886,35 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 <option value={8}>Intro 8 s</option>
               </select>
             )}
+            {postFormat === "4:5" && mediaType === "video" && (
+              <label
+                className="flex items-center gap-1.5 cursor-pointer select-none"
+                title="Pasados unos segundos el texto (categoría, titular y bajada) se oculta para mostrar el vídeo de fondo a sangre; el sello BlackNews de abajo a la izquierda se mantiene siempre"
+              >
+                <input
+                  type="checkbox"
+                  checked={textFadeOut}
+                  onChange={(e) => setTextFadeOut(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-white cursor-pointer"
+                />
+                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                  Texto → vídeo
+                </span>
+              </label>
+            )}
+            {postFormat === "4:5" && mediaType === "video" && textFadeOut && (
+              <select
+                value={textFadeOutDur}
+                onChange={(e) => setTextFadeOutDur(Number(e.target.value))}
+                className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-300 rounded-lg px-1.5 py-1 cursor-pointer"
+                title="Segundos que el texto permanece visible antes de desvanecerse"
+              >
+                <option value={3}>Oculta a 3 s</option>
+                <option value={4}>Oculta a 4 s</option>
+                <option value={5}>Oculta a 5 s</option>
+                <option value={8}>Oculta a 8 s</option>
+              </select>
+            )}
             {/* Atajo del cierre de marca: el mismo interruptor de la tarjeta 4,
                 aquí junto a la intro para poder probarlo sin salir de la
                 preview. Aplica en todos los formatos, no sólo en TV. */}
@@ -10307,6 +10439,9 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                     paddingTop: `${previewPadTop}px`,
                     paddingLeft: `${previewPadX}px`,
                     paddingRight: `${previewPadRight}px`,
+                    // Transición «texto → vídeo» (4:5): el bloque entero se
+                    // desvanece; el sello de abajo nunca se toca.
+                    opacity: 1 - textFadeP,
                   }}
                   className="z-20 relative select-none"
                 >
@@ -10490,24 +10625,41 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                   )}
                 </div>
 
-                {/* Media Container (inicio dinámico en 9:16, 40 % fijo en 4:5) */}
+                {/* Media Container (inicio dinámico en 9:16, 40 % fijo en 4:5;
+                    con el texto en salida sube hasta sangrar la tarjeta) */}
                 <div
-                  className="absolute inset-0 overflow-hidden z-0"
-                  style={{ top: `${previewMediaTopPct}%` }}
+                  className="absolute inset-0 overflow-hidden"
+                  style={{
+                    top: `${previewMediaTopPct * (1 - textFadeP)}%`,
+                    // Durante el fundido el vídeo que sube pasa POR ENCIMA del
+                    // bloque de texto (z-20), igual que en el lienzo exportado,
+                    // donde el media se pinta después del texto y lo tapa por
+                    // abajo. Fuera del fundido sigue por detrás (z-0).
+                    zIndex: textFadeP > 0 ? 30 : 0,
+                  }}
                 >
                   {previewMediaEl}
 
                   {/* Soft Gradient Fade from black on top of media */}
                   {blendFade && (
-                    <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black via-black/60 to-transparent pointer-events-none" />
+                    <div
+                      className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black via-black/60 to-transparent pointer-events-none"
+                      style={{ opacity: 1 - textFadeP }}
+                    />
                   )}
 
                   {/* Subtle bottom vignette */}
                   <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                 </div>
 
-                {/* Bottom Watermark Logo: "■ BlackNews" & Right-Aligned Caption */}
-                <div className="p-6 sm:p-7 z-20 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent">
+                {/* Bottom Watermark Logo: "■ BlackNews" & Right-Aligned Caption.
+                    Con el vídeo a sangre (z-30 durante el fundido) el sello
+                    sube a z-30: mismo nivel, pero va después en el DOM, así
+                    que siempre pinta por encima — nunca se oculta. */}
+                <div
+                  className="p-6 sm:p-7 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent"
+                  style={{ zIndex: textFadeP > 0 ? 30 : 20 }}
+                >
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="w-4 h-4 bg-white rounded-none"></div>
                     <span className="text-sm sm:text-base font-bold text-white tracking-tight font-['Lexend']">
