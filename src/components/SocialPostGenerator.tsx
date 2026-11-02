@@ -7687,7 +7687,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <button
               type="button"
               onClick={async () => {
-                const payload = `=== PROMPT PARA IA (BlackNews 4:5) ===\n${getClientSystemPrompt()}\n\n=== CONTEXTO ACTUAL ===\nTEMA: ${aiTopic.trim() || "(vacío)"}\nTÍTULO: ${title || "(vacío)"}\nDESCRIPCIÓN: ${description || "(vacío)"}\nCATEGORÍAS: ${enabledCategories.join(", ") || "(todas)"}\nPAÍSES: ${selectedCountries.map((c) => c.name).join(", ") || "(todos)"}`;
+                const newsTopic = aiTopic.trim() || title || description || "(especificá la noticia)";
+                const payload = `=== EJEMPLO / PLANTILLA (BlackNews 4:5) ===
+Este es un ejemplo de prompt de redacción para BlackNews. Copialo y completalo con la noticia que quieras redactar hoy.
+
+=== NOTICIA QUE VAMOS A REDACTAR ===
+Tema / titular: ${newsTopic}
+Título actual: ${title || "(vacío)"}
+Descripción / bajada: ${description || "(vacío)"}
+Categorías: ${enabledCategories.join(", ") || "(todas)"}
+Países / región: ${selectedCountries.map((c) => c.name).join(", ") || "(todos)"}
+
+=== SISTEMA DE REDACCIÓN (copiar tal cual o adaptar) ===
+${getClientSystemPrompt()}
+
+=== INSTRUCCIÓN PARA IA ===
+Redactá la noticia usando EXACTAMENTE el contexto de arriba (tema, categorías, países). El completado debe ser con esta noticia, no con un ejemplo genérico. Generá JSON válido con title (máx 120) y description (máx 150), sentence case, sin puntos suspensivos (...), sin saltos de línea. Usa casi todo el límite de caracteres. Impacto, datos concretos, no relleno.`;
                 try { await navigator.clipboard.writeText(payload); showToast("✓ Prompt IA copiado"); } catch {}
               }}
               title="Copia sistema + contexto actual"
