@@ -7654,21 +7654,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             { key: "groq-llama", label: "L3.3" }, { key: "gemini-flash", label: "Flash" }, { key: "or-gpt", label: "GPT-4o" }, { key: "or-llama", label: "L3.3" }, { key: "or-gemini", label: "Flash" },
           ].map(m => <button key={m.key} type="button" onClick={() => setAiModelChoice(m.key)} className={`text-[10px] px-1.5 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-rose-500/20 text-rose-300 font-semibold" : "text-neutral-400 hover:text-white"}`}>{m.label}</button>)}</div>
           <div className="h-6 w-px bg-white/10 mx-1" />
-          <button type="button" onClick={async () => { const t = aiTopic.trim() || title || description || "(especifica la noticia)"; const p = `EJEMPLO DE PROMPT — BlackNews 4:5
-Plantilla. Completalo con la noticia de hoy.
-
-NOTICIA A REDACTAR:
-Tema: ${t}
-Titulo: ${title || "(vacio)"}
-Bajada: ${description || "(vacio)"}
-Categorias: ${enabledCategories.slice(0,4).join(", ")}...
-Pais: ${selectedCountries.map(c=>c.name).slice(0,2).join(", ")}...
-
-SISTEMA (copiar tal cual):
-${getClientSystemPrompt()}
-
-INSTRUCCION:
-Genera JSON valido: title (max 120), description (max 150), sentence case, sin ..., sin \n, usa casi todo el limite, impacto real.`; try { await navigator.clipboard.writeText(p); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia plantilla + contexto">Prompt</button>
+          <button type="button" onClick={async () => { const t = aiTopic.trim() || title || description || "(especifica la noticia)"; const p = `EJEMPLO DE PROMPT — BlackNews 4:5\nEsta es una plantilla. Completa la noticia que quieras redactar hoy.\n\n=== EJEMPLO DE SALIDA (para que la IA entienda el formato exacto) ===\nA. JSON PARA BLACKNEWS 4:5 GENERATOR\n{\n  "version": 1,\n  "appName": "BlackNews 4:5 Generator",\n  "content": {\n    "title": "Ejemplo de titular directo, impactante, en Sentence Case",\n    "description": "Ejemplo breve con datos concretos y contexto.",\n    "category": "GEOPOLÍTICA",\n    "countryPlacement": "line",\n    "countryFormat": "flags-names",\n    "selectedCountries": [{ "name": "Uruguay", "code": "UY", "flag": "🇺🇾" }]\n  }\n}\nB. TWEET / REDES SOCIALES\n[🇺🇾💻] » Ejemplo de titular potente: desarrollo breve con datos clave.\n■ #BlackNews\n\n=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===\nTema / titular: ${t}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.slice(0,4).join(", ")}...\nPaís / Región: ${selectedCountries.map(c=>c.name).slice(0,2).join(", ")}...\n\n=== SISTEMA DE REDACCIÓN (copiar tal cual) ===\n${getClientSystemPrompt()}\n\n=== INSTRUCCIÓN ===\nGenera JSON válido (version 1, appName BlackNews 4:5 Generator) con title (máx 120) y description (máx 150), sentence case, sin ..., sin \\n, usa casi todo el límite, impacto real, datos verificables. Luego el tweet con [🇽💻] » Titular: desarrollo. Finaliza con ■ #BlackNews. Prioriza precisión y coherencia editorial.`; try { await navigator.clipboard.writeText(p); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia plantilla + contexto">Prompt</button>
           <button type="button" onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(()=>{}); showToast("✓ Tweet"); } else showToast("Sin tweet aun"); }} className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium cursor-pointer">Tweet</button>
           <button type="button" onClick={async () => { const j = aiJsonText ? `=== JSON ===
 ${aiJsonText}` : `=== JSON ===
