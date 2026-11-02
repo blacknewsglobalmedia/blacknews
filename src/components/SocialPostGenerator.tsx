@@ -7694,6 +7694,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
           <button
             type="button"
+            onClick={async () => {
+              const payload = `=== PROMPT PARA IA (BlackNews 4:5) ===\n${getClientSystemPrompt()}\n\n=== CONTEXTO ACTUAL ===\nTEMA: ${aiTopic.trim() || "(vacío)"}\nTÍTULO: ${title || "(vacío)"}\nDESCRIPCIÓN: ${description || "(vacío)"}\nCATEGORÍAS: ${enabledCategories.join(", ") || "(todas)"}\nPAÍSES: ${selectedCountries.map((c) => c.name).join(", ") || "(todos)"}`;
+              try { await navigator.clipboard.writeText(payload); showToast("✓ Prompt completo copiado para pegar en IA"); } catch {}
+            }}
+            title="Copia el sistema + contexto actual para usar como prompt en otra IA"
+            className="px-2 py-1 rounded-full bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 border border-violet-500/30 text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+          >
+            Copiar Prompt IA
+          </button>
+
+          <button
+            type="button"
             onClick={handleToggleAiSettings}
             title={
               groqKey.trim()
