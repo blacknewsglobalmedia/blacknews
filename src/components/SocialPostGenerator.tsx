@@ -6742,6 +6742,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tvIntroDoneRef = useRef(false);
   const tvIntroAccumRef = useRef(0);
   const tvIntroWallRef = useRef(0);
+  // Instante (ms de performance.now) en que terminó la última pasada de intro:
+  // el reloj del fade «texto → vídeo» lo mide desde aquí, porque el propio
+  // currentTime del vídeo vuelve a 0 al reiniciarse (así el texto se oculta
+  // aunque el elemento esté de nuevo en el principio).
+  const introEndWallRef = useRef(0);
+  // Instante (ms de performance.now) en que empezó el fade del texto: el reloj
+  // del fade es de pared (no del currentTime) porque, al reiniciarse el vídeo,
+  // currentTime vuelve a 0 y el progreso retrocedería.
+  const fadeStartWallRef = useRef(0);
   const isMutedRef = useRef(isMuted);
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -6773,6 +6782,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (acc >= tvIntroDur) {
       // Fin de la intro: el vídeo vuelve a empezar con color y con sonido.
       tvIntroDoneRef.current = true;
+      introEndWallRef.current = performance.now();
       v.currentTime = trimStart;
       v.muted = isMutedRef.current;
       setTvIntroT(tvIntroDur);
@@ -6806,6 +6816,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     tvIntroDoneRef.current = false;
     tvIntroAccumRef.current = 0;
     tvIntroWallRef.current = 0;
+    introEndWallRef.current = 0;
     setTvIntroT(0);
     const v = videoRef.current;
     if (v) {
@@ -7231,13 +7242,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       raf = requestAnimationFrame(tick);
       const v = videoRef.current;
       if (!v) return;
-      const p =
-        tvIntro && !tvIntroDoneRef.current
-          ? 0
-          : clamp01(
-              (Math.max(0, v.currentTime - trimStart) - textFadeOutDur) /
-                TEXT_FADE_MOVE,
-            );
+      // Tiempo de contenido: mientras el texto está visible se mide con el
+      // currentTime; cuando empieza a desvanecerse se reinicia el vídeo y el
+      // reloj pasa a ser de pared, manteniendo la continuidad del fade.
+      let contentTime: number;
+      if (fadeStartWallRef.current > 0) {
+        contentTime = (performance.now() - fadeStartWallRef.current) / 1000 + textFadeOutDur;
+      } else {
+        contentTime = Math.max(0, v.currentTime - trimStart);
+      }
+      const p = clamp01((contentTime - textFadeOutDur) / TEXT_FADE_MOVE);
+      // Al cruzar el umbral (texto empieza a irse): reiniciar video y arrancar
+      // el reloj de pared con la continuidad exacta del momento.
+      if (p > 0 && fadeStartWallRef.current === 0) {
+        fadeStartWallRef.current = performance.now() - textFadeOutDur * 1000;
+        if (Math.abs(v.currentTime - trimStart) > 0.05) v.currentTime = trimStart;
+        v.play().catch(() => {});
+      }
+      if (p === 0 && fadeStartWallRef.current > 0) {
+        fadeStartWallRef.current = 0;
+      }
       // Sólo se re-renderiza cuando el progreso avanza de verdad (los extremos
       // 0 y 1 siempre se aplican, para no quedarse pegados a un paso previo).
       setTextFadeP((prev) =>
