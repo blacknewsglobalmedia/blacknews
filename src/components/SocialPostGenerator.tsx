@@ -850,6 +850,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Marca de agua opcional (transparente) en el centro / esquina.
   const [watermark, setWatermark] = useState(false);
   const [watermarkOpacity, setWatermarkOpacity] = useState(0.35);
+  // Posición/escala del video en la vista previa (reposición opcional)
+  const [mediaZoom, setMediaZoom] = useState(1);
+  const [mediaOffsetX, setMediaOffsetX] = useState(0);
+  const [mediaOffsetY, setMediaOffsetY] = useState(0);
+  const [bgAudio, setBgAudio] = useState(false);
+  const [bgVolume, setBgVolume] = useState(0.6);
   // true mientras el cierre ocupa la vista previa (y durante su fase en la
   // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
   const [outroActive, setOutroActive] = useState(false);
@@ -9937,6 +9943,14 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
               <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
               <span className="text-[11px] uppercase tracking-wider text-neutral-500">Marca agua</span>
             </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Tema de fondo (BlackNewsPress-Background.wav) solo en video">
+              <input type="checkbox" checked={bgAudio} onChange={(e) => setBgAudio(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">Tema fondo</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Escala del video (reposición)">
+              <span className="text-[11px] text-neutral-500">Escala</span>
+              <input type="range" min={0.6} max={1.4} step={0.05} value={mediaZoom} onChange={(e) => setMediaZoom(Number(e.target.value))} className="w-16 h-1 accent-white" />
+            </label>
             {(postFormat === "4:5" || postFormat === "9:16") &&
               mediaType === "video" && (
               <label
@@ -10685,11 +10699,9 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                   className="absolute inset-0 overflow-hidden"
                   style={{
                     top: `${previewMediaTopPct * (1 - textFadeP)}%`,
-                    // Durante el fundido el vídeo que sube pasa POR ENCIMA del
-                    // bloque de texto (z-20), igual que en el lienzo exportado,
-                    // donde el media se pinta después del texto y lo tapa por
-                    // abajo. Fuera del fundido sigue por detrás (z-0).
                     zIndex: textFadeP > 0 ? 30 : 0,
+                    transform: `scale(${mediaZoom}) translate(${mediaOffsetX}px, ${mediaOffsetY}px)`,
+                    transformOrigin: 'center center',
                   }}
                 >
                   {previewMediaEl}
