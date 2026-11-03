@@ -847,6 +847,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // 16:9.
   const [videoOutro, setVideoOutro] = useState(false);
   const [outroDuration, setOutroDuration] = useState(OUTRO_DUR_FALLBACK);
+  // Marca de agua opcional (transparente) en el centro / esquina.
+  const [watermark, setWatermark] = useState(false);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.35);
   // true mientras el cierre ocupa la vista previa (y durante su fase en la
   // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
   const [outroActive, setOutroActive] = useState(false);
@@ -9930,6 +9933,10 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 <option value={8}>Intro 8 s</option>
               </select>
             )}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Marca de agua opcional">
+              <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">Marca agua</span>
+            </label>
             {(postFormat === "4:5" || postFormat === "9:16") &&
               mediaType === "video" && (
               <label
@@ -10699,6 +10706,14 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                   <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                 </div>
 
+                {watermark && (
+                  <div
+                    className="absolute pointer-events-none select-none text-white font-['Lexend'] font-bold tracking-tight drop-shadow-lg"
+                    style={{ top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '24px', opacity: watermarkOpacity, zIndex: 40, letterSpacing: '0.05em' }}
+                  >
+                    ■ BlackNews
+                  </div>
+                )}
                 {/* Bottom Watermark Logo: "■ BlackNews" & Right-Aligned Caption.
                     Con el vídeo a sangre (z-30 durante el fundido) el sello
                     sube a z-30: mismo nivel, pero va después en el DOM, así
