@@ -9943,7 +9943,7 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
               <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
               <span className="text-[11px] uppercase tracking-wider text-neutral-500">Marca agua</span>
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Tema de fondo (BlackNewsPress-Background.wav) solo en video">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Tema de fondo (BlackNewsPress-Background.mp3) solo en video">
               <input type="checkbox" checked={bgAudio} onChange={(e) => setBgAudio(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
               <span className="text-[11px] uppercase tracking-wider text-neutral-500">Tema fondo</span>
             </label>
@@ -11431,3 +11431,4 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
     </div>
   );
 };
+
