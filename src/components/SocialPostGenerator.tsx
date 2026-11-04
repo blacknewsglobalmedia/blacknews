@@ -856,10 +856,75 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [mediaOffsetY, setMediaOffsetY] = useState(0);
   const [bgAudio, setBgAudio] = useState(false);
   const [bgVolume, setBgVolume] = useState(0.6);
+  const bgAudioElementRef = useRef<HTMLAudioElement | null>(null);
+  // Tweet pegado (texto o URL): se muestra en el preview sin API key.
+  const [tweetText, setTweetText] = useState("");
+  const [tweetHtml, setTweetHtml] = useState("");
+  const [tweetLoading, setTweetLoading] = useState(false);
   // true mientras el cierre ocupa la vista previa (y durante su fase en la
   // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
   const [outroActive, setOutroActive] = useState(false);
   const outroActiveRef = useRef(false);
+
+  // Fondo musical: reproducir tras primera interacción (evita bloqueo autoplay)
+  useEffect(() => {
+    let first = true;
+    const tryPlay = () => {
+      if (!first) return;
+      first = false;
+      const el = bgAudioElementRef.current;
+      if (el && bgAudio) {
+        el.play().catch(() => {
+          /* bloqueado por autoplay; esperar interacción del usuario */
+        });
+      }
+    };
+    const onInteract = () => {
+      tryPlay();
+      document.removeEventListener('mousedown', onInteract);
+      document.removeEventListener('touchstart', onInteract);
+    };
+    document.addEventListener('mousedown', onInteract);
+    document.addEventListener('touchstart', onInteract);
+    // Si ya hay interacción previa (ej. carga con click), intentar ahora
+    tryPlay();
+    return () => {
+      document.removeEventListener('mousedown', onInteract);
+      document.removeEventListener('touchstart', onInteract);
+    };
+  }, [bgAudio]);
+
+  // Sincronizar volumen del fondo con el estado bgVolume
+  useEffect(() => {
+    const el = bgAudioElementRef.current;
+    if (el) el.volume = bgVolume;
+  }, [bgVolume]);
+
+  // Fetch oEmbed público de Twitter (sin API key) cuando el usuario pega una URL.
+  useEffect(() => {
+    if (!tweetText) {
+      setTweetHtml("");
+      return;
+    }
+    const trimmed = tweetText.trim();
+    const isUrl = /^(https?:\/\/(?:twitter\.com|x\.com)\/[^\/]+\/status\/\d+)/i.test(trimmed);
+    if (!isUrl) {
+      setTweetHtml("");
+      return;
+    }
+    setTweetLoading(true);
+    const url = trimmed;
+    fetch(`https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("oEmbed no disponible");
+        const data = await res.json();
+        setTweetHtml(data.html || "");
+      })
+      .catch(() => {
+        setTweetHtml("");
+      })
+      .finally(() => setTweetLoading(false));
+  }, [tweetText]);
 
   // ─── Aviso de contenido sensible (opcional): Blacknews-Advertencia.mp4 ───
   // Se inserta como fase previa antes del clip. El usuario puede elegir un
@@ -9947,6 +10012,17 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
               <input type="checkbox" checked={bgAudio} onChange={(e) => setBgAudio(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
               <span className="text-[11px] uppercase tracking-wider text-neutral-500">Tema fondo</span>
             </label>
+            {/* Tweet pegado (texto o URL) sin API */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Pega un tweet (texto o URL de Twitter/X) para mostrarlo en el post">
+              <span className="text-[11px] text-neutral-500 whitespace-nowrap">Tweet</span>
+              <input
+                type="text"
+                value={tweetText}
+                onChange={(e) => setTweetText(e.target.value)}
+                placeholder="Pega tweet o URL..."
+                className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-200 rounded-md px-1.5 py-0.5 w-36 focus:outline-none focus:border-white/30 transition-colors"
+              />
+            </label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Escala del video (reposición)">
               <span className="text-[11px] text-neutral-500">Escala</span>
               <input type="range" min={0.6} max={1.4} step={0.05} value={mediaZoom} onChange={(e) => setMediaZoom(Number(e.target.value))} className="w-16 h-1 accent-white" />
@@ -10705,6 +10781,35 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                   }}
                 >
                   {previewMediaEl}
+
+                  {/* Tema de fondo musical (solo video, opcional) */}
+                  {mediaType === "video" && bgAudio && (
+                    <audio
+                      ref={bgAudioElementRef}
+                      src="/assets/audio/BlackNewsPress-Background.mp3"
+                      loop
+                      style={{ display: "none" }}
+                    />
+                  )}
+
+                  {/* Tweet pegado: texto o embed oEmbed */}
+                  {(tweetText || tweetHtml) && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 z-50 px-3 py-2 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {tweetHtml ? (
+                        <div
+                          className="text-[10px] leading-snug text-neutral-200"
+                          dangerouslySetInnerHTML={{ __html: tweetHtml }}
+                        />
+                      ) : (
+                        <div className="text-[10px] leading-snug text-neutral-200 whitespace-pre-wrap">
+                          {tweetText}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Soft Gradient Fade from black on top of media */}
                   {blendFade && (
