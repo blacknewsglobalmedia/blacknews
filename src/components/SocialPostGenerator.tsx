@@ -867,6 +867,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [tweetAvatar, setTweetAvatar] = useState("");
   const [tweetBody, setTweetBody] = useState("");
   const [tweetDate, setTweetDate] = useState("");
+  // Traducción automática del cuerpo al español (sin API key).
+  const [tweetTranslate, setTweetTranslate] = useState(true);
+  const [tweetBodyEs, setTweetBodyEs] = useState("");
+  const [tweetTranslating, setTweetTranslating] = useState(false);
   // true si el usuario subió/editó el avatar a mano (no lo pisa el oEmbed).
   const tweetAvatarManualRef = useRef(false);
   // Subida opcional de la tarjeta del tweet sobre el sello inferior (px).
@@ -1068,6 +1072,73 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       })
       .finally(() => setTweetLoading(false));
   }, [tweetText]);
+
+  // Traducción del cuerpo del tweet al español, sin API key: Google (gtx) y,
+  // si ese falla, MyMemory como respaldo. Se debouncea para no disparar una
+  // petición por tecla y se descarta si el texto cambia a mitad de vuelo.
+  useEffect(() => {
+    const src = tweetBody.trim();
+    if (!src || !tweetTranslate) {
+      setTweetBodyEs("");
+      setTweetTranslating(false);
+      return;
+    }
+    let cancelled = false;
+    setTweetTranslating(true);
+    const q = encodeURIComponent(src);
+    // «Ya es español»: con acentos/¿¡ o palabras típicas no se traduce (y se
+    // evita el respaldo, que asume origen inglés y podría destrozarlo).
+    const looksEs =
+      /[áéíóúñ¿¡]/i.test(src) ||
+      /\b(el|la|los|las|de|que|en|un|una|por|con|para|como|esta|este|está|están|son|pero|muy)\b/i.test(
+        src,
+      );
+    const timer = window.setTimeout(() => {
+      (async () => {
+        let out = "";
+        try {
+          const r = await fetch(
+            `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=es&dt=t&q=${q}`,
+          );
+          if (r.ok) {
+            const data: unknown = await r.json();
+            const groups = Array.isArray(data) ? (data as unknown[]) : [];
+            const first = Array.isArray(groups[0]) ? (groups[0] as unknown[]) : [];
+            out = first
+              .map((s) =>
+                Array.isArray(s) && typeof s[0] === "string" ? (s[0] as string) : "",
+              )
+              .join("");
+          }
+        } catch {
+          /* sin red o CORS: se intenta el respaldo */
+        }
+        if (!out.trim() && !looksEs) {
+          try {
+            const r = await fetch(
+              `https://api.mymemory.translated.net/get?q=${q}&langpair=en|es`,
+            );
+            if (r.ok) {
+              const data = (await r.json()) as {
+                responseData?: { translatedText?: string };
+              };
+              out = data?.responseData?.translatedText || "";
+            }
+          } catch {
+            /* se queda el texto original */
+          }
+        }
+        if (cancelled) return;
+        const clean = out.trim();
+        setTweetBodyEs(clean && clean.toLowerCase() !== src.toLowerCase() ? clean : "");
+        setTweetTranslating(false);
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [tweetBody, tweetTranslate]);
 
   // Altura real del sello inferior: la tarjeta del tweet se apoya justo encima
   // (nunca por debajo) y puede subirse aún más con «Altura». Se re-mide al
@@ -10187,6 +10258,18 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
             {tweetText && (
               <div className="w-full flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 pt-1.5 border-t border-white/5">
                 <span className="text-[10px] uppercase tracking-wider text-neutral-600">Tarjeta tweet</span>
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer select-none"
+                  title="Muestra el cuerpo del tweet traducido al español (Google Translate, sin API key)"
+                >
+                  <input
+                    type="checkbox"
+                    checked={tweetTranslate}
+                    onChange={(e) => setTweetTranslate(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-white cursor-pointer"
+                  />
+                  <span className="text-[11px] text-neutral-500 whitespace-nowrap">Traducir ES</span>
+                </label>
                 <input
                   type="text"
                   value={tweetName}
@@ -10258,6 +10341,9 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 )}
                 {tweetLoading && (
                   <span className="text-[10px] text-amber-400 animate-pulse">Cargando…</span>
+                )}
+                {tweetTranslating && !tweetLoading && (
+                  <span className="text-[10px] text-sky-400 animate-pulse">Traduciendo…</span>
                 )}
               </div>
             )}
@@ -11093,14 +11179,28 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                             </span>
                           </div>
 
-                          {/* Cuerpo del tweet */}
-                          <p className="mt-1 text-[11.5px] leading-[1.35] text-neutral-100 whitespace-pre-wrap break-words line-clamp-5">
-                            {tweetBody || tweetText}
+                          {/* Cuerpo del tweet: en español si la traducción está
+                              activa; el original queda en el tooltip. */}
+                          <p
+                            className="mt-1 text-[11.5px] leading-[1.35] text-neutral-100 whitespace-pre-wrap break-words line-clamp-5"
+                            title={tweetBodyEs ? tweetBody : undefined}
+                          >
+                            {tweetBodyEs || tweetBody || tweetText}
                           </p>
 
                           {/* Fecha + iconos sociales */}
                           <div className="mt-1.5 flex items-center justify-between text-neutral-500">
-                            <span className="text-[9.5px]">{tweetDate}</span>
+                            <span className="flex items-center gap-1.5 text-[9.5px]">
+                              <span>{tweetDate}</span>
+                              {tweetBodyEs && (
+                                <span
+                                  className="text-[8.5px] font-semibold uppercase tracking-wider text-sky-400 border border-sky-400/40 rounded px-1 leading-[1.6]"
+                                  title="Tweet traducido al español (el texto original: pasa el cursor por encima)"
+                                >
+                                  ES
+                                </span>
+                              )}
+                            </span>
                             <span className="flex items-center gap-2.5 text-[9.5px]">
                               <span className="flex items-center gap-0.5" title="Respuestas">
                                 <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>
