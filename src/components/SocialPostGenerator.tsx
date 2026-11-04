@@ -869,6 +869,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [tweetDate, setTweetDate] = useState("");
   // true si el usuario subió/editó el avatar a mano (no lo pisa el oEmbed).
   const tweetAvatarManualRef = useRef(false);
+  // Subida opcional de la tarjeta del tweet sobre el sello inferior (px).
+  const [tweetLift, setTweetLift] = useState(0);
+  // Altura real del sello «BlackNews» de abajo: la tarjeta del tweet se apoya
+  // justo encima para no quedar tapada ni «muy abajo».
+  const previewFooterRef = useRef<HTMLDivElement>(null);
+  const [previewFooterH, setPreviewFooterH] = useState(0);
   // true mientras el cierre ocupa la vista previa (y durante su fase en la
   // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
   const [outroActive, setOutroActive] = useState(false);
@@ -1062,6 +1068,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       })
       .finally(() => setTweetLoading(false));
   }, [tweetText]);
+
+  // Altura real del sello inferior: la tarjeta del tweet se apoya justo encima
+  // (nunca por debajo) y puede subirse aún más con «Altura». Se re-mide al
+  // cambiar de formato/diseño, con la leyenda o al redimensionar la ventana.
+  useEffect(() => {
+    const el = previewFooterRef.current;
+    if (!el) return;
+    const measure = () => setPreviewFooterH(el.offsetHeight);
+    measure();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [postFormat, postDesign, photoCaption]);
 
   // ─── Aviso de contenido sensible (opcional): Blacknews-Advertencia.mp4 ───
   // Se inserta como fase previa antes del clip. El usuario puede elegir un
@@ -10189,6 +10213,21 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                 />
                 <label
                   className="flex items-center gap-1.5 cursor-pointer select-none"
+                  title="Sube la tarjeta del tweet por encima del sello (0 = justo encima)"
+                >
+                  <span className="text-[11px] text-neutral-500">Altura</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={240}
+                    step={4}
+                    value={tweetLift}
+                    onChange={(e) => setTweetLift(Number(e.target.value))}
+                    className="w-16 h-1 accent-white"
+                  />
+                </label>
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer select-none"
                   title="Foto de perfil de la tarjeta (se descarga del @usuario si no subes una)"
                 >
                   <span className="text-[11px] text-neutral-500">Avatar</span>
@@ -10991,83 +11030,6 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                     />
                   )}
 
-                  {/* Tarjeta «tweet embebido»: simula el embed de X sin API key */}
-                  {(tweetText || tweetHtml) && (
-                    <div
-                      className="absolute inset-x-0 bottom-0 z-50 px-3 pb-3 pt-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
-                      style={{ pointerEvents: "none" }}
-                    >
-                      <div className="rounded-2xl border border-white/15 bg-neutral-950/85 backdrop-blur-md px-3 py-2.5 shadow-2xl">
-                        <div className="flex items-start gap-2.5">
-                          {/* Avatar (foto de perfil) */}
-                          <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-white/10 ring-1 ring-white/20 grid place-items-center">
-                            {tweetAvatar ? (
-                              <img
-                                src={tweetAvatar}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                                }}
-                              />
-                            ) : (
-                              <span className="text-[13px] font-bold text-neutral-400">
-                                {(tweetName || tweetHandle || "B").replace(/^@/, "").charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            {/* Nombre + check + @usuario + fecha */}
-                            <div className="flex items-center gap-1 flex-wrap leading-none">
-                              <span className="text-[11.5px] font-semibold text-white truncate max-w-[45%]">
-                                {tweetName || "Usuario"}
-                              </span>
-                              <svg viewBox="0 0 22 22" aria-label="Verificado" className="w-3 h-3 shrink-0">
-                                <path
-                                  fill="#1d9bf0"
-                                  d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.445 1.054.75 1.687.882.635.13 1.294.083 1.902-.143.272.587.702 1.086 1.24 1.44.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"
-                                />
-                              </svg>
-                              <span className="text-[10.5px] text-neutral-400 truncate">
-                                {tweetHandle || ""}
-                              </span>
-                            </div>
-
-                            {/* Cuerpo del tweet */}
-                            <p className="mt-1 text-[11.5px] leading-[1.35] text-neutral-100 whitespace-pre-wrap break-words line-clamp-5">
-                              {tweetBody || tweetText}
-                            </p>
-
-                            {/* Fecha + iconos sociales */}
-                            <div className="mt-1.5 flex items-center justify-between text-neutral-500">
-                              <span className="text-[9.5px]">{tweetDate}</span>
-                              <span className="flex items-center gap-2.5 text-[9.5px]">
-                                <span className="flex items-center gap-0.5" title="Respuestas">
-                                  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>
-                                  12
-                                </span>
-                                <span className="flex items-center gap-0.5" title="Retweets">
-                                  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg>
-                                  34
-                                </span>
-                                <span className="flex items-center gap-0.5" title="Me gusta">
-                                  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>
-                                  567
-                                </span>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Logotipo X */}
-                          <svg viewBox="0 0 24 24" aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-white/70" fill="currentColor">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Soft Gradient Fade from black on top of media */}
                   {blendFade && (
                     <div
@@ -11079,6 +11041,91 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                   {/* Subtle bottom vignette */}
                   <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
                 </div>
+
+                {/* Tarjeta «tweet embebido»: simula el embed de X sin API key.
+                    Se apoya sobre el sello inferior (medido) y admite subida
+                    extra con «Altura», para que nunca quede «muy abajo». */}
+                {(tweetText || tweetHtml) && (
+                  <div
+                    className="absolute inset-x-0 px-3 pb-3 pt-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
+                    style={{
+                      pointerEvents: "none",
+                      // Por encima del video (z-30 durante el fundido texto->video) y por
+                      // debajo del cierre z-40: la tarjeta manda sobre el clip, no al reves.
+                      zIndex: textFadeP > 0 ? 35 : 25,
+                      bottom: previewFooterH + tweetLift,
+                    }}
+                  >
+                    <div className="rounded-2xl border border-white/15 bg-neutral-950/85 backdrop-blur-md px-3 py-2.5 shadow-2xl">
+                      <div className="flex items-start gap-2.5">
+                        {/* Avatar (foto de perfil) */}
+                        <div className="shrink-0 w-9 h-9 rounded-full overflow-hidden bg-white/10 ring-1 ring-white/20 grid place-items-center">
+                          {tweetAvatar ? (
+                            <img
+                              src={tweetAvatar}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <span className="text-[13px] font-bold text-neutral-400">
+                              {(tweetName || tweetHandle || "B").replace(/^@/, "").charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          {/* Nombre + check + @usuario + fecha */}
+                          <div className="flex items-center gap-1 flex-wrap leading-none">
+                            <span className="text-[11.5px] font-semibold text-white truncate max-w-[45%]">
+                              {tweetName || "Usuario"}
+                            </span>
+                            <svg viewBox="0 0 22 22" aria-label="Verificado" className="w-3 h-3 shrink-0">
+                              <path
+                                fill="#1d9bf0"
+                                d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.445 1.054.75 1.687.882.635.13 1.294.083 1.902-.143.272.587.702 1.086 1.24 1.44.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"
+                              />
+                            </svg>
+                            <span className="text-[10.5px] text-neutral-400 truncate">
+                              {tweetHandle || ""}
+                            </span>
+                          </div>
+
+                          {/* Cuerpo del tweet */}
+                          <p className="mt-1 text-[11.5px] leading-[1.35] text-neutral-100 whitespace-pre-wrap break-words line-clamp-5">
+                            {tweetBody || tweetText}
+                          </p>
+
+                          {/* Fecha + iconos sociales */}
+                          <div className="mt-1.5 flex items-center justify-between text-neutral-500">
+                            <span className="text-[9.5px]">{tweetDate}</span>
+                            <span className="flex items-center gap-2.5 text-[9.5px]">
+                              <span className="flex items-center gap-0.5" title="Respuestas">
+                                <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>
+                                12
+                              </span>
+                              <span className="flex items-center gap-0.5" title="Retweets">
+                                <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg>
+                                34
+                              </span>
+                              <span className="flex items-center gap-0.5" title="Me gusta">
+                                <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>
+                                567
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Logotipo X */}
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="w-3.5 h-3.5 shrink-0 text-white/70" fill="currentColor">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {watermark && (
                   <div
@@ -11093,6 +11140,7 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                     sube a z-30: mismo nivel, pero va después en el DOM, así
                     que siempre pinta por encima — nunca se oculta. */}
                 <div
+                  ref={previewFooterRef}
                   className="p-6 sm:p-7 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent"
                   style={{ zIndex: textFadeP > 0 ? 30 : 20 }}
                 >
