@@ -873,39 +873,131 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // ruta clásica de exportación, donde el mismo <video> alimenta el lienzo).
   const [outroActive, setOutroActive] = useState(false);
   const outroActiveRef = useRef(false);
+  // Pausa de la vista previa: aquí arriba para que el ciclo del tema de fondo
+  // (justo debajo) pueda leerla en su efecto de fase.
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
 
-  // Fondo musical: reproducir tras primera interacción (evita bloqueo autoplay)
+  // ── Ciclo del tema de fondo ──
+  // Suena mientras se ve el vídeo —a partir del fundido «texto → vídeo», o
+  // desde el arranque si ese fundido está apagado— y se desvanece con un fade
+  // suave al entrar el outro o al pausar la vista previa. El elemento <audio>
+  // sólo nace con el vídeo y el tema activado.
+  const bgAudioRafRef = useRef(0);
+  // Fase «sonando»: la decide el efecto de fase de abajo y la leen los otros.
+  const bgAudioOnRef = useRef(false);
+  // «Una vez el texto se fue, el tema sigue hasta el outro» (no se corta en
+  // cada vuelta del lazo, cuando el titular vuelve a aparecer).
+  const bgAudioLatchedRef = useRef(false);
+  const bgVolumeRef = useRef(bgVolume);
+
+  const stopBgRamp = () => {
+    cancelAnimationFrame(bgAudioRafRef.current);
+    bgAudioRafRef.current = 0;
+  };
+
+  // Volumen del tema con rampa: fade in/out en vez de cortes secos.
+  const rampBgAudio = (to: number, ms: number) => {
+    stopBgRamp();
+    const el = bgAudioElementRef.current;
+    if (!el) return;
+    const from = el.volume;
+    if (ms <= 0 || Math.abs(from - to) < 0.002) {
+      el.volume = to;
+      return;
+    }
+    const t0 = performance.now();
+    const step = () => {
+      const k = clamp01((performance.now() - t0) / ms);
+      el.volume = from + (to - from) * k;
+      if (k < 1) bgAudioRafRef.current = requestAnimationFrame(step);
+    };
+    bgAudioRafRef.current = requestAnimationFrame(step);
+  };
+
+  // Desbloqueo de autoplay: el <audio> sólo puede sonar tras una interacción
+  // del usuario. Se queda reproduciendo en silencio y la fase de abajo decide
+  // cuándo sube el volumen.
   useEffect(() => {
-    let first = true;
+    if (!bgAudio) return;
+    let unlocked = false;
     const tryPlay = () => {
-      if (!first) return;
-      first = false;
       const el = bgAudioElementRef.current;
-      if (el && bgAudio) {
-        el.play().catch(() => {
-          /* bloqueado por autoplay; esperar interacción del usuario */
+      if (!el || unlocked) return;
+      el.volume = 0;
+      el.play()
+        .then(() => {
+          unlocked = true;
+          document.removeEventListener("mousedown", tryPlay);
+          document.removeEventListener("touchstart", tryPlay);
+          // Si la fase ya pide tema (p. ej. reactivar con el texto ya fuera),
+          // el fade in arranca en cuanto el navegador lo permite.
+          if (bgAudioOnRef.current) rampBgAudio(bgVolumeRef.current, 900);
+        })
+        .catch(() => {
+          /* bloqueado por autoplay: se reintentará en la siguiente interacción */
         });
-      }
     };
-    const onInteract = () => {
-      tryPlay();
-      document.removeEventListener('mousedown', onInteract);
-      document.removeEventListener('touchstart', onInteract);
-    };
-    document.addEventListener('mousedown', onInteract);
-    document.addEventListener('touchstart', onInteract);
-    // Si ya hay interacción previa (ej. carga con click), intentar ahora
+    document.addEventListener("mousedown", tryPlay);
+    document.addEventListener("touchstart", tryPlay);
     tryPlay();
     return () => {
-      document.removeEventListener('mousedown', onInteract);
-      document.removeEventListener('touchstart', onInteract);
+      document.removeEventListener("mousedown", tryPlay);
+      document.removeEventListener("touchstart", tryPlay);
     };
-  }, [bgAudio]);
+    // mediaType/postDesign desmontan y remontan el <audio>: hay que volver a
+    // desbloquear el autoplay sobre el elemento nuevo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bgAudio, mediaType, postDesign]);
 
-  // Sincronizar volumen del fondo con el estado bgVolume
+  // Fase del tema: encendido cuando el texto empieza a irse (o desde el
+  // arranque si «texto → vídeo» está apagado) y apagado con fade al entrar el
+  // outro o al pausar la vista previa. El «latch» evita que el tema se corte
+  // en cada vuelta del lazo, cuando el titular vuelve a aparecer: una vez
+  // sonando, lo sigue hasta el outro.
   useEffect(() => {
     const el = bgAudioElementRef.current;
-    if (el) el.volume = bgVolume;
+    const fadeArmed =
+      textFadeOut &&
+      mediaType === "video" &&
+      postDesign !== "podcast" &&
+      (postFormat === "4:5" || postFormat === "9:16");
+    if (outroActive || !bgAudio || !fadeArmed) {
+      bgAudioLatchedRef.current = false;
+    }
+    if (fadeArmed && textFadeP > 0) bgAudioLatchedRef.current = true;
+    const wantSound =
+      !!el &&
+      bgAudio &&
+      isVideoPlaying &&
+      !outroActive &&
+      (fadeArmed ? bgAudioLatchedRef.current : true);
+    const prev = bgAudioOnRef.current;
+    bgAudioOnRef.current = wantSound;
+    if (!el) {
+      // Sin elemento (tema apagado o sin vídeo): cualquier rampa en curso
+      // queda cancelada para no tocar un <audio> desmontado.
+      stopBgRamp();
+      return;
+    }
+    if (wantSound === prev) return;
+    // Transición de fase: fade in (900 ms) o fade out (1 s) del tema.
+    rampBgAudio(wantSound ? bgVolumeRef.current : 0, wantSound ? 900 : 1000);
+  }, [
+    bgAudio,
+    textFadeP,
+    outroActive,
+    isVideoPlaying,
+    textFadeOut,
+    mediaType,
+    postFormat,
+    postDesign,
+  ]);
+
+  // Cambio del volumen elegido: lo guarda la rampa y, si el tema suena,
+  // asciende/desciende corto hasta el nuevo nivel.
+  useEffect(() => {
+    bgVolumeRef.current = bgVolume;
+    if (bgAudioOnRef.current) rampBgAudio(bgVolume, 300);
   }, [bgVolume]);
 
   // Fetch oEmbed público de Twitter (sin API key) cuando el usuario pega una URL.
@@ -1004,7 +1096,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [descLineHeightRatio, setDescLineHeightRatio] = useState(1.42);
 
   // Video playback & optimization
-  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
   const [recordingProgress, setRecordingProgress] = useState(0);
   const [recordingPaused, setRecordingPaused] = useState(false);
