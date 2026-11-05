@@ -618,6 +618,12 @@ const tvIntroExit = (t: number, dur: number) =>
 // izquierda nunca se toca: se pinta siempre, al final de todo.
 const TEXT_FADE_MOVE = 0.6;
 
+/** Ancho nominal de la tarjeta de vista previa por formato (px de pantalla).
+ *  Es la base de `previewScale` y la que usa el render exportado para pasar
+ *  la reposición del vídeo de px de vista previa a px de lienzo (1080). */
+const previewCardWidthFor = (format: "4:5" | "9:16" | "16:9") =>
+  format === "16:9" ? 480 : format === "9:16" ? 340 : 420;
+
 /** Sección plegable del generador.
  *
  *  El contenido se oculta con `hidden` y NO se desmonta: los controles
@@ -4654,8 +4660,32 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const mediaTopY = Math.round(mediaTopFull * (1 - fadeP));
     const mediaHeight = H - mediaTopY;
 
+    // Mismo trato que la vista previa para el bloque de media: la escala
+    // («Escala») y la reposición se aplican con origen en el centro del
+    // rectángulo —igual que el CSS `scale() translate()` del contenedor— y
+    // todo queda recortado a ese rectángulo (la vista previa monta el vídeo
+    // en un contenedor con overflow-hidden). Los offsets viajan en px de
+    // vista previa y aquí se pasan a px de lienzo.
+    const clipMediaRect = (c: CanvasRenderingContext2D) => {
+      c.beginPath();
+      c.rect(0, mediaTopY, W, mediaHeight);
+      c.clip();
+    };
+    const mediaZoomed = (c: CanvasRenderingContext2D) => {
+      if (mediaZoom === 1 && mediaOffsetX === 0 && mediaOffsetY === 0) return;
+      const cx = W / 2;
+      const cy = mediaTopY + mediaHeight / 2;
+      const toCanvas = W / previewCardWidthFor(postFormat);
+      c.translate(cx, cy);
+      c.scale(mediaZoom, mediaZoom);
+      c.translate(mediaOffsetX * toCanvas, mediaOffsetY * toCanvas);
+      c.translate(-cx, -cy);
+    };
+
     if ((mediaElement || frameOverride) && !isOverlayOnly) {
       ctx.save();
+      clipMediaRect(ctx);
+      mediaZoomed(ctx);
       const canvasFilter = getCanvasFilterString();
       // Identidad (brillo/contraste al 100%): saltarnos ctx.filter acelera mucho
       // el dibujo por fotograma y evita el filo que el filtro deja en los bordes.
@@ -4737,6 +4767,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // Se apaga con la transición: a sangre completa, el velo solo oscurecería el vídeo.
     if (blendFade && fadeP < 1) {
       ctx.save();
+      clipMediaRect(ctx);
+      mediaZoomed(ctx);
       ctx.globalAlpha = 1 - fadeP;
       const fadeHeight = Math.min(220, mediaHeight * 0.42);
       const grad = ctx.createLinearGradient(
@@ -4757,6 +4789,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // Subtle bottom shadow vignette behind logo and caption
     ctx.save();
+    clipMediaRect(ctx);
+    mediaZoomed(ctx);
     const bottomGrad = ctx.createLinearGradient(0, H - 160, 0, H);
     bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
     bottomGrad.addColorStop(1, "rgba(0,0,0,0.85)");
@@ -7019,8 +7053,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // disparar en alto).
   // Valores fraccionales exactos: al redondear, la vista previa partía las
   // líneas en sitios distintos a los del archivo exportado.
-  const previewCardWidth =
-    postFormat === "16:9" ? 480 : postFormat === "9:16" ? 340 : 420;
+  const previewCardWidth = previewCardWidthFor(postFormat);
   const previewScale = previewCardWidth / 1080;
   // Ancho REAL de la tarjeta de vista previa. El formato TV escala un lienzo
   // fijo de 1920 px, así que con este medidor el conjunto nunca se recorta
