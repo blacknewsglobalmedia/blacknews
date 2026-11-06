@@ -618,6 +618,44 @@ const tvIntroExit = (t: number, dur: number) =>
 // izquierda nunca se toca: se pinta siempre, al final de todo.
 const TEXT_FADE_MOVE = 0.6;
 
+// ── Tema de fondo («Tema») dentro del archivo exportado ──────────────────────
+// Mismos fundidos que la vista previa: sube en 900 ms cuando el texto empieza
+// a irse (o desde el arranque si «texto → vídeo» está apagado) y baja en 1 s
+// al entrar el cierre de marca — o al terminar el clip si no hay cierre.
+const BG_THEME_IN_S = 0.9;
+const BG_THEME_OUT_S = 1.0;
+
+/** Automatización de volumen del tema sobre un `GainNode`.
+ *
+ *  En `t0` queda en 0, sube hasta `peak` con fundido de `BG_THEME_IN_S`
+ *  segundos a partir de `inAt` y vuelve a 0 exactamente en `outAt` con una
+ *  bajada de `BG_THEME_OUT_S`. Todos los tiempos van en el reloj de la pista
+ *  (0 en el lienzo offline, `ctx.currentTime` en tiempo real) y en segundos.
+ *
+ *  Si la ventana (`outAt - inAt`) no da para los dos fundidos, sube y baja
+ *  por la mitad de lo que haya; si no llega a haber ventana, no suena. */
+const automateThemeGain = (
+  gain: GainNode,
+  t0: number,
+  inAt: number,
+  outAt: number,
+  peak: number,
+) => {
+  const g = gain.gain;
+  g.setValueAtTime(0, t0);
+  if (outAt <= inAt) return;
+  const win = outAt - inAt;
+  if (win < BG_THEME_IN_S + BG_THEME_OUT_S) {
+    g.linearRampToValueAtTime(peak, inAt + win / 2);
+    g.linearRampToValueAtTime(0, outAt);
+    return;
+  }
+  g.setValueAtTime(0, inAt);
+  g.linearRampToValueAtTime(peak, inAt + BG_THEME_IN_S);
+  g.setValueAtTime(peak, outAt - BG_THEME_OUT_S);
+  g.linearRampToValueAtTime(0, outAt);
+};
+
 /** Ancho nominal de la tarjeta de vista previa por formato (px de pantalla).
  *  Es la base de `previewScale` y la que usa el render exportado para pasar
  *  la reposición del vídeo de px de vista previa a px de lienzo (1080). */
@@ -1457,6 +1495,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const probe = new OfflineAudioContext(1, 1, 44100);
     const buf = await probe.decodeAudioData(raw);
     soundtrackBufRef.current = buf;
+    return buf;
+  };
+  // Tema de fondo (bgAudio): ya decodificado y cacheado para las dos rutas de
+  // exportación, igual que la cama del podcast. Se mezcla desde el archivo
+  // (no desde el <audio> de la vista previa) para que el MP4 salga igual en
+  // cualquier navegador y en segundo plano.
+  const bgThemeBufRef = useRef<AudioBuffer | null>(null);
+  const bgThemeBuffer = async (): Promise<AudioBuffer> => {
+    if (bgThemeBufRef.current) return bgThemeBufRef.current;
+    const raw = await (
+      await fetch("/assets/audio/BlackNewsPress-Background.mp3")
+    ).arrayBuffer();
+    const probe = new OfflineAudioContext(1, 1, 44100);
+    const buf = await probe.decodeAudioData(raw);
+    bgThemeBufRef.current = buf;
     return buf;
   };
   // Modo «sale vídeo»: el vídeo de siempre y el audio del podcast (las redes
@@ -5702,30 +5755,49 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // La cama musical se mezcla aquí mismo, por debajo de la voz: arranca en
       // el segundo 0 de la salida y buclea sola, así que tapa los silencios sin
       // descolocar el reloj ni depender de la duración de la pista.
+      // El tema de fondo entra aquí igual, pero NO le gobierna `mutedForExport`
+      // (que sólo apaga la voz del clip): en la vista previa es un <audio>
+      // aparte que el botón de silencio no toca. La mezcla cubre la pasada de
+      // intro + el clip, para que el tema respete el mismo desfase que en
+      // pantalla (silencio durante la intro si el fundido texto→vídeo está
+      // armado; desde el primer fotograma si no).
+      const themeFadeArmed =
+        textFadeOut &&
+        postDesign !== "podcast" &&
+        (postFormat === "4:5" || postFormat === "9:16");
+      const themeInAt = themeFadeArmed ? introPad + textFadeOutDur : 0;
+      const themeOutAt = introPad + outDur;
+      const themeWanted = bgAudio && !audioOnly && bgVolume > 0;
       let renderedAudio: AudioBuffer | null = null;
-      if (!mutedForExport) {
+      let hasTheme = false;
+      if (!mutedForExport || themeWanted) {
         try {
           const decoderCtx = new OfflineAudioContext(1, 1, 44100);
           const outRate = 48000;
+          // Pasada de intro + clip: la voz entra al terminar la intro.
+          const mixDur = introPad + outDur;
           const oac = new OfflineAudioContext(
             2,
-            Math.max(1, Math.ceil(outDur * outRate)),
+            Math.max(1, Math.ceil(mixDur * outRate)),
             outRate,
           );
           let hasVoice = false;
-          try {
-            const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
-            const srcNode = oac.createBufferSource();
-            srcNode.buffer = fullAudio;
-            srcNode.playbackRate.value = speed;
-            srcNode.connect(oac.destination);
-            srcNode.start(0, start);
-            hasVoice = true;
-          } catch {
-            // Voz no decodificable: si hay cama, el archivo sigue sonando.
+          if (!mutedForExport) {
+            try {
+              const fullAudio = await decoderCtx.decodeAudioData(raw.slice(0));
+              const srcNode = oac.createBufferSource();
+              srcNode.buffer = fullAudio;
+              srcNode.playbackRate.value = speed;
+              srcNode.connect(oac.destination);
+              srcNode.start(introPad, start);
+              hasVoice = true;
+            } catch {
+              // Voz no decodificable: si hay cama o tema, sigue sonando.
+            }
           }
           let hasMusic = false;
           if (
+            !mutedForExport &&
             postDesign === "podcast" &&
             podcastMusicOn &&
             podcastMusicVol > 0
@@ -5739,13 +5811,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               mGain.gain.value = podcastMusicVol;
               mNode.connect(mGain);
               mGain.connect(oac.destination);
-              mNode.start(0);
+              mNode.start(introPad);
               hasMusic = true;
             } catch {
               // Cama no disponible: se exporta sin ella (nunca aborta).
             }
           }
-          if (hasVoice || hasMusic) renderedAudio = await oac.startRendering();
+          if (themeWanted && themeOutAt > themeInAt) {
+            try {
+              const themeBuf = await bgThemeBuffer();
+              const tNode = oac.createBufferSource();
+              tNode.buffer = themeBuf;
+              tNode.loop = true;
+              const tGain = oac.createGain();
+              automateThemeGain(tGain, 0, themeInAt, themeOutAt, bgVolume);
+              tNode.connect(tGain);
+              tGain.connect(oac.destination);
+              tNode.start(0);
+              hasTheme = true;
+            } catch {
+              // Tema no disponible: se exporta sin él (nunca aborta).
+            }
+          }
+          if (hasVoice || hasMusic || hasTheme)
+            renderedAudio = await oac.startRendering();
         } catch {
           renderedAudio = null; // sin audio exportable → el MP4 sale mudo
         }
@@ -5794,9 +5883,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           ? outroClip.srcDur
           : outroClip.samples.length / 30;
       // El audio de la salida cubre todo el cierre: su propio audio o silencio.
-      // En silencio (isMuted) no se genera pista de audio: mudo es mudo.
-      const outroAudioLen =
-        mutedForExport || !outroClip
+      // En silencio (isMuted) no se genera pista… salvo que suene el tema:
+      // entonces la pista existe y hay que estirarla hasta el final del sello.
+      const outroAudioLen = !outroClip
+        ? 0
+        : mutedForExport && !hasTheme
           ? 0
           : outroAudio
             ? outroAudio.length
@@ -6213,11 +6304,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const ae = audioEncoder;
       if (ae) {
         const frameSize = 1024;
-        // Intro TV: la salida arranca con introPad s de silencio y el audio
-        // completo entra cuando el vídeo reinicia (color y con sonido). Si hay
-        // cierre, su audio (o silencio si el sello va mudo) cierra la pista y
-        // la iguala a la duración del vídeo.
+        // Intro TV: la mezcla (`ra`) cubre ya la pasada de intro + el clip, y
+        // sólo el tema suena durante la intro (la voz entra al reiniciarse el
+        // vídeo). Sin mezcla, la intro se rellena de silencio. Si hay cierre,
+        // su audio (o silencio si el sello va mudo) cierra la pista y la
+        // iguala a la duración del vídeo.
         const introSamples = introPad > 0 ? Math.round(introPad * 48000) : 0;
+        // La mezcla (`ra`) ya incluye la pasada de intro, así que va pegada al
+        // inicio de la pista; sin ella, el hueco de la intro se rellena de
+        // silencio como antes para que el cierre caiga en su segundo exacto.
+        const mainStart = ra ? 0 : introSamples;
         const mainLen = ra
           ? ra.length
           : outroAudioLen > 0
@@ -6228,10 +6324,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           start: number;
           len: number;
         }> = [
-          { buf: ra, start: introSamples, len: mainLen },
-          { buf: oa, start: introSamples + mainLen, len: outroAudioLen },
+          { buf: ra, start: mainStart, len: mainLen },
+          { buf: oa, start: mainStart + mainLen, len: outroAudioLen },
         ];
-        const outLen = introSamples + mainLen + outroAudioLen;
+        const outLen = mainStart + mainLen + outroAudioLen;
         for (let i = 0; i < outLen; i += frameSize) {
           await waitWhile(() => ae.encodeQueueSize > 8);
           const n = Math.min(frameSize, outLen - i);
@@ -6414,6 +6510,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     let liveStream: MediaStream | null = null;
     let timerWorker: Worker | null = null;
     let workerUrl: string | null = null;
+    // Tema de fondo («Tema») de la ruta clásica: BufferSource en bucle con su
+    // Gain, dentro del mismo grafo que la voz. Se declara fuera del `try` para
+    // poder apagarlo también en el `finally` si la exportación falla a mitad.
+    let themeNode: AudioBufferSourceNode | null = null;
+    let themeGain: GainNode | null = null;
+    let themeCtx: AudioContext | null = null;
 
     try {
       setIsRecordingVideo(true);
@@ -6485,11 +6587,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         await seekTo(start);
       }
 
+      // Pasada de intro y duración del clip de salida: los mismos valores que
+      // usa `step()` más abajo. Se calculan aquí porque el tema de fondo los
+      // necesita para programar sus fundidos antes de arrancar la grabación.
+      const introPad = tvIntro ? tvIntroDur : 0;
+      const clipOutDur = (end - start) / Math.max(videoSpeed, 0.01);
       let audioTrack: MediaStreamTrack | null = null;
       // Cama de la ruta clásica: BufferSource en bucle dentro del mismo grafo
       // que la voz. Se corta en `finish` y justo cuando entra el cierre.
       let musicNode: AudioBufferSourceNode | null = null;
-      if (!mutedForExport) {
+      // Tema de fondo («Tema»): NO le gobierna `mutedForExport` — que sólo
+      // apaga la voz del clip — porque en la vista previa es un <audio> aparte
+      // que el botón de silencio no toca. Sólo hace falta el grafo de audio.
+      const themeWanted = bgAudio && mediaType === "video" && bgVolume > 0;
+      const themeFadeArmed =
+        textFadeOut &&
+        postDesign !== "podcast" &&
+        (postFormat === "4:5" || postFormat === "9:16");
+      // Segundos de SALIDA en que el tema empieza a subir (la pasada de intro
+      // es muda si el fundido texto→vídeo está armado) y en el que debe quedar
+      // en 0, que es justo cuando entra el cierre de marca.
+      const themeInAt = themeFadeArmed ? introPad + textFadeOutDur : 0;
+      const themeOutAt = introPad + clipOutDur;
+      if (!mutedForExport || themeWanted) {
         try {
           // Un MediaElementSource por elemento (sólo se puede crear uno): el
           // <video> y el <audio> del podcast tienen cada uno su grafo cacheado.
@@ -6527,6 +6647,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               musicNode = mNode;
             } catch (musicErr) {
               console.warn("Cama musical no disponible:", musicErr);
+            }
+          }
+          // Tema de fondo: BufferSource en bucle + Gain en el mismo grafo (va
+          // a la pista de audio y también a los altavoces, como la cama). Los
+          // fundidos se programan al arrancar la grabación, cuando se conoce
+          // el segundo 0 real de la salida.
+          if (themeWanted && audioTrack) {
+            try {
+              const themeBuf = await bgThemeBuffer();
+              const tNode = graph.ctx.createBufferSource();
+              tNode.buffer = themeBuf;
+              tNode.loop = true;
+              const tGain = graph.ctx.createGain();
+              tGain.gain.value = 0;
+              tNode.connect(tGain);
+              tGain.connect(graph.dest);
+              tGain.connect(graph.ctx.destination);
+              themeNode = tNode;
+              themeGain = tGain;
+              themeCtx = graph.ctx;
+            } catch (themeErr) {
+              console.warn("Tema de fondo no disponible:", themeErr);
+              themeNode = null;
+              themeGain = null;
+              themeCtx = null;
             }
           }
         } catch (audioErr) {
@@ -6585,10 +6730,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // una pasada propia — el clip desde su principio y sin sonido (en 16:9,
       // además en B/N con las fases de TV) — y al terminar el vídeo vuelve a
       // empezar para no perderse nada. La salida total suma ese desfase
-      // (introPad) a la duración del clip.
-      const introPad = tvIntro ? tvIntroDur : 0;
-      // Duración del tramo de vídeo (sin la intro) y del cierre de marca.
-      const clipOutDur = (end - start) / Math.max(videoSpeed, 0.01);
+      // (introPad) a la duración del clip. `introPad` y `clipOutDur` están
+      // calculados arriba, junto al tema de fondo.
       const outroSec = videoOutro ? outroDuration : 0;
       let introPhase2 = false;
       let introWall0 = 0;
@@ -6675,6 +6818,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       timerWorker = new Worker(workerUrl);
 
       isRecordingRef.current = true;
+      // Tema de fondo: aquí empieza el segundo 0 real de la grabación, así
+      // que es el instante en que se programan sus fundidos (subida cuando el
+      // texto se va, bajada al entrar el cierre de marca).
+      if (themeNode && themeGain && themeCtx) {
+        try {
+          if (themeCtx.state === "suspended") await themeCtx.resume();
+          const t0 = themeCtx.currentTime;
+          automateThemeGain(
+            themeGain,
+            t0,
+            t0 + themeInAt,
+            t0 + themeOutAt,
+            bgVolume,
+          );
+          themeNode.start(t0, 0);
+        } catch (themeErr) {
+          console.warn("Tema de fondo no arrancó:", themeErr);
+          themeNode = null;
+          themeGain = null;
+          themeCtx = null;
+        }
+      }
       recorder.start(100);
 
       const targetFps = 30;
@@ -6729,6 +6894,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             if (musicNode) musicNode.stop();
           } catch {}
           musicNode = null;
+          // El tema se corta con la grabación: si aún sonara (deriva de unos
+          // ms entre el reloj del AudioContext y el del vídeo), se apaga ya.
+          try {
+            if (themeGain && themeCtx) {
+              const now = themeCtx.currentTime;
+              const cur = themeGain.gain.value;
+              themeGain.gain.cancelScheduledValues(now);
+              themeGain.gain.setValueAtTime(cur, now);
+              if (cur > 0.001)
+                themeGain.gain.linearRampToValueAtTime(0, now + 0.2);
+            }
+            if (themeNode) themeNode.stop();
+          } catch {}
+          themeNode = null;
+          themeGain = null;
+          themeCtx = null;
           outroPhase = false;
           outroActiveRef.current = false;
           setOutroActive(false);
@@ -6770,6 +6951,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             if (musicNode) musicNode.stop();
           } catch {}
           musicNode = null;
+          // El tema ya baja solo justo hasta aquí (automatización programada
+          // al arrancar); si aún quedara algo audible, se apaga con fundido
+          // corto para que no se cuele por debajo del sello.
+          try {
+            if (themeGain && themeCtx) {
+              const now = themeCtx.currentTime;
+              const cur = themeGain.gain.value;
+              themeGain.gain.cancelScheduledValues(now);
+              themeGain.gain.setValueAtTime(cur, now);
+              if (cur > 0.001)
+                themeGain.gain.linearRampToValueAtTime(0, now + 0.3);
+            }
+            if (themeNode && themeCtx)
+              themeNode.stop(themeCtx.currentTime + 0.35);
+          } catch {}
+          themeNode = null;
+          themeGain = null;
+          themeCtx = null;
           el.muted = mutedForExport;
           rewindOutro(el);
           // El sello entra en la misma pista de audio que el clip: el nodo
@@ -7040,6 +7239,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingPaused(false);
       // Devuelve el estado de audio normal aunque la exportación falle.
       video.muted = isMuted;
+      // Apaga el tema si la exportación se cortó antes de que lo hicieran
+      // `finish`/`enterOutro` (un lazo sonando en segundo plano no sirve de nada).
+      try {
+        if (themeNode) themeNode.stop();
+      } catch {}
+      themeNode = null;
+      themeGain = null;
+      themeCtx = null;
       try {
         if (timerWorker) timerWorker.terminate();
         if (workerUrl) URL.revokeObjectURL(workerUrl);
