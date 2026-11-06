@@ -662,6 +662,322 @@ const automateThemeGain = (
 const previewCardWidthFor = (format: "4:5" | "9:16" | "16:9") =>
   format === "16:9" ? 480 : format === "9:16" ? 340 : 420;
 
+/** ¿Se ve la tarjeta del tweet en este segundo de contenido?
+ *
+ *  `contentT` y `clipDur` van en las MISMAS unidades (segundos de contenido
+ *  ya normalizados a la velocidad de reproducción). Sin reloj —imagen o PNG—
+ *  o con el modo «todo el vídeo», se ve siempre. */
+const tweetShownAt = (
+  mode: "always" | "start" | "end",
+  secs: number,
+  contentT: number | undefined,
+  clipDur: number,
+): boolean => {
+  if (mode === "always") return true;
+  if (typeof contentT !== "number" || !(clipDur > 0)) return true;
+  if (mode === "start") return contentT < secs;
+  return contentT >= Math.max(0, clipDur - secs);
+};
+
+/** Transform de «Escala»/«Reposición» del bloque de media, con origen en el
+ *  centro del rectángulo —igual que el CSS `scale() translate()` del
+ *  preview—. Los offsets viajan en px de vista previa y se convierten a px de
+ *  lienzo con el ancho nominal del formato. Con Escala = 1 no transforma. */
+const applyMediaZoom = (
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  format: "4:5" | "9:16" | "16:9",
+  zoom: number,
+  offX: number,
+  offY: number,
+) => {
+  if (zoom === 1 && offX === 0 && offY === 0) return;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const toCanvas = w / previewCardWidthFor(format);
+  c.translate(cx, cy);
+  c.scale(zoom, zoom);
+  c.translate(offX * toCanvas, offY * toCanvas);
+  c.translate(-cx, -cy);
+};
+
+// ── Tarjeta «tweet embebido» dibujada en el lienzo exportado ─────────────────
+// Réplica del HTML de la vista previa: todas las medidas van en px de tarjeta
+// de vista previa y se multiplican por `k` (ancho del lienzo / ancho nominal
+// de tarjeta), así 4:5 y 9:16 salen con las mismas proporciones que en
+// pantalla. Iconos: las mismas rutas SVG (viewBox 24×24) del preview.
+const TWEET_ICON_REPLY =
+  "M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z";
+const TWEET_ICON_RETWEET =
+  "M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z";
+const TWEET_ICON_LIKE =
+  "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z";
+const TWEET_ICON_X =
+  "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z";
+
+/** Añade al path actual un rectángulo de esquinas redondeadas. */
+const pathRoundRect = (
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) => {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  c.moveTo(x + rr, y);
+  c.arcTo(x + w, y, x + w, y + h, rr);
+  c.arcTo(x + w, y + h, x, y + h, rr);
+  c.arcTo(x, y + h, x, y, rr);
+  c.arcTo(x, y, x + w, y, rr);
+  c.closePath();
+};
+
+/** Trunca `text` con «…» para que quepa en `maxW` con la fuente ya fijada. */
+const fitTextEllipsis = (
+  c: CanvasRenderingContext2D,
+  text: string,
+  maxW: number,
+): string => {
+  if (!(maxW > 0) || c.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && c.measureText(`${t}…`).width > maxW) t = t.slice(0, -1);
+  return `${t}…`;
+};
+
+/** Dibuja la tarjeta «tweet embebido» sobre el lienzo: degradado de apoyo,
+ *  caja redondeada, avatar, nombre con check, cuerpo (máx. 5 líneas) y pie
+ *  con fecha + métricas. `bottom` es la Y de la base de la tarjeta. */
+const drawTweetCard = (
+  ctx: CanvasRenderingContext2D,
+  d: {
+    W: number;
+    /** Alto del lienzo: el degradado de apoyo baja hasta el borde. */
+    H: number;
+    k: number;
+    bottom: number;
+    name: string;
+    handle: string;
+    body: string;
+    date: string;
+    showEs: boolean;
+    avatar: HTMLImageElement | null;
+    letter: string;
+  },
+) => {
+  const { W, H, k } = d;
+  const inset = 12 * k; // px-3 del contenedor con degradado
+  const padX = 12 * k; // px-3 de la tarjeta
+  const padY = 10 * k; // py-2.5
+  const radius = 16 * k; // rounded-2xl
+  const gap = 10 * k; // gap-2.5
+  const avatarSize = 36 * k; // w-9 h-9
+  const xLogoSize = 14 * k; // w-3.5
+
+  const cardX = inset;
+  const cardW = W - inset * 2;
+  const innerX = cardX + padX;
+  const innerW = cardW - padX * 2;
+  const colX = innerX + avatarSize + gap;
+  const colW = innerW - avatarSize - gap - xLogoSize - gap;
+  if (colW <= 24 * k) return; // tarjeta demasiado estrecha: nada que pintar
+
+  const nameFs = 11.5 * k;
+  const handleFs = 10.5 * k;
+  const bodyFs = 11.5 * k;
+  const bodyLh = bodyFs * 1.35; // leading-[1.35]
+  const footFs = 9.5 * k;
+  const iconSize = 12 * k;
+  const nameRowH = 14 * k;
+  const footH = 13 * k;
+
+  // Cuerpo: envuelto y recortado a 5 líneas con «…» (line-clamp-5).
+  ctx.font = `400 ${bodyFs}px 'Lexend', sans-serif`;
+  const raw = wrapText(ctx, d.body || "", colW);
+  const lines = raw.slice(0, 5);
+  if (raw.length > 5 && lines.length > 0) {
+    lines[lines.length - 1] = fitTextEllipsis(ctx, lines[lines.length - 1], colW);
+  }
+  const bodyH = lines.length * bodyLh;
+  const cardH = padY * 2 + nameRowH + 4 * k + bodyH + 6 * k + footH;
+  const cardTop = d.bottom - cardH;
+  if (cardTop < 0) return; // no cabe: mejor no pintar una tarjeta cortada
+
+  // Degradado del contenedor (pt-6 · pb-3 · from-black/90 via-black/70):
+  // en el archivo llega hasta el borde inferior (el velo y el sello se
+  // pintan después y quedan encima), así no queda costura sobre el pie.
+  const gTop = cardTop - 24 * k;
+  const gBot = H;
+  const grad = ctx.createLinearGradient(0, gBot, 0, gTop);
+  grad.addColorStop(0, "rgba(0,0,0,0.9)");
+  grad.addColorStop(0.5, "rgba(0,0,0,0.7)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, gTop, W, gBot - gTop);
+
+  // Caja de la tarjeta (fondo neutral-950 al 85 % + borde blanco al 15 %).
+  ctx.beginPath();
+  pathRoundRect(ctx, cardX, cardTop, cardW, cardH, radius);
+  ctx.fillStyle = "rgba(10,10,10,0.85)";
+  ctx.fill();
+  ctx.lineWidth = k;
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.stroke();
+
+  const rowTop = cardTop + padY;
+  const rowMid = rowTop + nameRowH / 2;
+  ctx.textAlign = "start";
+  ctx.textBaseline = "middle";
+
+  // Avatar (recorte «cover») o letra inicial, con su anillo blanco al 20 %.
+  const avCx = innerX + avatarSize / 2;
+  const avCy = rowTop + avatarSize / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(avCx, avCy, avatarSize / 2, 0, Math.PI * 2);
+  ctx.clip();
+  const iw = d.avatar ? d.avatar.naturalWidth || d.avatar.width : 0;
+  const ih = d.avatar ? d.avatar.naturalHeight || d.avatar.height : 0;
+  if (d.avatar && iw > 0 && ih > 0) {
+    const s = Math.max(avatarSize / iw, avatarSize / ih);
+    const sw = avatarSize / s;
+    const sh = avatarSize / s;
+    ctx.drawImage(
+      d.avatar,
+      (iw - sw) / 2,
+      (ih - sh) / 2,
+      sw,
+      sh,
+      avCx - avatarSize / 2,
+      avCy - avatarSize / 2,
+      avatarSize,
+      avatarSize,
+    );
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    ctx.fillRect(
+      avCx - avatarSize / 2,
+      avCy - avatarSize / 2,
+      avatarSize,
+      avatarSize,
+    );
+    ctx.font = `700 ${13 * k}px 'Lexend', sans-serif`;
+    ctx.fillStyle = "#a3a3a3";
+    ctx.textAlign = "center";
+    ctx.fillText(d.letter, avCx, avCy + 0.5 * k);
+    ctx.textAlign = "start";
+  }
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(avCx, avCy, avatarSize / 2, 0, Math.PI * 2);
+  ctx.lineWidth = k;
+  ctx.strokeStyle = "rgba(255,255,255,0.2)";
+  ctx.stroke();
+
+  // Nombre + check verificado + @usuario.
+  ctx.font = `600 ${nameFs}px 'Lexend', sans-serif`;
+  ctx.fillStyle = "#FFFFFF";
+  const nameText = fitTextEllipsis(ctx, d.name || "Usuario", colW * 0.45);
+  ctx.fillText(nameText, colX, rowMid);
+  const nameW = ctx.measureText(nameText).width;
+
+  const badgeR = 6 * k;
+  const badgeCx = colX + nameW + 4 * k + badgeR;
+  ctx.beginPath();
+  ctx.arc(badgeCx, rowMid, badgeR, 0, Math.PI * 2);
+  ctx.fillStyle = "#1d9bf0";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(badgeCx - 2.7 * k, rowMid + 0.1 * k);
+  ctx.lineTo(badgeCx - 0.9 * k, rowMid + 1.9 * k);
+  ctx.lineTo(badgeCx + 2.9 * k, rowMid - 2.3 * k);
+  ctx.lineWidth = 1.7 * k;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+
+  if (d.handle) {
+    ctx.font = `400 ${handleFs}px 'Lexend', sans-serif`;
+    ctx.fillStyle = "#a3a3a3";
+    const hx = badgeCx + badgeR + 4 * k;
+    ctx.fillText(
+      fitTextEllipsis(ctx, d.handle, colX + colW - hx),
+      hx,
+      rowMid,
+    );
+  }
+
+  // Cuerpo del tweet.
+  ctx.font = `400 ${bodyFs}px 'Lexend', sans-serif`;
+  ctx.fillStyle = "#f5f5f5";
+  let ly = rowTop + nameRowH + 4 * k;
+  for (const line of lines) {
+    ctx.fillText(line, colX, ly + bodyLh / 2);
+    ly += bodyLh;
+  }
+
+  // Pie: fecha (+ badge «ES» si está traducido) y métricas a la derecha.
+  const footMid = rowTop + nameRowH + 4 * k + bodyH + 6 * k + footH / 2;
+  ctx.font = `400 ${footFs}px 'Lexend', sans-serif`;
+  ctx.fillStyle = "#737373";
+  let lx = innerX;
+  if (d.date) {
+    ctx.fillText(d.date, lx, footMid);
+    lx += ctx.measureText(d.date).width;
+  }
+  if (d.showEs) {
+    lx += 6 * k;
+    const esW = ctx.measureText("ES").width + 8 * k;
+    const esH = 12 * k;
+    ctx.beginPath();
+    pathRoundRect(ctx, lx, footMid - esH / 2, esW, esH, 3 * k);
+    ctx.lineWidth = k;
+    ctx.strokeStyle = "rgba(56,189,248,0.4)";
+    ctx.stroke();
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillText("ES", lx + 4 * k, footMid);
+    ctx.fillStyle = "#737373";
+    lx += esW;
+  }
+
+  const stats: Array<[string, string]> = [
+    [TWEET_ICON_REPLY, "12"],
+    [TWEET_ICON_RETWEET, "34"],
+    [TWEET_ICON_LIKE, "567"],
+  ];
+  const statWs = stats.map(([, n]) => ctx.measureText(n).width);
+  const statGap = 10 * k;
+  const innerGap = 2 * k; // gap-0.5
+  const totalW =
+    stats.reduce((acc, _, i) => acc + iconSize + innerGap + statWs[i], 0) +
+    statGap * (stats.length - 1);
+  let sx = innerX + innerW - totalW;
+  ctx.fillStyle = "#737373";
+  for (let i = 0; i < stats.length; i++) {
+    ctx.save();
+    ctx.translate(sx, footMid - iconSize / 2);
+    ctx.scale(iconSize / 24, iconSize / 24);
+    ctx.fill(new Path2D(stats[i][0]));
+    ctx.restore();
+    ctx.fillText(stats[i][1], sx + iconSize + innerGap, footMid);
+    sx += iconSize + innerGap + statWs[i] + statGap;
+  }
+
+  // Logotipo de X, arriba a la derecha de la fila.
+  ctx.save();
+  ctx.translate(innerX + innerW - xLogoSize, rowTop);
+  ctx.scale(xLogoSize / 24, xLogoSize / 24);
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fill(new Path2D(TWEET_ICON_X));
+  ctx.restore();
+};
+
 /** Sección plegable del generador.
  *
  *  El contenido se oculta con `hidden` y NO se desmonta: los controles
@@ -919,6 +1235,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tweetAvatarManualRef = useRef(false);
   // Subida opcional de la tarjeta del tweet sobre el sello inferior (px).
   const [tweetLift, setTweetLift] = useState(0);
+  // Cuándo se ve la tarjeta en vídeo: todo el clip, sólo los primeros N s o
+  // sólo los últimos N s (en PNG sale siempre). `tweetOn` es el estado ya
+  // resuelto del reloj: sólo cambia al cruzar el umbral, para no repintar
+  // en cada fotograma.
+  const [tweetShowMode, setTweetShowMode] = useState<
+    "always" | "start" | "end"
+  >("always");
+  const [tweetShowSecs, setTweetShowSecs] = useState(5);
+  const [tweetOn, setTweetOn] = useState(true);
   // Altura real del sello «BlackNews» de abajo: la tarjeta del tweet se apoya
   // justo encima para no quedar tapada ni «muy abajo».
   const previewFooterRef = useRef<HTMLDivElement>(null);
@@ -3217,6 +3542,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.fillRect(0, 0, W, H);
     } else if (mediaElement || frameOverride) {
       ctx.save();
+      // «Escala»/«Reposición»: recorte al rectángulo de la señal y transform
+      // con origen en su centro, igual que el CSS del preview (16:9 = 1920 px
+      // de lienzo frente a los 480 px nominales de la tarjeta).
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      ctx.clip();
+      applyMediaZoom(ctx, 0, 0, W, H, "16:9", mediaZoom, mediaOffsetX, mediaOffsetY);
       // Intro: imagen en B&N (sin color). Tras la intro: color original
       // (sólo ajuste tonal), ignorando el desaturado del filtro elegido.
       const canvasFilter =
@@ -3732,6 +4064,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           H;
       ctx.save();
       ctx.filter = getCanvasFilterString();
+      // «Escala»/«Reposición»: mismo transform con origen en el centro del
+      // rectángulo que el resto de ramas (fondo a sangre en podcast).
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      ctx.clip();
+      applyMediaZoom(
+        ctx,
+        0,
+        0,
+        W,
+        H,
+        postFormat === "16:9" ? "16:9" : postFormat === "9:16" ? "9:16" : "4:5",
+        mediaZoom,
+        mediaOffsetX,
+        mediaOffsetY,
+      );
       drawCoverFrame(ctx, bgSrc, bgW, bgH, frameOverride?.rotation ?? 0, W, H);
       ctx.restore();
       // Velo: el texto manda. Con vídeo en movimiento basta con 58 % para que
@@ -4342,6 +4690,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // vídeo» del 4:5 y el 9:16, que así se mantiene sincronizada con la
     // vista previa.
     contentTime?: number,
+    // true = dibujar la tarjeta del tweet pase lo que pase (PNG y copia al
+    // portapapeles: la portada siempre la muestra, aunque en el vídeo esté
+    // limitada a unos segundos).
+    forceTweet = false,
   ): Promise<void> => {
     const W = POST_W;
     const H = POST_H;
@@ -4379,6 +4731,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           return { code: c.code, img, text };
         }),
       ));
+
+    // Tarjeta del tweet (sólo en la rama de noticias 4:5/9:16, que es donde
+    // también se muestra la vista previa): todo lo async aquí, ANTES de tocar
+    // el lienzo. El avatar se carga con CORS para no «teñir» el canvas.
+    // En vídeo el corte temporal se resuelve con `contentTime` (segundos de
+    // contenido ya normalizados a `videoSpeed`, igual que en la vista previa);
+    // sin reloj —imagen o composición estática— se ve siempre.
+    const speedTweet = videoSpeed > 0 ? videoSpeed : 1;
+    const tweetClipDur =
+      (trimEnd > trimStart ? trimEnd - trimStart : videoDuration) / speedTweet;
+    const tweetHere =
+      postDesign !== "podcast" &&
+      (postFormat === "4:5" || postFormat === "9:16") &&
+      !!(tweetText || tweetHtml) &&
+      (forceTweet ||
+        (typeof contentTime === "number"
+          ? tweetShownAt(tweetShowMode, tweetShowSecs, contentTime, tweetClipDur)
+          : tweetOn));
+    const tweetAvatarImg = tweetHere
+      ? await loadTweetAvatarImg(tweetAvatar)
+      : null;
 
     // 2) Lienzo y estado de forma síncrona: solo redimensionar si hace falta
     //    (reasignar el tamaño reinicia el bitmap y rearmada la capa capturada)
@@ -4840,6 +5213,36 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.restore();
     }
 
+    // 7. Tarjeta «tweet embebido» sobre el sello: la MISMA composición que la
+    //    vista previa, con todas las medidas en px de tarjeta × `k` (ancho del
+    //    lienzo / ancho nominal de la tarjeta). La base se apoya en el sello
+    //    medido (`previewFooterH`) + «Altura» + el padding inferior del
+    //    contenedor, igual que en pantalla. Se pinta ANTES del velo y del
+    //    sello: su degradado baja hasta el borde inferior (sin costura) y el
+    //    sello se dibuja después, por encima, siempre nítido. El save/restore
+    //    aísla el estado de texto que deja la tarjeta.
+    if (tweetHere) {
+      const k = W / previewCardWidthFor(postFormat);
+      const footerPx = previewFooterH > 0 ? previewFooterH : 95 / k;
+      ctx.save();
+      drawTweetCard(ctx, {
+        W,
+        H,
+        k,
+        bottom: H - (footerPx + tweetLift + 12) * k,
+        name: tweetName,
+        handle: tweetHandle,
+        body: tweetBodyEs || tweetBody || tweetText,
+        date: tweetDate,
+        showEs: !!tweetBodyEs,
+        avatar: tweetAvatarImg,
+        letter:
+          (tweetName || tweetHandle || "B").replace(/^@/, "").charAt(0).toUpperCase() ||
+          "B",
+      });
+      ctx.restore();
+    }
+
     // Subtle bottom shadow vignette behind logo and caption
     ctx.save();
     clipMediaRect(ctx);
@@ -4931,6 +5334,32 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     });
   };
 
+  // Avatar del tweet para el lienzo exportado: SÓLO con crossOrigin
+  // «anonymous» — sin él, el canvas queda tainted y se rompen PNG y
+  // captureStream. Si el servidor no envía CORS, se resuelve null y la
+  // tarjeta pinta la letra inicial. Cacheado por URL.
+  const tweetAvatarImgCache = useRef<Map<string, HTMLImageElement | null>>(
+    new Map(),
+  );
+  const loadTweetAvatarImg = async (
+    src: string,
+  ): Promise<HTMLImageElement | null> => {
+    if (!src) return null;
+    const hit = tweetAvatarImgCache.current.get(src);
+    if (hit !== undefined) return hit;
+    const img = await new Promise<HTMLImageElement | null>((resolve) => {
+      const el = new Image();
+      if (!src.startsWith("data:") && !src.startsWith("blob:")) {
+        el.crossOrigin = "anonymous";
+      }
+      el.onload = () => resolve(el);
+      el.onerror = () => resolve(null);
+      el.src = src;
+    });
+    tweetAvatarImgCache.current.set(src, img);
+    return img;
+  };
+
   // Export High-Res PNG
   const handleExportPng = async () => {
     try {
@@ -4967,6 +5396,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           undefined,
           tvIntro ? tvIntroDur * 0.5 : 0,
           0,
+          true,
         );
       } else {
         const img = await loadImageSafely(mediaSrc);
@@ -4978,6 +5408,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           undefined,
           tvIntro ? tvIntroDur * 0.5 : 0,
           0,
+          true,
         );
       }
 
@@ -5406,6 +5837,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             : 0,
         // Copia = póster: el bloque de texto siempre visible.
         0,
+        true,
       );
 
       canvas.toBlob(async (blob) => {
@@ -7766,6 +8198,48 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaType, videoDuration]);
 
+  // Cuándo se ve la tarjeta del tweet en vídeo: se resuelve con un reloj rAF
+  // que sólo llama a `setState` al cruzar el umbral (el resto de fotogramas
+  // no re-renderiza nada). Sin tweet, sin vídeo o con el modo «todo», la
+  // tarjeta está siempre visible.
+  useEffect(() => {
+    const wanted =
+      (!tweetText && !tweetHtml) ||
+      mediaType !== "video" ||
+      postDesign === "podcast" ||
+      tweetShowMode === "always";
+    if (wanted) {
+      setTweetOn(true);
+      return;
+    }
+    let raf = 0;
+    const speed = videoSpeed > 0 ? videoSpeed : 1;
+    const clipDur =
+      trimEnd > trimStart ? (trimEnd - trimStart) / speed : videoDuration;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const v = videoRef.current;
+      if (!v) return;
+      const contentT = Math.max(0, (v.currentTime - trimStart) / speed);
+      const on = tweetShownAt(tweetShowMode, tweetShowSecs, contentT, clipDur);
+      setTweetOn((prev) => (prev === on ? prev : on));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    tweetText,
+    tweetHtml,
+    mediaType,
+    postDesign,
+    tweetShowMode,
+    tweetShowSecs,
+    trimStart,
+    trimEnd,
+    videoSpeed,
+    videoDuration,
+  ]);
+
   // Reloj de la transición «texto → vídeo» (4:5 y 9:16): mientras el vídeo
   // corre, el bloque de texto se desvanece pasado `textFadeOutDur` s y la foto
   // sube hasta ocupar la tarjeta entera; al dar la vuelta del lazo el titular
@@ -8007,6 +8481,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     filter,
     brightness,
     contrast,
+    mediaZoom,
+    mediaOffsetX,
+    mediaOffsetY,
   ]);
 
   return (
@@ -10549,6 +11026,57 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                     className="w-16 h-1 accent-white"
                   />
                 </label>
+                {/* Cuándo se ve en vídeo: todo el clip o sólo unos segundos.
+                    En el PNG la tarjeta sale siempre. */}
+                {mediaType === "video" && (
+                  <>
+                    <label
+                      className="flex items-center gap-1.5 cursor-pointer select-none"
+                      title="Cuándo se muestra la tarjeta en el vídeo (en el PNG sale siempre)"
+                    >
+                      <span className="text-[11px] text-neutral-500">Ver</span>
+                      <select
+                        value={tweetShowMode}
+                        onChange={(e) =>
+                          setTweetShowMode(
+                            e.target.value as "always" | "start" | "end",
+                          )
+                        }
+                        className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:border-white/30 transition-colors cursor-pointer"
+                      >
+                        <option value="always">Todo el video</option>
+                        <option value="start">Primeros segundos</option>
+                        <option value="end">Últimos segundos</option>
+                      </select>
+                    </label>
+                    {tweetShowMode !== "always" && (
+                      <label
+                        className="flex items-center gap-1.5 cursor-pointer select-none"
+                        title={
+                          tweetShowMode === "start"
+                            ? "Segundos desde el inicio en los que se ve la tarjeta"
+                            : "Segundos antes del final en los que se ve la tarjeta"
+                        }
+                      >
+                        <span className="text-[11px] text-neutral-500">
+                          {tweetShowMode === "start" ? "Primeros" : "Últimos"}
+                        </span>
+                        <input
+                          type="range"
+                          min={1}
+                          max={30}
+                          step={1}
+                          value={tweetShowSecs}
+                          onChange={(e) => setTweetShowSecs(Number(e.target.value))}
+                          className="w-16 h-1 accent-white"
+                        />
+                        <span className="text-[10px] font-mono text-neutral-400 tabular-nums w-6">
+                          {tweetShowSecs}s
+                        </span>
+                      </label>
+                    )}
+                  </>
+                )}
                 <label
                   className="flex items-center gap-1.5 cursor-pointer select-none"
                   title="Foto de perfil de la tarjeta (se descarga del @usuario si no subes una)"
@@ -10591,6 +11119,30 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
               <span className="text-[11px] text-neutral-500">Escala</span>
               <input type="range" min={0.6} max={1.4} step={0.05} value={mediaZoom} onChange={(e) => setMediaZoom(Number(e.target.value))} className="w-16 h-1 accent-white" />
             </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Reposición horizontal del video (izquierda/derecha)">
+              <span className="text-[11px] text-neutral-500">X</span>
+              <input type="range" min={-150} max={150} step={2} value={mediaOffsetX} onChange={(e) => setMediaOffsetX(Number(e.target.value))} className="w-16 h-1 accent-white" />
+              <span className="text-[10px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetX}</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Reposición vertical del video (arriba/abajo)">
+              <span className="text-[11px] text-neutral-500">Y</span>
+              <input type="range" min={-150} max={150} step={2} value={mediaOffsetY} onChange={(e) => setMediaOffsetY(Number(e.target.value))} className="w-16 h-1 accent-white" />
+              <span className="text-[10px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetY}</span>
+            </label>
+            {(mediaOffsetX !== 0 || mediaOffsetY !== 0 || mediaZoom !== 1) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaZoom(1);
+                  setMediaOffsetX(0);
+                  setMediaOffsetY(0);
+                }}
+                className="text-[10px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
+                title="Volver a la posición y escala originales"
+              >
+                Reset
+              </button>
+            )}
             {(postFormat === "4:5" || postFormat === "9:16") &&
               mediaType === "video" && (
               <label
@@ -10756,7 +11308,18 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
                         sólo existe con el chyron (intro): al terminar la
                         intro queda vídeo limpio, igual que en el lienzo. */}
                     <div className="absolute inset-0 overflow-hidden bg-black">
-                      {previewMediaEl}
+                      {/* «Escala»/«Reposición»: mismo transform que el lienzo
+                          (origen en el centro, offsets en px de tarjeta
+                          nominal ×4 para pasar de 480 a los 1920 del lienzo). */}
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          transform: `scale(${mediaZoom}) translate(${mediaOffsetX * (TV_W / previewCardWidthFor("16:9"))}px, ${mediaOffsetY * (TV_W / previewCardWidthFor("16:9"))}px)`,
+                          transformOrigin: "center center",
+                        }}
+                      >
+                        {previewMediaEl}
+                      </div>
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-[260px] bg-gradient-to-b from-black/95 via-black/60 to-transparent" />
                       {tvShowChyron && (
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent" />
@@ -11370,8 +11933,9 @@ ${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2
 
                 {/* Tarjeta «tweet embebido»: simula el embed de X sin API key.
                     Se apoya sobre el sello inferior (medido) y admite subida
-                    extra con «Altura», para que nunca quede «muy abajo». */}
-                {(tweetText || tweetHtml) && (
+                    extra con «Altura», para que nunca quede «muy abajo».
+                    `tweetOn` la limita a los segundos elegidos en vídeo. */}
+                {tweetOn && (tweetText || tweetHtml) && (
                   <div
                     className="absolute inset-x-0 px-3 pb-3 pt-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
                     style={{
