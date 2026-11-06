@@ -2780,6 +2780,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ].join("\n");
   };
 
+  /** Plantilla BASE del prompt para pegar en una IA externa: ejemplo de
+   *  salida (JSON + tweet), la noticia a redactar con el contexto cargado y
+   *  el sistema de redacción tal cual. La comparten los botones «Prompt» y
+   *  «Todo», así no pueden desincronizarse. */
+  const buildAiPromptBase = () => {
+    const t =
+      aiTopic.trim() || title || description || "(especifica la noticia)";
+    return `EJEMPLO DE PROMPT — BlackNews 4:5\nEsta es una plantilla. Completa la noticia que quieras redactar hoy.\n\n=== EJEMPLO DE SALIDA (para que la IA entienda el formato exacto) ===\nA. JSON PARA BLACKNEWS 4:5 GENERATOR\n{\n  "version": 1,\n  "appName": "BlackNews 4:5 Generator",\n  "content": {\n    "title": "Ejemplo de titular directo, impactante, en Sentence Case",\n    "description": "Ejemplo breve con datos concretos y contexto.",\n    "category": "GEOPOLÍTICA",\n    "countryPlacement": "line",\n    "countryFormat": "flags-names",\n    "selectedCountries": [{ "name": "Uruguay", "code": "UY", "flag": "🇺🇾" }]\n  }\n}\nB. TWEET / REDES SOCIALES\n[🇺🇾💻] » Ejemplo de titular potente: desarrollo breve con datos clave.\n■ #BlackNews\n\n=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===\nTema / titular: ${t}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.slice(0, 4).join(", ")}...\nPaís / Región: ${selectedCountries.map((c) => c.name).slice(0, 2).join(", ")}...\n\n=== SISTEMA DE REDACCIÓN (copiar tal cual) ===\n${getClientSystemPrompt()}\n\n=== INSTRUCCIÓN ===\nGenera JSON válido (version 1, appName BlackNews 4:5 Generator) con title (máx 120) y description (máx 150), sentence case, sin ..., sin \\n, usa casi todo el límite, impacto real, datos verificables. Luego el tweet con [🇽💻] » Titular: desarrollo. Finaliza con ■ #BlackNews. Prioriza precisión y coherencia editorial.`;
+  };
+
+  /** Texto que copia el botón «Todo»: SIEMPRE empieza por la base del
+   *  prompt (para que una IA redacte el post y el tweet) y añade lo ya
+   *  generado más el contexto completo de la noticia. Si aún no hay JSON o
+   *  tweet se avisa en su sección en vez de dejarlas vacías. */
+  const buildAiTodoClipboard = () => {
+    const pending =
+      "(aun no generado — pega el PROMPT de arriba en una IA para obtenerlo)";
+    const json = aiJsonText.trim()
+      ? `=== JSON ===\n${aiJsonText}`
+      : `=== JSON ===\n${pending}`;
+    const tweet = aiTweet.trim()
+      ? `=== TWEET ===\n${aiTweet}`
+      : `=== TWEET ===\n${pending}`;
+    const ctx = `=== CONTEXT ===\nNoticia: ${aiTopic.trim() || title || description || "(no definida)"}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.join(", ") || "(ninguna)"}\nPaíses: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
+    return `=== PROMPT ===\n${buildAiPromptBase()}\n\n${json}\n\n${tweet}\n\n${ctx}`;
+  };
+
   const callGroqDirect = async (
     topic: string,
   ): Promise<{ success: boolean; data?: unknown; error?: string }> => {
@@ -8825,19 +8852,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             { key: "groq-llama", label: "L3.3" }, { key: "gemini-flash", label: "Flash" }, { key: "or-gpt", label: "GPT-4o" }, { key: "or-llama", label: "L3.3" }, { key: "or-gemini", label: "Flash" },
           ].map(m => <button key={m.key} type="button" onClick={() => setAiModelChoice(m.key)} className={`text-[10px] px-1.5 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-rose-500/20 text-rose-300 font-semibold" : "text-neutral-400 hover:text-white"}`}>{m.label}</button>)}</div>
           <div className="h-6 w-px bg-white/10 mx-1" />
-          <button type="button" onClick={async () => { const t = aiTopic.trim() || title || description || "(especifica la noticia)"; const p = `EJEMPLO DE PROMPT — BlackNews 4:5\nEsta es una plantilla. Completa la noticia que quieras redactar hoy.\n\n=== EJEMPLO DE SALIDA (para que la IA entienda el formato exacto) ===\nA. JSON PARA BLACKNEWS 4:5 GENERATOR\n{\n  "version": 1,\n  "appName": "BlackNews 4:5 Generator",\n  "content": {\n    "title": "Ejemplo de titular directo, impactante, en Sentence Case",\n    "description": "Ejemplo breve con datos concretos y contexto.",\n    "category": "GEOPOLÍTICA",\n    "countryPlacement": "line",\n    "countryFormat": "flags-names",\n    "selectedCountries": [{ "name": "Uruguay", "code": "UY", "flag": "🇺🇾" }]\n  }\n}\nB. TWEET / REDES SOCIALES\n[🇺🇾💻] » Ejemplo de titular potente: desarrollo breve con datos clave.\n■ #BlackNews\n\n=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===\nTema / titular: ${t}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.slice(0,4).join(", ")}...\nPaís / Región: ${selectedCountries.map(c=>c.name).slice(0,2).join(", ")}...\n\n=== SISTEMA DE REDACCIÓN (copiar tal cual) ===\n${getClientSystemPrompt()}\n\n=== INSTRUCCIÓN ===\nGenera JSON válido (version 1, appName BlackNews 4:5 Generator) con title (máx 120) y description (máx 150), sentence case, sin ..., sin \\n, usa casi todo el límite, impacto real, datos verificables. Luego el tweet con [🇽💻] » Titular: desarrollo. Finaliza con ■ #BlackNews. Prioriza precisión y coherencia editorial.`; try { await navigator.clipboard.writeText(p); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia plantilla + contexto">Prompt</button>
+          <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(buildAiPromptBase()); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia plantilla + contexto">Prompt</button>
           <button type="button" onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(()=>{}); showToast("✓ Tweet"); } else showToast("Sin tweet aun"); }} className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium cursor-pointer">Tweet</button>
-          <button type="button" onClick={async () => { const j = aiJsonText ? `=== JSON ===
-${aiJsonText}` : `=== JSON ===
-(aun no generado)`; const t = aiTweet ? `=== TWEET ===
-${aiTweet}` : `=== TWEET ===
-(aun no generado)`; const m = `=== CONTEXT ===
-Noticia: ${aiTopic.trim() || title || description || "(no definida)"}
-Categorias: ${enabledCategories.slice(0,3).join(", ")}...`; try { await navigator.clipboard.writeText(`${j}
-
-${t}
-
-${m}`); showToast("✓ Todo copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium cursor-pointer">Todo</button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(buildAiTodoClipboard());
+                showToast("✓ Todo copiado (prompt + JSON + tweet + contexto)");
+              } catch {}
+            }}
+            title="Copia la base del prompt para la IA + el JSON + el tweet + el contexto"
+            className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium cursor-pointer"
+          >
+            Todo
+          </button>
           <button type="button" onClick={handleToggleAiSettings} title="Claves de IA" className="h-8 w-8 rounded-lg grid place-items-center text-amber-300 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><Zap className="w-3.5 h-3.5" /></button>
           {aiComposerOpen && <button type="button" onClick={() => setAiComposerOpen(false)} title="Cerrar" className="h-8 w-8 rounded-lg grid place-items-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
         </aside>
