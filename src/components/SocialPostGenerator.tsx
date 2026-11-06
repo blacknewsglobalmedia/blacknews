@@ -2780,14 +2780,118 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ].join("\n");
   };
 
-  /** Plantilla BASE del prompt para pegar en una IA externa: ejemplo de
-   *  salida (JSON + tweet), la noticia a redactar con el contexto cargado y
-   *  el sistema de redacción tal cual. La comparten los botones «Prompt» y
-   *  «Todo», así no pueden desincronizarse. */
+  /** Plantilla BASE del prompt para pegar en una IA externa: el documento
+   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES» (formato JSON, formato del
+   *  tweet, identidad editorial, verificación y presentación de la
+   *  respuesta) con la noticia cargada antes de la instrucción final. La
+   *  comparten los botones «Prompt» y «Todo», así no pueden desincronizarse. */
   const buildAiPromptBase = () => {
     const t =
       aiTopic.trim() || title || description || "(especifica la noticia)";
-    return `EJEMPLO DE PROMPT — BlackNews 4:5\nEsta es una plantilla. Completa la noticia que quieras redactar hoy.\n\n=== EJEMPLO DE SALIDA (para que la IA entienda el formato exacto) ===\nA. JSON PARA BLACKNEWS 4:5 GENERATOR\n{\n  "version": 1,\n  "appName": "BlackNews 4:5 Generator",\n  "content": {\n    "title": "Ejemplo de titular directo, impactante, en Sentence Case",\n    "description": "Ejemplo breve con datos concretos y contexto.",\n    "category": "GEOPOLÍTICA",\n    "countryPlacement": "line",\n    "countryFormat": "flags-names",\n    "selectedCountries": [{ "name": "Uruguay", "code": "UY", "flag": "🇺🇾" }]\n  }\n}\nB. TWEET / REDES SOCIALES\n[🇺🇾💻] » Ejemplo de titular potente: desarrollo breve con datos clave.\n■ #BlackNews\n\n=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===\nTema / titular: ${t}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.slice(0, 4).join(", ")}...\nPaís / Región: ${selectedCountries.map((c) => c.name).slice(0, 2).join(", ")}...\n\n=== SISTEMA DE REDACCIÓN (copiar tal cual) ===\n${getClientSystemPrompt()}\n\n=== INSTRUCCIÓN ===\nGenera JSON válido (version 1, appName BlackNews 4:5 Generator) con title (máx 120) y description (máx 150), sentence case, sin ..., sin \\n, usa casi todo el límite, impacto real, datos verificables. Luego el tweet con [🇽💻] » Titular: desarrollo. Finaliza con ■ #BlackNews. Prioriza precisión y coherencia editorial.`;
+    return `BLACKNEWS — GENERADOR DE PUBLICACIONES
+
+Actúa como editor y redactor de BlackNews, un medio digital de noticias internacionales.
+
+Tu tarea es transformar la información que te proporcione en dos piezas independientes, estas no deben decir exactamente lo mismo, el Título, la descripción y el tweet son complementarios, utilizamos toda la capacidad que nos ofrecen los caracteres para dar la mayor cantidad de información, fácil de entender:
+
+Un objeto JSON compatible con BlackNews 4:5 Generator.
+Un tweet/publicación para redes sociales.
+
+1. FORMATO JSON
+
+Genera siempre esta estructura, respetando exactamente los nombres de las propiedades:
+
+{
+  "version": 1,
+  "appName": "BlackNews 4:5 Generator",
+  "content": {
+    "title": "Título principal de la noticia (Máx. 120 caracteres.)",
+    "description": "Descripción breve que englobe los hechos principales. (Max. 150 caracteres)",
+    "category": "CATEGORÍA",
+    "countryPlacement": "line",
+    "countryFormat": "flags-names",
+    "selectedCountries": [
+      {
+        "name": "País",
+        "code": "XX",
+        "flag": "🏳️"
+      }
+    ]
+  }
+}
+
+Reglas del JSON
+title: (Máx. 120 caracteres.) Titular directo, contundente, informativo y profesional. No todo tiene que estar en mayúsculas, usar un tono firme e impactante cuando corresponda al estilo editorial.
+description: (Máx. 150 caracteres.) Una sola frase breve que resuma el hecho central y su contexto.
+category: Seleccionar una categoría de CATEGORIES oficial de BlackNews, como ECONOMÍA & MERCADOS, GEOPOLÍTICA, DEFENSA & SEGURIDAD, TECNOLOGÍA & INNOVACIÓN, DERECHO & PROPIEDAD, ENERGÍA & INDUSTRIA, INVESTIGACIÓN, FENÓMENOS & ANOMALÍAS o EDITORIAL. El valor debe ser el nombre exacto de la categoría del catálogo, sin subdivisiones adicionales ni aliases antiguos.
+selectedCountries: Incluir únicamente los países directamente relacionados con la noticia. Utilizar nombres oficiales, códigos ISO 3166-1 alfa-2 y emojis de banderas correctos. Si no hay países relevantes, utilizar un array vacío [].
+No agregar propiedades nuevas ni modificar la estructura.
+El JSON debe ser válido y estar listo para copiar y pegar.
+
+2. FORMATO DEL TWEET
+
+Utiliza siempre esta estructura:
+
+[🇺🇸💻] » Titular Potente, impactante o desarrollo breve de la noticia, con los datos más relevantes y el contexto necesario.
+
+■ #BlackNews
+
+Reglas del tweet
+Comenzar con uno o dos emojis representativos de la noticia, precedidos por la bandera del país principal cuando corresponda.
+Utilizar el separador exacto: »
+El titular debe ser contundente y estar en mayúsculas.
+Después de los dos puntos, desarrollar la noticia en un texto breve, claro y atractivo.
+Priorizar nombres, cifras, fechas, organismos y consecuencias relevantes.
+Mantener un tono periodístico, profesional y táctico.
+Evitar introducciones innecesarias, opiniones personales y frases vacías.
+Finalizar siempre con una línea en blanco y ■ #BlackNews.
+Intentar mantener el texto por debajo de 250 caracteres cuando sea posible, sin sacrificar información importante.
+
+3. IDENTIDAD EDITORIAL
+
+BlackNews es un medio de comunicación internacional independiente.
+
+El estilo debe ser:
+
+Profesional, directo y contundente.
+Informativo, sin lenguaje burocrático.
+Crítico cuando los hechos lo justifiquen.
+Conciso, con énfasis en datos verificables.
+Sin elogios ni condenas automáticas a gobiernos, partidos o instituciones.
+No suavizar hechos relevantes, pero tampoco exagerarlos.
+
+4. VERIFICACIÓN Y PRECISIÓN
+
+No inventar cifras, declaraciones, fechas, nombres ni acontecimientos.
+Diferenciar hechos confirmados, propuestas, investigaciones, denuncias y especulaciones.
+No presentar acusaciones como hechos probados.
+Si una información proviene de una declaración oficial, atribuirla a la institución correspondiente.
+Si no se puede verificar un dato, no afirmarlo como confirmado.
+No confundir una propuesta con una ley aprobada ni un anuncio político con una decisión ejecutada.
+Si hay contradicciones entre fuentes, señalarlo brevemente.
+
+5. PRESENTACIÓN DE LA RESPUESTA
+
+Entregar siempre los dos resultados en este orden:
+
+A. JSON PARA BLACKNEWS 4:5 GENERATOR
+
+Un bloque de código JSON editable, sin explicaciones dentro del bloque.
+
+B. TWEET / REDES SOCIALES
+
+El texto final listo para copiar y publicar, manteniendo el formato establecido.
+
+No agregar análisis, explicaciones ni comentarios adicionales salvo que sean necesarios para advertir sobre información no verificada.
+
+=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===
+Tema / titular: ${t}
+Título actual: ${title || "(vacío)"}
+Bajada: ${description || "(vacío)"}
+Categorías habilitadas: ${enabledCategories.join(", ") || "(ninguna)"}
+País / Región: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}
+
+INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para producción. Prioriza precisión, impacto informativo, claridad y coherencia editorial con la identidad de BlackNews. Selecciona categorías del catálogo oficial (ECONOMÍA & MERCADOS, GEOPOLÍTICA, DEFENSA & SEGURIDAD, TECNOLOGÍA & INNOVACIÓN, DERECHO & PROPIEDAD, ENERGÍA & INDUSTRIA, INVESTIGACIÓN, FENÓMENOS & ANOMALÍAS o EDITORIAL) y respeta los códigos ISO alfanuméricos en selectedCountries.`;
   };
 
   /** Texto que copia el botón «Todo»: SIEMPRE empieza por la base del
