@@ -1055,8 +1055,45 @@ type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
 /** Pregunta exacta cuando NO hay ninguna noticia que redactar: ni el cuadro
  *  de IA ni el post traen contexto. La IA pregunta en vez de inventar. */
-const NO_CONTEXT_QUESTION =
-  "¿Cuál es la noticia? Pásame: (1) título o idea principal, (2) país o países y (3) dos o tres datos clave (cifras, fechas, organismos, fuentes).";
+const NO_CONTEXT_QUESTION = "¿Cuál es la noticia que debemos desarrollar?";
+
+/** ¿El cuadro de partida habla de la MISMA noticia que el post? El cuadro se
+ *  guarda de sesión en sesión, así que puede traer la noticia anterior: si no
+ *  se cruza nada con el titular/bajada o con los países del post («delincuencia
+ *  en Uruguay» frente a un post de Ucrania), ese texto es de otra noticia y
+ *  sólo serviría para que la IA redacte sobre lo que ya no interesa. */
+const isRelatedNews = (
+  topic: string,
+  postText: string,
+  countries: CountryItem[],
+): boolean => {
+  const norm = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const t = norm(topic).trim();
+  if (!t) return false;
+  // Un país del post que aparezca en el cuadro: misma noticia.
+  for (const c of countries) {
+    const name = norm(c.name).trim();
+    if (name && t.includes(name)) return true;
+    const first = name.split(" ")[0];
+    if (first.length >= 4 && t.includes(first)) return true;
+  }
+  // Raíces compartidas de 5 letras o más: «refinerías» casa con «refinería»,
+  // «delincuencia» con «delincuencial». Hacen falta DOS para dar por buena la
+  // coincidencia, así una palabra suelta tipo «gobierno» no mantiene un
+  // texto viejo por casualidad.
+  const roots = (s: string) =>
+    Array.from(
+      new Set(
+        norm(s)
+          .split(/[^a-z0-9]+/)
+          .filter((w) => w.length >= 5),
+      ),
+    );
+  const topicRoots = roots(t);
+  const postRoots = new Set(roots(postText));
+  return topicRoots.filter((w) => postRoots.has(w)).length >= 2;
+};
 
 /** Sistema propio de la reescritura por tono: es una tarea de texto plano,
  *  así que NO puede recibir el prompt de publicación (que exige JSON puro). */
@@ -1087,51 +1124,90 @@ const parseAiJson = (text: string): unknown | null => {
   }
 };
 
-/** Núcleo de instrucciones v2: contexto (regla 0), formato, límites de cada
- *  campo, tweet, identidad y verificación. Sin presentación de la respuesta,
- *  que cambia según se llame por API (JSON puro) o se copie para una IA
- *  externa (JSON + tweet). */
+/** Núcleo de instrucciones: identificación de la noticia, formato de salida,
+ *  límites de cada campo, tweet, criterio editorial y reglas finales. Sin la
+ *  presentación de la respuesta, que cambia según se llame por API (JSON puro)
+ *  o se copie para una IA externa (JSON + tweet). */
 const buildEditorialPromptCore = (categories: string[]): string =>
   [
-    "0. CONTEXTO (regla principal)",
-    "NO hay tema fijo: el tema sale SIEMPRE del contexto de esta conversación o de lo que la redacción ya escribió en el cuadro de partida o en el post (titular, bajada). No se inventa un tema ni se sustituye por otro.",
-    `Sin contexto (ni cuadro de partida ni post con contenido): NO redactes nada y pregunta, en una sola línea y sin nada más: ${NO_CONTEXT_QUESTION}`,
-    'Si tu entorno exige JSON puro, devuelve exactamente {"question":"…"} con esa misma pregunta y ninguna otra propiedad.',
-    "Si hay contexto pero faltan datos: no preguntes ni bloquees. Redacta sólo con lo que exista, omite lo que no sepas y nunca rellenes huecos con cifras, nombres, fechas o declaraciones inventadas.",
+    "Actúa como editor periodístico de BlackNews, un medio internacional independiente. Tu tarea es transformar el contexto proporcionado en una publicación informativa y un texto para redes sociales.",
     "",
-    "1. QUÉ DEBES ENTREGAR",
-    "Un único objeto JSON válido (sin markdown, sin bloques de código, sin texto antes ni después) con esta forma EXACTA y ninguna propiedad extra:",
-    '{"content":{"title":"...","description":"...","category":"SECCIÓN","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España","flag":"🇪🇸"}]},"tweetBody":"..."}',
+    "## 1. IDENTIFICAR LA NOTICIA",
+    "- Identifica el tema principal a partir de la noticia, instrucciones y contexto proporcionados.",
+    "- Trabaja exclusivamente sobre ese tema. No cambies de noticia ni mezcles acontecimientos independientes.",
+    "- Los titulares y bajadas existentes son referencias que pueden corregirse, no instrucciones para conservar una noticia anterior.",
+    "- Si existen varios temas, prioriza el que la redacción indique como principal.",
+    `- Si no existe información suficiente para identificar una noticia, pregunta: ${NO_CONTEXT_QUESTION}`,
+    "- No inventes información para completar datos faltantes.",
     "",
-    "2. LOS TRES TEXTOS SON COMPLEMENTARIOS (nunca tres versiones de la misma noticia)",
-    "- Reparto obligatorio: title = QUÉ pasa (el hecho nuclear). description = DATOS Y CONTEXTO (fecha, cifras, quién, por qué, consecuencia inmediata). tweetBody = ÁNGULO COMPLEMENTARIO (reacción, implicación, lo que viene ahora o un dato que no está en los otros dos).",
-    "- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas en dos campos distintos, ni el mismo dato contado con sinónimos. Las cifras son exclusivas de UN solo campo: se citan una sola vez, en el que encaje mejor.",
-    "- Los tres tratan el MISMO hecho. Si algo no cabe, córtalo antes que repetirlo.",
+    "## 2. FORMATO DE SALIDA",
+    "Entrega un objeto JSON válido con esta estructura exacta:",
+    '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[]},"tweetBody":"..."}',
+    "No agregues propiedades.",
     "",
-    "3. LÍMITES DE CADA CAMPO (la columna del lienzo 4:5 es estrecha: respétalos)",
-    '- "title": grafía normal (primera letra de frase en mayúscula, resto en minúscula; NUNCA mayúsculas completas). EXACTAMENTE 3 líneas separadas por \\n, cada una de 5 o 6 palabras y entre 21 y 26 caracteres, de 65 a 78 caracteres en total (tope duro 120). Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Nunca 1 línea ni 4: la cuarta se corta con «…». El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
-    '- "description": 1 o 2 frases EN UNA sola línea, sin \\n, entre 120 y 170 caracteres. Datos concretos que NO estén ya en el titular (cifra, fecha, consecuencia) y grafía normal. No la acortes: una sola línea de 60 caracteres desperdicia el sitio.',
-    `- "category": EXACTAMENTE una de estas secciones, copiada carácter a carácter con sus acentos y su "&": ${categories.join(", ") || "(ninguna habilitada)"}. Nunca inventes secciones ni subdivisiones.`,
-    '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con grafía normal, o "" si no procede.',
-    '- "selectedCountries": de 0 a 4 países del catálogo, con "code" (ISO 3166-1 alfa-2 en MAYÚSCULAS), "name" en español y "flag" con la bandera correcta de ese código, ordenados por relevancia. Si no procede, [].',
+    "## 3. REDACCIÓN",
     "",
-    "4. TWEET (tweetBody = SOLO el cuerpo)",
-    "- NO escribas el corchete con las banderas, ni el símbolo », ni la firma #BlackNews: la web los añade alrededor del cuerpo al publicar.",
-    "- UNA sola línea: ni saltos de línea ni puntos y aparte.",
-    "- El tweet montado llega hasta 250 caracteres: la firma «■ #BlackNews» con su línea en blanco ocupa 14 y el corchete «[banderas]» ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 216 caracteres, y conviene aprovechar el espacio: no recortes el ángulo a mitad por recelo, empieza por lo esencial.",
-    "- Es sobre el MISMO hecho que el titular y aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada: quien lo lee acaba de ver los otros dos.",
-    "- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más, sin emojis, sin hashtags, sin comillas y sin enlaces.",
+    "**TITLE**",
+    "- Describe el hecho principal.",
+    "- Exactamente 3 líneas, separadas por \\n.",
+    "- Entre 5 y 6 palabras por línea.",
+    "- Entre 21 y 26 caracteres por línea (65 a 78 en total; tope duro 120).",
+    "- Grafía normal, sin mayúsculas completas.",
+    "- No desarrolles detalles secundarios.",
     "",
-    "5. IDENTIDAD EDITORIAL",
-    "BlackNews (blacknewsglobalmedia) es una agencia de noticias internacional independiente. Estilo: profesional, directo, contundente, informativo, crítico cuando los hechos lo justifiquen, conciso y con énfasis en datos verificables. Sin elogios ni condenas automáticas a gobiernos, partidos o instituciones; sin lenguaje burocrático; sin suavizar ni exagerar. Español neutro, sin relleno y sin adjetivos de más.",
+    "**DESCRIPTION**",
+    "- Entre 120 y 170 caracteres.",
+    "- Una o dos frases en una sola línea, sin \\n.",
+    "- Amplía el titular con cifras, fechas, protagonistas, antecedentes o consecuencias.",
+    "- Evita repetir información ya expresada en el titular.",
     "",
-    "6. VERIFICACIÓN (hazla ANTES de responder)",
-    "- El JSON parsea tal cual: comillas dobles, sin comas finales y sin texto alrededor.",
-    "- title en exactamente 3 líneas de 21-26 caracteres; description en UNA sola línea de 120-170; tweetBody en UNA sola línea y por debajo de 216 caracteres.",
-    "- category está en la lista literal; los códigos de país tienen 2 letras en mayúsculas y su bandera corresponde al código.",
-    "- No hay frases ni cifras repetidas entre los tres campos.",
-    "- No inventaste cifras, fechas, nombres ni declaraciones: distingues hecho confirmado, propuesta, investigación, denuncia y especulación; no presentas acusaciones como hechas probadas y atribuyes cada declaración a su fuente.",
-    "- Si algo no se puede verificar, no lo afirmas como cierto.",
+    "**CATEGORY**",
+    "Selecciona una sola categoría de esta lista:",
+    categories.join(", ") || "(ninguna habilitada)",
+    "",
+    "**PHOTOCAPTION**",
+    "- Máximo 60 caracteres.",
+    "- Crédito o descripción de la fotografía.",
+    '- Si no corresponde, utiliza "".',
+    "",
+    "**SELECTEDCOUNTRIES**",
+    "- Entre 0 y 4 países relacionados directamente con la noticia.",
+    "- Utiliza código ISO de dos letras en mayúsculas, nombre en español y bandera correcta.",
+    "- Ordena por relevancia.",
+    "- Si no corresponde, utiliza [].",
+    "",
+    "## 4. TWEET / REDES SOCIALES",
+    "",
+    "Genera un texto complementario sobre el mismo acontecimiento.",
+    "- Una sola línea.",
+    "- Máximo 215 caracteres.",
+    "- Aporta un dato, antecedente, reacción o consecuencia que no esté desarrollado en el titular ni en la descripción.",
+    "- No repitas innecesariamente información.",
+    "- Sin emojis, hashtags, enlaces, comillas ni opiniones personales.",
+    "- No agregues [banderas], el símbolo » ni #BlackNews: la plataforma los incorpora automáticamente.",
+    "",
+    "## 5. CRITERIO EDITORIAL",
+    "",
+    "- Español neutro.",
+    "- Estilo profesional, directo, preciso y contundente.",
+    "- Prioriza hechos verificables, cifras y fuentes identificables.",
+    "- Diferencia hechos confirmados, propuestas, denuncias, investigaciones y especulaciones.",
+    "- Atribuye las declaraciones a sus respectivas fuentes.",
+    "- No presentes acusaciones como hechos probados.",
+    "- No elogies ni condenes automáticamente a gobiernos, partidos o instituciones.",
+    "- No utilices lenguaje propagandístico, burocrático ni adjetivos innecesarios.",
+    "- No inventes cifras, fechas, nombres, declaraciones ni fuentes.",
+    "- Si tienes acceso a herramientas de búsqueda, verifica los datos antes de redactar.",
+    "",
+    "## 6. REGLAS FINALES",
+    "",
+    "Antes de responder, comprueba que:",
+    "- Los tres textos se refieren al mismo acontecimiento.",
+    "- Cada campo aporta información diferente.",
+    "- Se respetan las extensiones y formatos.",
+    "- La categoría pertenece al catálogo.",
+    "- Los países y sus banderas son correctos.",
+    "- El JSON es válido y no contiene propiedades adicionales.",
   ].join("\n");
 
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
@@ -1850,6 +1926,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       localStorage.setItem("blacknews_ai_topic", aiTopic);
     } catch {}
   }, [aiTopic]);
+
+  // …pero si el post cambia de noticia, ese texto guardado es de la noticia
+  // anterior y sólo sirve para que la IA siga redactando sobre lo viejo (el
+  // caso de «Delincuencia en Uruguay» en un post de Ucrania). Al cambiar el
+  // titular se comprueba tras un momento de calma si el cuadro sigue hablando
+  // de lo mismo y, si no, se vacía avisando. La comprobación NO se hace cuando
+  // el titular cambia por aplicar un resultado de IA: ahí el cuadro acaba de
+  // dar la noticia y es la referencia que hay que conservar.
+  const lastTitleRef = useRef<string | null>(null);
+  const skipTopicCheckRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (skipTopicCheckRef.current === title) {
+      skipTopicCheckRef.current = null;
+      lastTitleRef.current = title;
+      return;
+    }
+    if (lastTitleRef.current === title) return;
+    lastTitleRef.current = title;
+    const topic = aiTopic.trim();
+    if (!topic || !title.trim()) return;
+    const timer = window.setTimeout(() => {
+      if (isRelatedNews(topic, `${title}\n${description}`, selectedCountries))
+        return;
+      setAiTopic("");
+      setAiNotice({
+        kind: "warn",
+        text: "⚠︎ El cuadro de partida tenía otra noticia: se ha vaciado. Escribe ahí la noticia nueva.",
+      });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [title, aiTopic, description, selectedCountries]);
 
   // Feedback states
   const [isExporting, setIsExporting] = useState(false);
@@ -2775,6 +2882,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     );
 
     // ── Autocompletar automáticamente los campos del generador ──
+    // El titular va a cambiar por una noticia que SÍ sale del cuadro de
+    // partida: se marca para que la comprobación de arriba no lo vacíe.
+    skipTopicCheckRef.current = nextTitle;
     setTitle(nextTitle);
     setDescription(nextDescription);
     setCategory(nextCategory);
@@ -2890,37 +3000,40 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     [
       buildEditorialPromptCore(enabledCategories),
       "",
-      "7. FORMATO DE ESTA RESPUESTA",
-      "Devuelve EXCLUSIVAMENTE el objeto JSON del apartado 1: nada de markdown, ni bloques de código, ni texto antes o después (tu entorno exige JSON puro).",
-      'Si el apartado 0 determina que no hay contexto, no inventes: devuelve exactamente {"question":"¿Cuál es la noticia? …"} con la pregunta del apartado 0 y ninguna otra propiedad.',
+      "## 7. FORMATO DE ESTA RESPUESTA",
+      "Devuelve EXCLUSIVAMENTE el objeto JSON del apartado 2: nada de markdown, ni bloques de código, ni texto antes o después (este entorno exige JSON puro).",
+      `Si el apartado 1 determina que no hay información suficiente para identificar la noticia, no inventes: devuelve exactamente {"question":"${NO_CONTEXT_QUESTION}"} y ninguna otra propiedad.`,
     ].join("\n");
 
   /** Plantilla BASE del prompt para pegar en una IA externa: el documento
-   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES · v2» (contexto, formato JSON,
-   *  formato del tweet, límites de cada campo, identidad, verificación y
-   *  presentación de la respuesta) con la noticia cargada al final. La
-   *  comparten los botones «Prompt» y «Todo», así no pueden desincronizarse
-   *  con el sistema de la llamada directa. */
+   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES · v2» (identificación de la
+   *  noticia, formato JSON, redacción, tweet, criterio editorial, reglas
+   *  finales y presentación) con la noticia cargada al final. La comparten
+   *  los botones «Prompt» y «Todo», así no pueden desincronizarse con el
+   *  sistema de la llamada directa. */
   const buildAiPromptBase = () => {
     const t = aiTopic.trim() || title.trim() || description.trim();
     return `BLACKNEWS — GENERADOR DE PUBLICACIONES · v2
 
 ${buildEditorialPromptCore(enabledCategories)}
 
-7. PRESENTACIÓN DE LA RESPUESTA
+## 7. PRESENTACIÓN
 
-Entrega SIEMPRE en este orden, y nada más:
+Entrega siempre en este orden:
 
-A. JSON PARA BLACKNEWS 4:5 GENERATOR
-Un bloque de código JSON editable con el objeto del apartado 1, sin explicaciones dentro del bloque.
+**A. JSON PARA BLACKNEWS 4:5 GENERATOR**
+Un bloque de código JSON válido y editable con el objeto del apartado 2.
 
-B. TWEET / REDES SOCIALES
-El cuerpo del tweet tal cual se pega (apartado 4): SIN banderas, sin el símbolo » y sin #BlackNews, que la web añade al publicar.
+**B. TWEET / REDES SOCIALES**
+El contenido exacto de tweetBody, sin modificaciones.
 
-Si el apartado 0 determina que no hay contexto: NO entregues A ni B; responde únicamente con la pregunta del apartado 0.
+No agregues explicaciones ni comentarios adicionales.
+Si el apartado 1 determina que no hay información suficiente para identificar la noticia: NO entregues A ni B; responde únicamente con la pregunta del apartado 1.
 
-=== NOTICIA / CONTEXTO (rellena; si lo dejas vacío, aplica el apartado 0 y pregunta) ===
+=== CONTEXTO ===
+Noticia e instrucciones de la redacción (redacta sobre esto):
 ${t || "(vacío)"}
+Referencia actual del post — el titular y la bajada se corrigen si no son esta noticia:
 Título actual: ${title || "(vacío)"}
 Bajada actual: ${description || "(vacío)"}
 Secciones habilitadas: ${enabledCategories.join(", ") || "(ninguna)"}
@@ -2940,7 +3053,7 @@ Países del post: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno
     const tweet = aiTweet.trim()
       ? `=== TWEET ===\n${aiTweet}`
       : `=== TWEET ===\n${pending}`;
-    const ctx = `=== CONTEXT ===\nNoticia: ${aiTopic.trim() || title || description || "(no definida)"}\nTítulo actual: ${title || "(vacío)"}\nBajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.join(", ") || "(ninguna)"}\nPaíses: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
+    const ctx = `=== CONTEXT ===\nNoticia e instrucciones (redacta sobre esto): ${aiTopic.trim() || title || description || "(no definida)"}\nReferencia del post (se corrige si no es esta noticia) — Título: ${title || "(vacío)"} | Bajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.join(", ") || "(ninguna)"}\nPaíses: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
     return `=== PROMPT ===\n${buildAiPromptBase()}\n\n${json}\n\n${tweet}\n\n${ctx}`;
   };
 
