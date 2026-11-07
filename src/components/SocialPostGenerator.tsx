@@ -1047,6 +1047,93 @@ const COLLAPSE_SECTION_KEYS = [
 
 type MediaFilter = "bw-high" | "bw-smooth" | "noir" | "color" | "muted-color";
 
+// ── Prompt v2 del generador ────────────────────────────────────────────────
+// El mismo texto alimenta la llamada directa (getClientSystemPrompt) y la
+// plantilla que se copia para usar en una IA externa (buildAiPromptBase), y
+// sus límites coinciden con buildSystemPrompt() de worker/ai.ts: los dos
+// caminos (Worker y navegador) redactan con las mismas reglas.
+
+/** Pregunta exacta cuando NO hay ninguna noticia que redactar: ni el cuadro
+ *  de IA ni el post traen contexto. La IA pregunta en vez de inventar. */
+const NO_CONTEXT_QUESTION =
+  "¿Cuál es la noticia? Pásame: (1) título o idea principal, (2) país o países y (3) dos o tres datos clave (cifras, fechas, organismos, fuentes).";
+
+/** Sistema propio de la reescritura por tono: es una tarea de texto plano,
+ *  así que NO puede recibir el prompt de publicación (que exige JSON puro). */
+const REWRITE_SYSTEM_PROMPT =
+  "Eres el editor de BLACKNEWS. Reescribes un texto de publicación conservando el contenido y todos los datos: español neutro, grafía normal (Sentence Case), sin puntos suspensivos, sin saltos de línea, sin emojis, sin hashtags y sin explicaciones. Devuelve SOLO el texto reescrito, listo para pegar en el campo, y nada más.";
+
+/** Quita lo que el modelo insista en meter en el cuerpo del tweet (corchete
+ *  de banderas, «» y firma): el cliente vuelve a montarlo con los países
+ *  reales del post. Espejo de `cleanTweetBody` de worker/ai.ts para que el
+ *  tweet salga idéntico venga del Worker o del navegador. */
+const cleanAiTweetBody = (value: string): string => {
+  let body = value.replace(/\r\n?/g, "\n").trim();
+  body = body.replace(/^\[[^\]\n]{0,40}\]\s*(?:[»\-–—:]\s*)?/u, "");
+  body = body.replace(/(?:^|\s)(?:■\s*)?#BlackNews\b/giu, "");
+  return body.replace(/\s+/g, " ").trim();
+};
+
+/** JSON tolerante del navegador (admite markdown y texto alrededor, como el
+ *  Worker). Devuelve null si no hay nada parseable. */
+const parseAiJson = (text: string): unknown | null => {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+};
+
+/** Núcleo de instrucciones v2: contexto (regla 0), formato, límites de cada
+ *  campo, tweet, identidad y verificación. Sin presentación de la respuesta,
+ *  que cambia según se llame por API (JSON puro) o se copie para una IA
+ *  externa (JSON + tweet). */
+const buildEditorialPromptCore = (categories: string[]): string =>
+  [
+    "0. CONTEXTO (regla principal)",
+    "NO hay tema fijo: el tema sale SIEMPRE del contexto de esta conversación o de lo que la redacción ya escribió en el cuadro de partida o en el post (titular, bajada). No se inventa un tema ni se sustituye por otro.",
+    `Sin contexto (ni cuadro de partida ni post con contenido): NO redactes nada y pregunta, en una sola línea y sin nada más: ${NO_CONTEXT_QUESTION}`,
+    'Si tu entorno exige JSON puro, devuelve exactamente {"question":"…"} con esa misma pregunta y ninguna otra propiedad.',
+    "Si hay contexto pero faltan datos: no preguntes ni bloquees. Redacta sólo con lo que exista, omite lo que no sepas y nunca rellenes huecos con cifras, nombres, fechas o declaraciones inventadas.",
+    "",
+    "1. QUÉ DEBES ENTREGAR",
+    "Un único objeto JSON válido (sin markdown, sin bloques de código, sin texto antes ni después) con esta forma EXACTA y ninguna propiedad extra:",
+    '{"content":{"title":"...","description":"...","category":"SECCIÓN","photoCaption":"...","selectedCountries":[{"code":"ES","name":"España","flag":"🇪🇸"}]},"tweetBody":"..."}',
+    "",
+    "2. LOS TRES TEXTOS SON COMPLEMENTARIOS (nunca tres versiones de la misma noticia)",
+    "- Reparto obligatorio: title = QUÉ pasa (el hecho nuclear). description = DATOS Y CONTEXTO (fecha, cifras, quién, por qué, consecuencia inmediata). tweetBody = ÁNGULO COMPLEMENTARIO (reacción, implicación, lo que viene ahora o un dato que no está en los otros dos).",
+    "- PROHIBIDO repetir: ninguna secuencia de 5 palabras seguidas en dos campos distintos, ni el mismo dato contado con sinónimos. Las cifras son exclusivas de UN solo campo: se citan una sola vez, en el que encaje mejor.",
+    "- Los tres tratan el MISMO hecho. Si algo no cabe, córtalo antes que repetirlo.",
+    "",
+    "3. LÍMITES DE CADA CAMPO (la columna del lienzo 4:5 es estrecha: respétalos)",
+    '- "title": grafía normal (primera letra de frase en mayúscula, resto en minúscula; NUNCA mayúsculas completas). EXACTAMENTE 3 líneas separadas por \\n, cada una de 5 o 6 palabras y entre 21 y 26 caracteres, de 65 a 78 caracteres en total (tope duro 120). Ejemplo: "Irán cierra el estrecho\\nde Ormuz tras los ataques\\nde Israel y EE.UU.". Nunca 1 línea ni 4: la cuarta se corta con «…». El titular dice el hecho; no lo desarrolles, eso va en la bajada.',
+    '- "description": 1 o 2 frases EN UNA sola línea, sin \\n, entre 120 y 170 caracteres. Datos concretos que NO estén ya en el titular (cifra, fecha, consecuencia) y grafía normal. No la acortes: una sola línea de 60 caracteres desperdicia el sitio.',
+    `- "category": EXACTAMENTE una de estas secciones, copiada carácter a carácter con sus acentos y su "&": ${categories.join(", ") || "(ninguna habilitada)"}. Nunca inventes secciones ni subdivisiones.`,
+    '- "photoCaption": pie o crédito de foto de máximo 60 caracteres con grafía normal, o "" si no procede.',
+    '- "selectedCountries": de 0 a 4 países del catálogo, con "code" (ISO 3166-1 alfa-2 en MAYÚSCULAS), "name" en español y "flag" con la bandera correcta de ese código, ordenados por relevancia. Si no procede, [].',
+    "",
+    "4. TWEET (tweetBody = SOLO el cuerpo)",
+    "- NO escribas el corchete con las banderas, ni el símbolo », ni la firma #BlackNews: la web los añade alrededor del cuerpo al publicar.",
+    "- UNA sola línea: ni saltos de línea ni puntos y aparte.",
+    "- El tweet montado llega hasta 250 caracteres: la firma «■ #BlackNews» con su línea en blanco ocupa 14 y el corchete «[banderas]» ocupa 5 más 4 por bandera (habrá como mucho 4). Así que el cuerpo debe quedar POR DEBAJO de 216 caracteres, y conviene aprovechar el espacio: no recortes el ángulo a mitad por recelo, empieza por lo esencial.",
+    "- Es sobre el MISMO hecho que el titular y aporta un dato o un ángulo que NO estén ni en el titular ni en la bajada: quien lo lee acaba de ver los otros dos.",
+    "- Hechos, cifras, nombres propios y, si los hay, fechas. Sin relleno, sin opinión, sin adjetivos de más, sin emojis, sin hashtags, sin comillas y sin enlaces.",
+    "",
+    "5. IDENTIDAD EDITORIAL",
+    "BlackNews (blacknewsglobalmedia) es una agencia de noticias internacional independiente. Estilo: profesional, directo, contundente, informativo, crítico cuando los hechos lo justifiquen, conciso y con énfasis en datos verificables. Sin elogios ni condenas automáticas a gobiernos, partidos o instituciones; sin lenguaje burocrático; sin suavizar ni exagerar. Español neutro, sin relleno y sin adjetivos de más.",
+    "",
+    "6. VERIFICACIÓN (hazla ANTES de responder)",
+    "- El JSON parsea tal cual: comillas dobles, sin comas finales y sin texto alrededor.",
+    "- title en exactamente 3 líneas de 21-26 caracteres; description en UNA sola línea de 120-170; tweetBody en UNA sola línea y por debajo de 216 caracteres.",
+    "- category está en la lista literal; los códigos de país tienen 2 letras en mayúsculas y su bandera corresponde al código.",
+    "- No hay frases ni cifras repetidas entre los tres campos.",
+    "- No inventaste cifras, fechas, nombres ni declaraciones: distingues hecho confirmado, propuesta, investigación, denuncia y especulación; no presentas acusaciones como hechas probadas y atribuyes cada declaración a su fuente.",
+    "- Si algo no se puede verificar, no lo afirmas como cierto.",
+  ].join("\n");
+
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   reports = [],
   categories: propCategories = [],
@@ -2251,8 +2338,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         if (Array.isArray(data.content.selectedCountries)) {
           // Sólo entran países con forma {code, flag, name}: una cadena o un
           // objeto incompleto rompía el render en `c.name.toUpperCase()`.
-          const validCountries = data.content.selectedCountries.filter(
-            (c: unknown): c is CountryItem => {
+          // Además se normalizan contra el catálogo (por código o por nombre):
+          // así la bandera y el nombre oficiales mandan siempre y no puede
+          // colarse una bandera cruzada (🇲🇽 con «Brasil») desde un JSON.
+          const validCountries = data.content.selectedCountries
+            .filter((c: unknown): c is CountryItem => {
               if (!c || typeof c !== "object") return false;
               const cand = c as Partial<CountryItem>;
               return (
@@ -2261,8 +2351,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 typeof cand.code === "string" &&
                 typeof cand.flag === "string"
               );
-            },
-          );
+            })
+            .map((c) => {
+              const code = c.code.trim().toUpperCase();
+              const found =
+                countryCatalog.find((k) => k.code.toUpperCase() === code) ||
+                countryCatalog.find(
+                  (k) => countryKey(k.name) === countryKey(c.name),
+                );
+              return found || { ...c, code };
+            });
           setSelectedCountries(validCountries);
         }
       }
@@ -2519,7 +2617,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     countries: CountryItem[],
   ): { tweet: string; trimmed: boolean } => {
     const flags = aiTweetFlags(countries);
-    const oneLine = body.replace(/\s+/g, " ").trim();
+    // El modelo puede insistir en escribir el corchete, el «» o la firma:
+    // se limpian ANTES de medir, así el tweet montado nunca sale duplicado.
+    const oneLine = cleanAiTweetBody(body);
     const prefix = flags ? `[${flags}] » ` : "";
     const budget = Math.max(
       40,
@@ -2577,7 +2677,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return out;
   };
 
-  const applyAiResult = (payload: unknown) => {
+  /** Devuelve true si se aplicó un post; false si la IA no trajo contenido
+   *  (pregunta por la noticia, respuesta vacía o inesperada), caso en el que
+   *  sólo se avisa y NO se toca nada del post. */
+  const applyAiResult = (payload: unknown): boolean => {
     const root =
       payload && typeof payload === "object"
         ? (payload as Record<string, unknown>)
@@ -2586,6 +2689,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       root.content && typeof root.content === "object"
         ? (root.content as Record<string, unknown>)
         : {};
+
+    // Sin contexto la IA no inventa: devuelve {"question":"…"} (o nada).
+    // Se muestra tal cual para que el usuario complete la noticia.
+    const question =
+      typeof root.question === "string" && root.question.trim()
+        ? root.question.trim()
+        : typeof raw.question === "string" && raw.question.trim()
+          ? raw.question.trim()
+          : "";
+    const hasTitle = typeof raw.title === "string" && raw.title.trim() !== "";
+    if (question || !hasTitle) {
+      setAiNotice({
+        kind: "warn",
+        text: `⚠︎ ${question || NO_CONTEXT_QUESTION}`,
+      });
+      return false;
+    }
+
     const pick = (key: string, max: number, fallback: string) =>
       typeof raw[key] === "string"
         ? (raw[key] as string).trim().slice(0, max) || fallback
@@ -2748,150 +2869,62 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           },
     );
     showToast("✓ ¡Post y tweet redactados con éxito!");
+    return true;
   };
 
   // ── Prompt compartido para llamadas directas desde el navegador ────────
   /** Aplica el resultado de la IA y cierra el compositor flotante: cuando ya
    *  hay post redactado, lo que interesa es mirarlo, no la caja de texto. */
   const applyAiResultAndClose = (payload: unknown) => {
-    applyAiResult(payload);
-    setAiComposerOpen(false);
+    // Sólo se cierra si la IA redactó de verdad: si preguntó por la noticia
+    // el compositor se queda abierto para responderle.
+    if (applyAiResult(payload)) setAiComposerOpen(false);
   };
 
-  const getClientSystemPrompt = () => {
-    const cats = enabledCategories.join(", ");
-    return [
-      "Actúa como redactor jefe de BLACKNEWS (blacknewsglobalmedia), agencia internacional independiente.",
-      "Identidad editorial: profesional, directo, contundente, informativo, crítico cuando los hechos lo justifican. Sin elogios ni condenas automáticas a gobiernos, instituciones o partidos. Conciso, datos verificables, sin relleno.",
-      "Tarea: transformas el tema que te pasen en un post completo (JSON) y un tweet, siguiendo EXACTAMENTE el formato y reglas de BlackNews 4:5 Generator.",
-      "No inventes cifras, declaraciones, fechas ni nombres. Diferencia hechos confirmados, propuestas, investigaciones y especulaciones. No presentes acusaciones como hechos probados. Si una declaración es oficial, atríbela a la institución correspondiente.",
-      "EL JSON DEBE SER VÁLIDO. Nada de markdown, ni bloques de código, ni texto antes o después del JSON. Respuesta EXCLUSIVAMENTE el objeto JSON.",
+  /** Sistema de la llamada directa (Groq / Gemini / OpenRouter): el mismo
+   *  núcleo editorial que la plantilla copiable, pero exigiendo JSON puro,
+   *  porque estos proveedores se llaman con `response_format: json_object`
+   *  (o `response_mime_type: application/json`). Si no hay contexto, la
+   *  pregunta viaja DENTRO del objeto para que la UI pueda mostrarla. */
+  const getClientSystemPrompt = () =>
+    [
+      buildEditorialPromptCore(enabledCategories),
       "",
-      "FORMATO JSON EXACTO:",
-      '{"content":{"title":"...","description":"...","category":"CATEGORÍA REAL","photoCaption":"","selectedCountries":[{"code":"ES","name":"España"}]},"tweetBody":"..."}',
-      "",
-      "REGLAS DEL TÍTULO (title): Máx. 120 caracteres. Sentence Case (Sc) — primera letra de cada oración en mayúscula, resto en minúsculas. PROFUNDO, DIRECTO, IMPACTANTE, informativo: cultiva un titular que DATA, no que habla. La IA UIÁS USAR AL MÁXIMO LA CANTIDAD DE CARACTERES DISPONIBLE (cerca del 80%+), nunca cadema '...' ni paus accar. NUNCA uses saltos de línea (\\n) ni más de 3 líneas separadas; si el texto original lleva saltos, quítalos y hazlo una sola línea continua. Datos nucleares: cifras, fechas, organismos, nombres de personas/grupos. Cada otro dato se dice en description o tweet.",
-      "REGLAS DE LA DESCRIPCIÓN (description): Máx. 150 caracteres. 1-2 frases EN UNA sola línea, sin saltos de línea. Sentence Case (Sc). Usa datos relevantes: cifras, fechas, organismos, consecuencias. Completa información que NO esté en el titular ni en el tweet, sin exagerar. Usa casi todo el límite (150 chars). Sin puntos suspensivos (...).",
-      `CATEGORÍAS VÁLIDAS (elige EXACTAMENTE una, con el nombre exacto del catálogo): ${cats}`,
-      "REGLAS DEL TWEET (tweetBody): Una sola línea. Comienza con [🇽💻] » luego titular potente (mayúsculas cuando corresponda por impacto editorial, no por obligación), luego desarrollo breve con datos, fechas, cifras, nombres, organismos y consecuencias. Máx. ~215 de cuerpo. Finaliza con línea en blanco y ■ #BlackNews. Sin hashtags, sin enlaces, sin emojis (excepto la bandera inicial).",
-      "LOS TRES CAMPOS SON COMPLEMENTARIOS: ninguna frase ni cifra se repite entre title, description y tweetBody; cada dato se dice una sola vez en un solo campo.",
-      "selectedCountries: 0 a 4 países del catálogo oficial, con code (ISO 3166-1 alfa-2, 2 letras en MAYÚSCULAS) y name en español. Si no hay países relevantes, array vacío [].",
-      "Prioriza precisión, impacto informativo, claridad y coherencia visual y editorial con la identidad de BlackNews. Usa las categorías oficiales, no inventes subcategorías.",
+      "7. FORMATO DE ESTA RESPUESTA",
+      "Devuelve EXCLUSIVAMENTE el objeto JSON del apartado 1: nada de markdown, ni bloques de código, ni texto antes o después (tu entorno exige JSON puro).",
+      'Si el apartado 0 determina que no hay contexto, no inventes: devuelve exactamente {"question":"¿Cuál es la noticia? …"} con la pregunta del apartado 0 y ninguna otra propiedad.',
     ].join("\n");
-  };
 
   /** Plantilla BASE del prompt para pegar en una IA externa: el documento
-   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES» (formato JSON, formato del
-   *  tweet, identidad editorial, verificación y presentación de la
-   *  respuesta) con la noticia cargada antes de la instrucción final. La
-   *  comparten los botones «Prompt» y «Todo», así no pueden desincronizarse. */
+   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES · v2» (contexto, formato JSON,
+   *  formato del tweet, límites de cada campo, identidad, verificación y
+   *  presentación de la respuesta) con la noticia cargada al final. La
+   *  comparten los botones «Prompt» y «Todo», así no pueden desincronizarse
+   *  con el sistema de la llamada directa. */
   const buildAiPromptBase = () => {
-    const t =
-      aiTopic.trim() || title || description || "(especifica la noticia)";
-    return `BLACKNEWS — GENERADOR DE PUBLICACIONES
+    const t = aiTopic.trim() || title.trim() || description.trim();
+    return `BLACKNEWS — GENERADOR DE PUBLICACIONES · v2
 
-Actúa como editor y redactor de BlackNews, un medio digital de noticias internacionales.
+${buildEditorialPromptCore(enabledCategories)}
 
-Tu tarea es transformar la información que te proporcione en dos piezas independientes, estas no deben decir exactamente lo mismo, el Título, la descripción y el tweet son complementarios, utilizamos toda la capacidad que nos ofrecen los caracteres para dar la mayor cantidad de información, fácil de entender:
+7. PRESENTACIÓN DE LA RESPUESTA
 
-Un objeto JSON compatible con BlackNews 4:5 Generator.
-Un tweet/publicación para redes sociales.
-
-1. FORMATO JSON
-
-Genera siempre esta estructura, respetando exactamente los nombres de las propiedades:
-
-{
-  "version": 1,
-  "appName": "BlackNews 4:5 Generator",
-  "content": {
-    "title": "Título principal de la noticia (Máx. 120 caracteres.)",
-    "description": "Descripción breve que englobe los hechos principales. (Max. 150 caracteres)",
-    "category": "CATEGORÍA",
-    "countryPlacement": "line",
-    "countryFormat": "flags-names",
-    "selectedCountries": [
-      {
-        "name": "País",
-        "code": "XX",
-        "flag": "🏳️"
-      }
-    ]
-  }
-}
-
-Reglas del JSON
-title: (Máx. 120 caracteres.) Titular directo, contundente, informativo y profesional. No todo tiene que estar en mayúsculas, usar un tono firme e impactante cuando corresponda al estilo editorial.
-description: (Máx. 150 caracteres.) Una sola frase breve que resuma el hecho central y su contexto.
-category: Seleccionar una categoría de CATEGORIES oficial de BlackNews, como ECONOMÍA & MERCADOS, GEOPOLÍTICA, DEFENSA & SEGURIDAD, TECNOLOGÍA & INNOVACIÓN, DERECHO & PROPIEDAD, ENERGÍA & INDUSTRIA, INVESTIGACIÓN, FENÓMENOS & ANOMALÍAS o EDITORIAL. El valor debe ser el nombre exacto de la categoría del catálogo, sin subdivisiones adicionales ni aliases antiguos.
-selectedCountries: Incluir únicamente los países directamente relacionados con la noticia. Utilizar nombres oficiales, códigos ISO 3166-1 alfa-2 y emojis de banderas correctos. Si no hay países relevantes, utilizar un array vacío [].
-No agregar propiedades nuevas ni modificar la estructura.
-El JSON debe ser válido y estar listo para copiar y pegar.
-
-2. FORMATO DEL TWEET
-
-Utiliza siempre esta estructura:
-
-[🇺🇸💻] » Titular Potente, impactante o desarrollo breve de la noticia, con los datos más relevantes y el contexto necesario.
-
-■ #BlackNews
-
-Reglas del tweet
-Comenzar con uno o dos emojis representativos de la noticia, precedidos por la bandera del país principal cuando corresponda.
-Utilizar el separador exacto: »
-El titular debe ser contundente y estar en mayúsculas.
-Después de los dos puntos, desarrollar la noticia en un texto breve, claro y atractivo.
-Priorizar nombres, cifras, fechas, organismos y consecuencias relevantes.
-Mantener un tono periodístico, profesional y táctico.
-Evitar introducciones innecesarias, opiniones personales y frases vacías.
-Finalizar siempre con una línea en blanco y ■ #BlackNews.
-Intentar mantener el texto por debajo de 250 caracteres cuando sea posible, sin sacrificar información importante.
-
-3. IDENTIDAD EDITORIAL
-
-BlackNews es un medio de comunicación internacional independiente.
-
-El estilo debe ser:
-
-Profesional, directo y contundente.
-Informativo, sin lenguaje burocrático.
-Crítico cuando los hechos lo justifiquen.
-Conciso, con énfasis en datos verificables.
-Sin elogios ni condenas automáticas a gobiernos, partidos o instituciones.
-No suavizar hechos relevantes, pero tampoco exagerarlos.
-
-4. VERIFICACIÓN Y PRECISIÓN
-
-No inventar cifras, declaraciones, fechas, nombres ni acontecimientos.
-Diferenciar hechos confirmados, propuestas, investigaciones, denuncias y especulaciones.
-No presentar acusaciones como hechos probados.
-Si una información proviene de una declaración oficial, atribuirla a la institución correspondiente.
-Si no se puede verificar un dato, no afirmarlo como confirmado.
-No confundir una propuesta con una ley aprobada ni un anuncio político con una decisión ejecutada.
-Si hay contradicciones entre fuentes, señalarlo brevemente.
-
-5. PRESENTACIÓN DE LA RESPUESTA
-
-Entregar siempre los dos resultados en este orden:
+Entrega SIEMPRE en este orden, y nada más:
 
 A. JSON PARA BLACKNEWS 4:5 GENERATOR
-
-Un bloque de código JSON editable, sin explicaciones dentro del bloque.
+Un bloque de código JSON editable con el objeto del apartado 1, sin explicaciones dentro del bloque.
 
 B. TWEET / REDES SOCIALES
+El cuerpo del tweet tal cual se pega (apartado 4): SIN banderas, sin el símbolo » y sin #BlackNews, que la web añade al publicar.
 
-El texto final listo para copiar y publicar, manteniendo el formato establecido.
+Si el apartado 0 determina que no hay contexto: NO entregues A ni B; responde únicamente con la pregunta del apartado 0.
 
-No agregar análisis, explicaciones ni comentarios adicionales salvo que sean necesarios para advertir sobre información no verificada.
-
-=== NOTICIA A REDACTAR (completá esta parte con tu noticia) ===
-Tema / titular: ${t}
+=== NOTICIA / CONTEXTO (rellena; si lo dejas vacío, aplica el apartado 0 y pregunta) ===
+${t || "(vacío)"}
 Título actual: ${title || "(vacío)"}
-Bajada: ${description || "(vacío)"}
-Categorías habilitadas: ${enabledCategories.join(", ") || "(ninguna)"}
-País / Región: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}
-
-INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para producción. Prioriza precisión, impacto informativo, claridad y coherencia editorial con la identidad de BlackNews. Selecciona categorías del catálogo oficial (ECONOMÍA & MERCADOS, GEOPOLÍTICA, DEFENSA & SEGURIDAD, TECNOLOGÍA & INNOVACIÓN, DERECHO & PROPIEDAD, ENERGÍA & INDUSTRIA, INVESTIGACIÓN, FENÓMENOS & ANOMALÍAS o EDITORIAL) y respeta los códigos ISO alfanuméricos en selectedCountries.`;
+Bajada actual: ${description || "(vacío)"}
+Secciones habilitadas: ${enabledCategories.join(", ") || "(ninguna)"}
+Países del post: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
   };
 
   /** Texto que copia el botón «Todo»: SIEMPRE empieza por la base del
@@ -2957,10 +2990,17 @@ INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para pro
       const text: string | undefined = raw?.choices?.[0]?.message?.content;
       if (!text) return { success: false, error: "Groq no devolvió texto." };
 
-      const parsed = JSON.parse(text);
+      const parsed = parseAiJson(text) as Record<string, unknown> | null;
+      if (!parsed)
+        return {
+          success: false,
+          error: `Groq no devolvió JSON válido: ${text.slice(0, 200)}`,
+        };
       return {
         success: true,
         data: {
+          question:
+            typeof parsed.question === "string" ? parsed.question : undefined,
           content: parsed.content ?? parsed,
           tweetBody: parsed.tweetBody ?? parsed.tweet ?? "",
           sources: [],
@@ -3040,12 +3080,22 @@ INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para pro
       const start = text.indexOf("{");
       const end = text.lastIndexOf("}");
       if (start < 0 || end <= start)
-        return { success: false, error: "Gemini no devolvió JSON válido." };
-      const parsed = JSON.parse(text.slice(start, end + 1));
+        return {
+          success: false,
+          error: `Gemini no devolvió JSON válido: ${text.slice(0, 200)}`,
+        };
+      const parsed = parseAiJson(text) as Record<string, unknown> | null;
+      if (!parsed)
+        return {
+          success: false,
+          error: `Gemini no devolvió JSON válido: ${text.slice(0, 200)}`,
+        };
 
       return {
         success: true,
         data: {
+          question:
+            typeof parsed.question === "string" ? parsed.question : undefined,
           content: parsed.content ?? parsed,
           tweetBody: parsed.tweetBody ?? parsed.tweet ?? "",
           sources: [],
@@ -3086,19 +3136,21 @@ INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para pro
       const raw = await res.json().catch(() => null);
       const text = raw?.choices?.[0]?.message?.content;
       if (!text) return { success: false, error: "OpenRouter no devolvió texto." };
-      const parsed = JSON.parse(text);
-      return { success: true, data: { content: parsed.content ?? parsed, tweetBody: parsed.tweetBody ?? parsed.tweet ?? "", sources: [], searched: false, note: `Modo directo OpenRouter (${model} · gratuito)`, model: `${model} (OpenRouter)` } };
+      const parsed = parseAiJson(text) as Record<string, unknown> | null;
+      if (!parsed) return { success: false, error: `OpenRouter no devolvió JSON válido: ${text.slice(0, 200)}` };
+      return { success: true, data: { question: typeof parsed.question === "string" ? parsed.question : undefined, content: parsed.content ?? parsed, tweetBody: parsed.tweetBody ?? parsed.tweet ?? "", sources: [], searched: false, note: `Modo directo OpenRouter (${model} · gratuito)`, model: `${model} (OpenRouter)` } };
     } catch { return { success: false, error: "No se pudo conectar con OpenRouter." }; }
   };
 
   const handleGenerateAi = async () => {
     if (aiBusy) return;
-    const topic = aiTopic.trim();
+    // Contexto de partida: lo que se escribió en el cuadro de IA o, si está
+    // vacío, lo que ya hay en el post. Sin nada de esto, no se pide redacción
+    // (la IA sólo puede inventar): se lanza la pregunta por la noticia.
+    const topic =
+      aiTopic.trim() || title.trim() || description.trim();
     if (!topic) {
-      setAiNotice({
-        kind: "warn",
-        text: "Escribe primero el tema o el texto de partida en el cuadro de arriba.",
-      });
+      setAiNotice({ kind: "warn", text: `⚠︎ ${NO_CONTEXT_QUESTION}` });
       return;
     }
     setAiBusy(true);
@@ -3252,7 +3304,7 @@ INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para pro
     }
     setAiBusy(true);
     try {
-      const prompt = `Reescribe EXCLUSIVAMENTE el siguiente texto con el tono indicado (solo el texto, sin explicaciones, sin markdown, sin comillas extra):\n\nTEXTO ORIGINAL:\n${text}\n\nTONO: ${tone}\n\nREGLAS: Sentence Case (Sc), sin puntos suspensivos (...), sin saltos de línea (\\n) en el título ni en la bajada, máximo 120 chars en título y 150 en descripción según corresponda. Solo el texto reescrito.`;
+      const prompt = `Reescribe EXCLUSIVAMENTE el siguiente texto con el tono indicado (sólo el texto, sin explicaciones, sin markdown, sin comillas extra):\n\nTEXTO ORIGINAL:\n${text}\n\nTONO: ${tone}\n\nREGLAS: grafía normal (Sentence Case), sin puntos suspensivos (...), sin saltos de línea (\\n), sin hashtags ni emojis, máximo 120 caracteres en título y 170 en bajada según corresponda. Sólo el texto reescrito.`;
       const preferGroq = aiModelChoice === "groq-llama";
       const preferOpenRouter = aiModelChoice.startsWith("or-");
       const useOpenRouter = preferOpenRouter ? openRouterKey.trim() : (!groqKey.trim() && openRouterKey.trim());
@@ -3267,7 +3319,7 @@ INSTRUCCIÓN FINAL: Cada noticia se convierte en una publicación lista para pro
       const res = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${auth}` },
-        body: JSON.stringify({ model: modelName, messages: [{ role: "system", content: getClientSystemPrompt() }, { role: "user", content: prompt }], temperature: 0.7, max_tokens: 300 }),
+        body: JSON.stringify({ model: modelName, messages: [{ role: "system", content: REWRITE_SYSTEM_PROMPT }, { role: "user", content: prompt }], temperature: 0.7, max_tokens: 300 }),
         signal: AbortSignal.timeout(useOpenRouter ? 60000 : 45000),
       });
       const raw = await res.json().catch(() => null);
