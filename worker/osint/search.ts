@@ -87,7 +87,12 @@ export async function searchAll(
 ): Promise<OsintSearchResponse> {
   const started = Date.now();
   const query = (body.query || '').replace(/\s+/g, ' ').trim();
-  if (query.length < 2) throw new Error('La búsqueda requiere al menos 2 caracteres.');
+  // Consulta vacía = modo «Últimas»: se devuelven los artículos más
+  // recientes del período sin escribir nada. Una sola letra no es una
+  // búsqueda útil, así que se pide al menos 2 caracteres (o vacío).
+  if (query.length === 1) {
+    throw new Error('La búsqueda requiere al menos 2 caracteres (o déjala vacía para las últimas noticias).');
+  }
 
   const { from, to } = periodRange(body.period, body.customFrom, body.customTo);
   const maxPerSource = Math.min(50, Math.max(5, body.maxPerSource || 20));
@@ -119,6 +124,28 @@ export async function searchAll(
           skipped: true,
           itemCount: 0,
           error: blocked,
+          durationMs: 0,
+          quota: {
+            kind: runtime.quotaKind || 'unknown',
+            remaining: runtime.quotaHeaderRemaining,
+            limit: runtime.quotaHeaderLimit,
+            note: quotaNote,
+          },
+        });
+        return;
+      }
+
+      // Modo «Últimas» (consulta vacía): Wikidata y Tavily exigen un
+      // término de búsqueda en su API, así que se saltan con el motivo
+      // honesto en lugar de devolver resultados inventados.
+      if (!query && (config.kind === 'wikidata' || config.kind === 'tavily')) {
+        results.push({
+          sourceId: config.id,
+          sourceName: config.name,
+          ok: false,
+          skipped: true,
+          itemCount: 0,
+          error: 'Esta fuente exige un término de búsqueda: no aporta en el modo «Últimas» (consulta vacía).',
           durationMs: 0,
           quota: {
             kind: runtime.quotaKind || 'unknown',

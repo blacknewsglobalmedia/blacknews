@@ -5,6 +5,12 @@ multi-fuente desde el backend, detección de duplicados, cuotas honestas,
 vista previa e importación a las herramientas editoriales. Sólo para
 administradores y con verificación **también en el Worker**.
 
+Al abrir la pestaña **Buscar** se traen **solas las últimas noticias**
+(modo «Últimas»: consulta vacía, período 6 h por defecto), cada titular
+se muestra **en su idioma original junto a su traducción automática al
+español**, y los resultados salen **agrupados por día** (Hoy / Ayer /
+fecha) tipo línea de tiempo.
+
 ---
 
 ## 1. Arquitectura
@@ -43,7 +49,8 @@ Navegador (OsintCenter.tsx)          Worker Cloudflare (worker/osint/)
 | POST | `/api/osint/sources` | Añadir feed RSS personalizado (dominio en allowlist) |
 | DELETE | `/api/osint/sources?id=` | Eliminar una fuente personalizada (las built-in no) |
 | POST | `/api/osint/sources/test` | Probar conexión + vista previa de 5 titulares |
-| POST | `/api/osint/translate` | Traducción automática de un hallazgo al español (IA gratuita) |
+| POST | `/api/osint/translate` | Adaptación de un hallazgo al importar (traduce + reescribe antiplagio; IA gratuita) |
+| POST | `/api/osint/translate-batch` | Traducción EN BLOQUE de titulares del modo «Últimas» (≤25/petición; 1 llamada a la IA; fail-open) |
 
 ### Autenticación (doble vía, ninguna expone secretos)
 
@@ -110,6 +117,48 @@ Además hay **límite interno diario configurable** por fuente (el contador
 se reinicia a medianoche UTC) y un **cortacircuito de 15 min** tras un 429
 (persistido en KV; la fuente se omite con el motivo y la hora).
 
+### Modo «Últimas» (consulta vacía)
+
+`POST /api/osint/search` acepta `query: ""`: en lugar de un error (sólo
+se exige ≥2 caracteres si hay texto), devuelve **lo más reciente del
+período**. La UI lo dispara **sola al abrir la pestaña Buscar** (período
+por defecto 6 h) y también con el botón «Ver últimas»; el refresco
+automático periódico sigue apagado por defecto. Cada fuente responde a su
+manera:
+
+- **RSS / RSS por categoría** — `parseFeed` sin tokens devuelve los
+  últimos artículos del feed (la ventana rotativa usa la clave
+  «global» para elegir los 12 feeds del día).
+- **GDELT** — pide sólo por filtro de idioma (`sourcelang:english` si no
+  hay idioma elegido), que es lo mínimo que su API acepta.
+- **OpenAlex** — sin parámetro `search` y con
+  `sort=publication_date:desc` para traer lo más reciente del período.
+- **Wikidata y Tavily** — sus APIs exigen un término de búsqueda: se
+  **saltan con motivo honesto** («Esta fuente exige un término de
+  búsqueda…») en lugar de inventar resultados.
+
+### Traducción en bloque de titulares (original → español)
+
+Al volver una búsqueda, la UI recopila los titulares **no españoles** y
+llama **una sola vez por lote** (máx. 25, `TRANSLATE_BATCH` en la UI y
+`BATCH_MAX` en el Worker) a `POST /api/osint/translate-batch`, que usa
+`translateBatch()` de `translate.ts`: un **único envío** al modelo con
+los titulares como arreglo JSON y una respuesta `{"0":"…","1":"…"}`
+mapeada por índice (parser propio, tolerante a markdown/texto alrededor).
+
+- Se muestra **el original en su idioma + la traducción al español al
+  lado** (tarjeta, vista previa y cabecera de la tarjeta nunca se
+  sustituyen); los titulares `language === 'es'` no se envían.
+- **Fail-open**: sin proveedor, con la IA caída o con respuesta
+  ilegible, responde `ok:false` (200) con el motivo, la UI avisa en
+  ámbar y **se conservan los titulares originales**. Un fallo parcial
+  informa «X de Y traducidos».
+- No hay bucles de reintento: los ids sin traducir vuelven a la cola y
+  sólo se reintentan en la búsqueda siguiente; una búsqueda nueva cancela
+  la traducción en vuelo (`translateRunId`).
+- **Nada de esto publica solo**: la importación sigue siendo un borrador
+  editable y conserva su adaptación antiplagio propia al importar.
+
 ## 4. Duplicados, puntuación y datos
 
 - **Duplicados** = misma URL canónica (sin `utm_*`, `fbclid`, `gclid`,
@@ -125,6 +174,12 @@ se reinicia a medianoche UTC) y un **cortacircuito de 15 min** tras un 429
 - Los datos son **originales de la fuente**: titular, enlace, fecha de
   publicación, fragmento tal cual. Si no hay más (sólo titular y enlace),
   la vista previa lo advierte; nunca se genera un texto ajeno.
+- **Orden en la UI**: los resultados se agrupan por día local del editor
+  (**Hoy / Ayer / fecha**) con cabecera de sección, y dentro de cada día
+  se ordenan de más reciente a más antiguo; cada tarjeta muestra chips de
+  hora, idioma original, país y fuentes agrupadas. El orden interno del
+  Worker (`sort`: score / fecha / relevancia) sigue disponible en el
+  selector «Orden».
 
 ## 5. Importaciones (siempre borradores editables)
 
@@ -197,7 +252,7 @@ OSINT_RSS_ALLOWLIST=bbc.co.uk,dw.com,france24.com,un.org
 ## 7. Pruebas
 
 ```bash
-npx tsx test/osint-logic.test.ts   # 35 pruebas: dedupe, scoring, SSRF, RSS/Atom, presupuesto de subpeticiones, adaptación antiplagio, tokens Google
+npx tsx test/osint-logic.test.ts   # 42 pruebas: dedupe, scoring, SSRF, RSS/Atom, presupuesto de subpeticiones, adaptación antiplagio, modo «Últimas», traducción en bloque, tokens Google
 npm run lint                       # tsc (incluye worker/ y test/)
 ```
 
@@ -207,6 +262,12 @@ Prueba manual del backend:
 curl -H "x-bn-admin-token: <token>" http://127.0.0.1:8787/api/osint/status
 curl -X POST -H "content-type: application/json" -H "x-bn-admin-token: <token>" \
   -d '{"query":"Ukraine","period":"24h"}' http://127.0.0.1:8787/api/osint/search
+# Modo «Últimas» (consulta vacía) + traducción en bloque:
+curl -X POST -H "content-type: application/json" -H "x-bn-admin-token: <token>" \
+  -d '{"query":"","period":"6h"}' http://127.0.0.1:8787/api/osint/search
+curl -X POST -H "content-type: application/json" -H "x-bn-admin-token: <token>" \
+  -d '{"items":[{"id":"a1","title":"Government unveils new AI rules","language":"en"}]}' \
+  http://127.0.0.1:8787/api/osint/translate-batch
 ```
 
 ## 8. Limitaciones conocidas
@@ -221,5 +282,10 @@ curl -X POST -H "content-type: application/json" -H "x-bn-admin-token: <token>" 
 - **Filtro por categoría en la búsqueda**: las categorías se usan hoy para
   describir la cobertura de cada fuente; el filtrado textual está por
   tokens de la consulta.
+- **Modo «Últimas»**: sin idioma elegido, GDELT se consulta en inglés
+  (`sourcelang:english`, su mayor cobertura) y Wikidata/Tavily no
+  participan (exigen término de búsqueda). La traducción en bloque es de
+  **titulares** (no de fragmentos): el snippet se conserva en su idioma
+  original hasta la adaptación antiplagio del importar.
 - Los contadores diarios se reinician a medianoche UTC; los mensuales son
   sólo informativos.

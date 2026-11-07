@@ -11,6 +11,8 @@
  */
 import { auth } from '../firebase';
 import type {
+  OsintBatchTranslateItem,
+  OsintBatchTranslateResponse,
   OsintSearchRequest,
   OsintSearchResponse,
   OsintSourceConfig,
@@ -82,4 +84,15 @@ export const osintApi = {
         body: JSON.stringify({ title, snippet, language: opts?.language, rewrite: opts?.rewrite }),
       },
     ),
+
+  /**
+   * Traducción EN BLOQUE de titulares (modo «Últimas»): una sola llamada
+   * por lote (máx. 25) con los titulares originales. Fail-open: si la IA
+   * no responde, `ok:false` y la UI conserva los titulares originales.
+   */
+  translateBatch: (items: OsintBatchTranslateItem[]) =>
+    request<OsintBatchTranslateResponse>('/translate-batch', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
 };

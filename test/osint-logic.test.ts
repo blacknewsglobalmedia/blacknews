@@ -28,9 +28,12 @@ import {
 } from '../worker/osint/ssrf';
 import { feedWindow, parseFeed, searchRssFeed, SUBREQUEST_BUDGET, takeSubrequest, BUDGET_MSG, type ConnectorContext } from '../worker/osint/connectors';
 import {
+  buildBatchTranslationPrompt,
   buildRewritePrompt,
   buildTranslationPrompt,
+  parseBatchTranslationResponse,
   parseTranslationResponse,
+  translateBatch,
   translateFinding,
 } from '../worker/osint/translate';
 import { verifyGoogleIdToken } from '../worker/osint/auth';
@@ -428,6 +431,85 @@ test('sin proveedor de IA la adaptación falla abierto con el original intacto',
   );
   assert.equal(out.ok, false);
   assert.equal(out.ok === false && /original/.test(out.error), true, 'el mensaje menciona el original');
+});
+
+/* ------------------------------------------------------------------ */
+console.log('\n[8c] Modo «Últimas» (consulta vacía) y traducción en bloque');
+
+test('scoreItems con consulta vacía puntúa recencia sin factor de búsqueda', () => {
+  const recient = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  const norm = normalizeItems(
+    [raw('Última hora: acontecimiento internacional en desarrollo', 'https://a.com/last', recient)],
+    { ...baseCtx, sourceId: 'a', sourceName: 'A', query: '' },
+  );
+  const { items, clusters } = clusterItems(norm);
+  scoreItems(items, clusters, '');
+  assert.ok(items[0].score > 0, 'la recencia sigue sumando');
+  assert.ok(
+    !items[0].scoreFactors.some((f) => /relacionado con la b\xfasqueda/i.test(f)),
+    'sin consulta no hay factor de coincidencia',
+  );
+  assert.ok(sortItems(items, 'date')[0].score >= 0, 'el orden por fecha no necesita consulta');
+});
+
+test('parseFeed y feedWindow admiten consulta vacía (últimos artículos, ventana estable)', () => {
+  assert.equal(parseFeed(RSS_SAMPLE, 'es', 10, '').length, 1, 'sin filtro llegan los últimos');
+  const feeds = Array.from({ length: 47 }, (_, i) => `f${i}`);
+  const w1 = feedWindow(feeds, '', 20_700, 12);
+  assert.equal(w1.length, 12);
+  assert.deepEqual(w1, feedWindow(feeds, '', 20_700, 12), 'misma ventana determinista');
+});
+
+test('el prompt de bloque pide traducir TODO el arreglo con claves por índice', () => {
+  const { system, user } = buildBatchTranslationPrompt([
+    { title: 'Government unveils new AI rules' },
+    { title: 'Bundestag beschließt neue Energiegesetze' },
+  ]);
+  assert.match(system, /AL ESPAÑOL/i);
+  assert.match(system, /SOLO JSON/i);
+  assert.match(system, /índice de posición/i);
+  const sent = JSON.parse(user) as string[];
+  assert.ok(Array.isArray(sent), 'el usuario es un arreglo de titulares');
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0], 'Government unveils new AI rules');
+});
+
+test('parseBatchTranslationResponse acepta JSON limpio, cercado o con texto', () => {
+  const clean = parseBatchTranslationResponse('{"0":"Titular uno","1":"Titular dos"}');
+  assert.deepEqual(clean, { '0': 'Titular uno', '1': 'Titular dos' });
+  const fenced = parseBatchTranslationResponse('```json\n{"0":"Titular fenced"}\n```');
+  assert.equal(fenced?.['0'], 'Titular fenced');
+  const chatty = parseBatchTranslationResponse('Aquí: {"0":"Titular  con\\n espacios"} ¡listo!');
+  assert.equal(chatty?.['0'], 'Titular con espacios');
+});
+
+test('parseBatchTranslationResponse descarta basura, recorta y devuelve null si no hay nada', () => {
+  assert.equal(parseBatchTranslationResponse('texto sin json'), null);
+  assert.equal(parseBatchTranslationResponse('{"a":"no numérico"}'), null);
+  assert.equal(parseBatchTranslationResponse('[1,2]'), null, 'arreglo no es un mapa índice→texto');
+  assert.equal(parseBatchTranslationResponse('{"0":123}'), null, 'valores que no son texto');
+  const long = parseBatchTranslationResponse(`{"0":"${'x'.repeat(900)}"}`);
+  assert.equal(long?.['0'].length, 300, 'cada titular se recorta a 300');
+  const partial = parseBatchTranslationResponse('{"0":"Sólo el primero"}');
+  assert.equal(partial?.['1'], undefined, 'los índices que faltan quedan ausentes (missing)');
+});
+
+test('translateBatch sin proveedor falla abierto conservando los originales', async () => {
+  const out = await translateBatch({}, [
+    { id: 'a', title: 'Government unveils new AI rules', language: 'en' },
+  ]);
+  assert.equal(out.ok, false);
+  assert.equal(out.ok === false && /originales/.test(out.error), true);
+});
+
+test('translateBatch omite los titulares ya en español (sin pedir IA)', async () => {
+  const out = await translateBatch({}, [
+    { id: 'a', title: 'Titular en español', language: 'es' },
+    { id: 'b', title: '', language: 'en' },
+  ]);
+  assert.equal(out.ok, true);
+  assert.equal(out.ok && out.provider, 'sin traducir');
+  assert.deepEqual(out.ok && out.translations, {});
 });
 
 /* ------------------------------------------------------------------ */

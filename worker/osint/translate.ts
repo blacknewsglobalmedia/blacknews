@@ -18,6 +18,7 @@
  *   la misma cadena gratuita que usa la redacción asistida.
  */
 import { callFreeModel, type AiEnv } from '../ai';
+import type { OsintBatchTranslateResponse } from '../../src/types/osint';
 
 export interface TranslationInput {
   title: string;
@@ -106,16 +107,11 @@ export function buildRewritePrompt(input: TranslationInput): { system: string; u
 }
 
 /**
- * Parser tolerante de la respuesta del modelo (puro):
- * - admite JSON limpio, JSON rodeado de texto y cercado por ```json …```;
- * - exige un `title` string no vacío;
- * - recorta longitudes excesivas.
- * Devuelve null si no hay nada fiable (la importación usará el original).
+ * Extrae el PRIMER objeto JSON balanceado del texto (puro): admite JSON
+ * limpio, JSON rodeado de texto y cercado por ```json …```. Devuelve null
+ * si no hay nada fiable.
  */
-export function parseTranslationResponse(raw: string): {
-  title: string;
-  snippet?: string;
-} | null {
+export function extractFirstJsonObject(raw: string): unknown | null {
   if (!raw) return null;
   let text = raw.trim();
   // Quitar cercado de código tipo markdown.
@@ -149,13 +145,26 @@ export function parseTranslationResponse(raw: string): {
     }
   }
   if (end === -1) return null;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text.slice(start, end + 1));
+    return JSON.parse(text.slice(start, end + 1));
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
+}
+
+/**
+ * Parser tolerante de la respuesta del modelo (puro):
+ * - admite JSON limpio, JSON rodeado de texto y cercado por ```json …```;
+ * - exige un `title` string no vacío;
+ * - recorta longitudes excesivas.
+ * Devuelve null si no hay nada fiable (la importación usará el original).
+ */
+export function parseTranslationResponse(raw: string): {
+  title: string;
+  snippet?: string;
+} | null {
+  const parsed = extractFirstJsonObject(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const obj = parsed as Record<string, unknown>;
   const title = typeof obj.title === 'string' ? obj.title.replace(/\s+/g, ' ').trim() : '';
   if (!title) return null;
@@ -229,4 +238,107 @@ export async function translateFinding(
     changed,
     action: needsTranslation ? 'traducido+reescribir' : 'reescribir',
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Traducción EN BLOQUE de titulares (modo «Últimas»)                  */
+/* ------------------------------------------------------------------ */
+
+/** Máximo de titulares por petición (1 llamada al modelo por lote). */
+export const BATCH_MAX = 25;
+
+/** Longitud máxima de cada titular traducido. */
+const MAX_BATCH_TITLE = 300;
+
+/**
+ * Prompt de traducción en bloque (puro, testeable): un SOLO envío con
+ * todos los titulares como arreglo JSON y una respuesta JSON que mapea
+ * índice → traducción. Así el modo «Últimas» traduce toda la pantalla
+ * con una llamada en lugar de una por titular.
+ */
+export function buildBatchTranslationPrompt(items: Array<{ title: string }>): {
+  system: string;
+  user: string;
+} {
+  const system =
+    'Eres traductor profesional y editor de una agencia de noticias en español. ' +
+    'Traduce AL ESPAÑOL el titular de cada posición del arreglo JSON que se te da. ' +
+    'Conserva nombres propios, siglas, cifras y fechas tal cual; no resumas, no ' +
+    'adornes, no añadas ni quites información; si un titular ya está en español, ' +
+    'devuélvelo tal cual. ' +
+    'Devuelve SOLO JSON válido, sin markdown, con esta forma exacta: ' +
+    '{"0":"traducción del primer titular","1":"traducción del segundo",…} ' +
+    'usando como clave el índice de posición (empezando en 0) y traduce TODOS los ' +
+    'índices enviados.';
+  const user = JSON.stringify(items.map((i) => i.title.slice(0, 1000)));
+  return { system, user };
+}
+
+/**
+ * Parser de la respuesta de traducción en bloque (puro): acepta el objeto
+ * {índice → texto} en JSON limpio, cercado por markdown o rodeado de
+ * texto. Recorta longitudes excesivas y descarta valores que no sean
+ * texto. Devuelve null si no hay nada fiable (se conservan los originales).
+ */
+export function parseBatchTranslationResponse(raw: string): Record<string, string> | null {
+  const parsed = extractFirstJsonObject(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!/^\d+$/.test(key) || typeof value !== 'string') continue;
+    const title = value.replace(/\s+/g, ' ').trim();
+    if (title) out[key] = title.slice(0, MAX_BATCH_TITLE);
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Traduce en bloque los titulares que NO están en español con la cadena
+ * gratuita del proyecto (1 llamada por lote, máx. `BATCH_MAX`). Nunca
+ * lanza: cualquier fallo vuelve `ok:false` para que la UI muestre los
+ * titulares ORIGINALES (fail-open). Los ítems en español se omiten.
+ */
+export async function translateBatch(
+  env: AiEnv,
+  items: Array<{ id: string; title: string; language?: string }>,
+): Promise<OsintBatchTranslateResponse> {
+  const pending = items
+    .filter((i) => i.language !== 'es' && i.title.trim().length > 0)
+    .slice(0, BATCH_MAX);
+  if (pending.length === 0) {
+    return { ok: true, provider: 'sin traducir', translations: {}, missing: 0 };
+  }
+  const { system, user } = buildBatchTranslationPrompt(pending);
+  let text: string | null = null;
+  let provider = '';
+  try {
+    const out = await callFreeModel(env, system, user);
+    if (out) {
+      text = out.text;
+      provider = out.name;
+    }
+  } catch {
+    text = null;
+  }
+  if (!text) {
+    const anyProvider = Boolean(env.AI || env.GROQ_API_KEY || env.GEMINI_API_KEY);
+    return {
+      ok: false,
+      error: anyProvider
+        ? 'El proveedor de IA no respondió (fallo de red o cuota); se conservan los titulares originales.'
+        : 'Sin proveedor de IA disponible para traducir; se conservan los titulares originales (configura Workers AI, GROQ_API_KEY o GEMINI_API_KEY).',
+    };
+  }
+  const parsed = parseBatchTranslationResponse(text);
+  if (!parsed) {
+    return { ok: false, error: 'La IA devolvió una traducción ilegible; se conservan los titulares originales.' };
+  }
+  const translations: Record<string, string> = {};
+  let missing = 0;
+  pending.forEach((item, index) => {
+    const title = parsed[String(index)];
+    if (title) translations[item.id] = title;
+    else missing++;
+  });
+  return { ok: true, provider, translations, missing };
 }

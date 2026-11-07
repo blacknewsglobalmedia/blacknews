@@ -177,7 +177,13 @@ export async function searchGdelt(ctx: ConnectorContext): Promise<RawFetch> {
   // pide sin filtro y se filtra después por el campo `language` real.
   const langIso = ctx.languages && ctx.languages.length === 1 ? ctx.languages[0] : undefined;
   const gdeltLang = langIso ? GDELT_LANG[langIso] : undefined;
-  const query = `${ctx.query}${gdeltLang ? ` sourcelang:${gdeltLang}` : ''}`;
+  const q = ctx.query.trim();
+  // Modo «Últimas» (consulta vacía): GDELT exige un término, así que se
+  // pide SÓLO por filtro de idioma para traer los artículos recientes
+  // (sin idioma elegido se parte del inglés, la cobertura mayor de GDELT).
+  const query = q
+    ? `${q}${gdeltLang ? ` sourcelang:${gdeltLang}` : ''}`
+    : `sourcelang:${gdeltLang || 'english'}`;
   const url =
     `${GDELT_API}?query=${encodeURIComponent(query)}` +
     `&mode=artlist&format=json&maxrecords=${Math.min(75, ctx.max)}` +
@@ -421,10 +427,16 @@ export async function searchOpenAlex(ctx: ConnectorContext): Promise<RawFetch> {
   if (!takeSubrequest(ctx)) throw new ConnectorError(BUDGET_MSG, 'budget');
   const from = ctx.from.toISOString().slice(0, 10);
   const to = ctx.to.toISOString().slice(0, 10);
-  const url =
-    `https://api.openalex.org/works?search=${encodeURIComponent(ctx.query)}` +
-    `&filter=from_publication_date:${from},to_publication_date:${to}` +
-    `&per-page=${Math.min(25, ctx.max)}`;
+  const q = ctx.query.trim();
+  // Modo «Últimas» (consulta vacía): sin `search`, OpenAlex ordena por
+  // fecha de publicación para devolver lo más reciente del período.
+  const url = q
+    ? `https://api.openalex.org/works?search=${encodeURIComponent(q)}` +
+      `&filter=from_publication_date:${from},to_publication_date:${to}` +
+      `&per-page=${Math.min(25, ctx.max)}`
+    : `https://api.openalex.org/works?filter=from_publication_date:${from},to_publication_date:${to}` +
+      `&sort=publication_date:desc` +
+      `&per-page=${Math.min(25, ctx.max)}`;
   const { res, text } = await fetchText(url, { headers: { accept: 'application/json' } });
   let body: { results?: Array<Record<string, unknown>> };
   try {

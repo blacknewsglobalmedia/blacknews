@@ -198,6 +198,23 @@ export interface OsintSearchResponse {
   duplicateCount: number;
 }
 
+/** Ítem enviado a la traducción en bloque de titulares (modo «Últimas»). */
+export interface OsintBatchTranslateItem {
+  id: string;
+  title: string;
+  /** ISO 639-1 del original; 'es' se omite en el Worker (ya en español). */
+  language?: string;
+}
+
+/**
+ * Respuesta de `POST /api/osint/translate-batch`.
+ * `translations` mapea id → titular en español. Falla ABIERTO: si la IA no
+ * responde, `ok:false` y el cliente conserva los titulares originales.
+ */
+export type OsintBatchTranslateResponse =
+  | { ok: true; provider: string; translations: Record<string, string>; missing: number }
+  | { ok: false; error: string };
+
 export interface OsintStatusResponse {
   /** El backend pudo verificar la administración (no dice si el token era válido). */
   sources: Array<OsintSourceConfig & { runtime: OsintSourceRuntime }>;

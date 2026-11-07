@@ -17,8 +17,12 @@
  *                                   hace falta y reescribe con palabras
  *                                   propias (antiplagio; IA gratuita del
  *                                   proyecto; el original nunca se toca)
+ *   POST   /api/osint/translate-batch → traduce EN BLOQUE titulares del modo
+ *                                   «Últimas» (1 llamada por lote; fail-open:
+ *                                   si falla, la UI conserva los originales)
  */
 import type {
+  OsintBatchTranslateItem,
   OsintSearchRequest,
   OsintSourceConfig,
   OsintStatusResponse,
@@ -27,7 +31,7 @@ import type { Env } from '../index';
 import { requireOsintAdmin } from './auth';
 import { searchRssFeed } from './connectors';
 import { searchAll } from './search';
-import { translateFinding } from './translate';
+import { BATCH_MAX, translateBatch, translateFinding } from './translate';
 import { assertSafeOutboundUrl, hostnameOf, isDomainAllowlisted, SsrfError } from './ssrf';
 import { hashHex } from './normalize';
 import { defaultRuntime, loadLastSearchAt, loadSources, saveSources } from './store';
@@ -268,6 +272,42 @@ export async function handleOsintRequest(
     // ok:false es una respuesta legítima (sin proveedor o ilegible): el
     // importador usará el original. Sólo los fallos de formulario son 4xx.
     return json(out);
+  }
+
+  /* -------------------------------------------------------------- */
+  /* Traducción EN BLOQUE de titulares (modo «Últimas»)              */
+  /* -------------------------------------------------------------- */
+  if (pathname === '/api/osint/translate-batch' && request.method === 'POST') {
+    let body: { items?: unknown };
+    try {
+      body = await request.json();
+    } catch {
+      return error('Cuerpo JSON inválido.');
+    }
+    if (!Array.isArray(body.items)) return error('Falta el arreglo «items».');
+    const items: OsintBatchTranslateItem[] = [];
+    for (const entry of body.items as unknown[]) {
+      const e = (entry || {}) as { id?: unknown; title?: unknown; language?: unknown };
+      const id = typeof e.id === 'string' ? e.id.trim() : '';
+      const title = typeof e.title === 'string' ? e.title.trim() : '';
+      if (!id || title.length < 2 || title.length > 2000) {
+        return error('Cada ítem necesita id y un titular de 2 a 2000 caracteres.');
+      }
+      const language =
+        typeof e.language === 'string' && /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(e.language.trim())
+          ? e.language.trim()
+          : undefined;
+      items.push({ id, title, language });
+    }
+    if (items.length === 0) {
+      return json({ ok: true, provider: 'sin traducir', translations: {}, missing: 0 });
+    }
+    if (items.length > BATCH_MAX) {
+      return error(`Máximo ${BATCH_MAX} titulares por petición (recorta en el cliente).`);
+    }
+    // ok:false es legítimo (sin proveedor o ilegible): la UI conserva los
+    // titulares originales. Nunca se bloquea la lectura de resultados.
+    return json(await translateBatch(env, items));
   }
 
   return error('Ruta OSINT no encontrada.', 404);

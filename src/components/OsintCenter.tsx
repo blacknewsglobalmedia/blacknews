@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Bookmark,
   BookmarkCheck,
+  CalendarDays,
   Check,
   Clock,
   ExternalLink,
@@ -61,6 +62,9 @@ import {
 import { osintApi } from '../utils/osintApi';
 
 const SAVED_KEY = 'blacknews_osint_saved';
+
+/** Titulares por llamada a la traducción en bloque (máx. del Worker). */
+const TRANSLATE_BATCH = 25;
 
 /* ISO 3166-1 → nombre legible (sólo cuando la fuente lo informa). */
 const ISO_NAMES: Record<string, string> = {
@@ -106,6 +110,25 @@ function fmtDateTime(iso?: string): string {
   });
 }
 
+/**
+ * Etiqueta de día para agrupar resultados (Hoy / Ayer / fecha larga).
+ * Usa la fecha LOCAL del editor para que «Hoy» coincida con su calendario.
+ */
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Sin fecha';
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
+  if (diff <= 0) return 'Hoy';
+  if (diff === 1) return 'Ayer';
+  return d.toLocaleDateString('es-UY', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}),
+  });
+}
+
 /** Categoría de cuota → etiqueta honesta para la UI. */
 const QUOTA_LABEL: Record<OsintQuotaKind, string> = {
   official: 'Cuota documentada por el proveedor',
@@ -138,7 +161,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
   /* ---------------- buscador ---------------- */
   const [tab, setTab] = useState<CenterTab>('buscar');
   const [query, setQuery] = useState('');
-  const [period, setPeriod] = useState<OsintSearchRequest['period']>('24h');
+  const [period, setPeriod] = useState<OsintSearchRequest['period']>('6h');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [langs, setLangs] = useState<Set<string>>(new Set());
@@ -152,6 +175,15 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lastSearch, setLastSearch] = useState<OsintSearchResponse | null>(null);
+
+  /* -------- traducción en bloque de titulares (original → español) -------- */
+  /** Mapa id → titular traducido al español (el original se conserva). */
+  const [esTitles, setEsTitles] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState(false);
+  const [translateNotice, setTranslateNotice] = useState<{ tone: 'emerald' | 'amber'; text: string } | null>(null);
+  /** Ids ya intentados (evita bucles; un fallo devuelve el id a la cola). */
+  const attemptedIds = useRef<Set<string>>(new Set());
+  const translateRunId = useRef(0);
 
   /* ---------------- resultados / guardados ---------------- */
   const [preview, setPreview] = useState<OsintItem | null>(null);
@@ -206,15 +238,18 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
   /* ---------------- buscar ---------------- */
   const runSearch = useCallback(
     async (signal?: AbortSignal) => {
-      if (query.trim().length < 2) {
-        setSearchError('Escribe al menos 2 palabras clave para buscar.');
+      const q = query.trim();
+      // Consulta vacía = modo «Últimas»: el Worker trae sólo lo más
+      // reciente del período. Una sola letra no es una búsqueda útil.
+      if (q.length === 1) {
+        setSearchError('Escribe al menos 2 caracteres, o déjalo vacío para ver las últimas noticias.');
         return;
       }
       setSearching(true);
       setSearchError(null);
       try {
         const body: OsintSearchRequest = {
-          query: query.trim(),
+          query: q,
           period,
           sort,
           maxPerSource,
@@ -240,9 +275,17 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
     [customFrom, customTo, langs, maxPerSource, onlyNew, period, query, refreshStatus, savedIds, sort, sourceFilter],
   );
 
+  /* Modo «Últimas»: al abrir el panel se consultan SOLAS las noticias más
+   * recientes (consulta vacía), sin escribir nada en el buscador. */
+  useEffect(() => {
+    if (searchRanOnce.current) return;
+    searchRanOnce.current = true;
+    void runSearch();
+  }, [runSearch]);
+
   /* Actualización automática: DESACTIVADA hasta que el admin la active. */
   useEffect(() => {
-    if (!autoRefresh || query.trim().length < 2) return;
+    if (!autoRefresh || query.trim().length === 1) return;
     const controller = new AbortController();
     const id = window.setInterval(() => {
       void runSearch(controller.signal);
@@ -252,6 +295,66 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
       controller.abort();
     };
   }, [autoRefresh, autoMinutes, query, runSearch]);
+
+  /* Traducción EN BLOQUE de titulares: una sola llamada al Worker por
+   * lote (máx. 25) para mostrar cada titular en español AL LADO del
+   * original en su idioma. Fail-open: si la IA falla, se conservan los
+   * originales y se avisa; nada de esto bloquea la lectura de resultados. */
+  useEffect(() => {
+    const items = lastSearch?.items || [];
+    const pending = items.filter(
+      (it) => it.language && it.language !== 'es' && !attemptedIds.current.has(it.id),
+    );
+    if (pending.length === 0) return;
+    for (const it of pending) attemptedIds.current.add(it.id);
+    const runId = ++translateRunId.current;
+    setTranslating(true);
+    void (async () => {
+      const collected: Record<string, string> = {};
+      let failure: string | null = null;
+      try {
+        for (let i = 0; i < pending.length && !failure; i += TRANSLATE_BATCH) {
+          const chunk = pending.slice(i, i + TRANSLATE_BATCH);
+          const res = await osintApi.translateBatch(
+            chunk.map((it) => ({ id: it.id, title: it.title, language: it.language })),
+          );
+          if (translateRunId.current !== runId) return; // llegó otra búsqueda
+          if (res.ok) {
+            Object.assign(collected, res.translations);
+          } else {
+            // Sin strictNullChecks TS no estrecha el else de la unión:
+            // se comprueba la propiedad para leer el mensaje honesto.
+            failure = 'error' in res && typeof res.error === 'string' ? res.error : 'sin detalle';
+          }
+        }
+      } catch (err) {
+        failure = err instanceof Error ? err.message : 'error desconocido';
+      }
+      if (translateRunId.current !== runId) return;
+      const done = Object.keys(collected).length;
+      // Guarda las traducciones: la tarjeta/la vista previa muestran el
+      // original en su idioma y ESTE español al lado.
+      if (done > 0) setEsTitles((prev) => ({ ...prev, ...collected }));
+      if (failure) {
+        // Los titulares sin traducir vuelven a la cola para el PRÓXIMO
+        // intento (una búsqueda nueva); aquí no se reintenta en bucle.
+        for (const it of pending) if (!(it.id in collected)) attemptedIds.current.delete(it.id);
+        setTranslateNotice({
+          tone: 'amber',
+          text:
+            done > 0
+              ? `Traducción parcial: ${done} de ${pending.length} titulares en español; el resto se conserva en su idioma original (${failure}).`
+              : `No se pudo traducir a español (${failure}). Se muestran los titulares en su idioma original.`,
+        });
+      } else if (done > 0) {
+        setTranslateNotice({
+          tone: 'emerald',
+          text: `${done} titular${done === 1 ? '' : 'es'} traducido${done === 1 ? '' : 's'} al español por la IA del proyecto, junto al original en su idioma. Los titulares ya en español no se tocan.`,
+        });
+      }
+      setTranslating(false);
+    })();
+  }, [lastSearch]);
 
   /* ---------------- guardados ---------------- */
   const saveItem = (item: OsintItem) => {
@@ -447,6 +550,33 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
     return map;
   }, [lastSearch]);
 
+  /** Resultados agrupados por día (Hoy / Ayer / fecha) tipo línea de tiempo. */
+  const dayGroups = useMemo(() => {
+    const items = lastSearch?.items || [];
+    const map = new Map<number, { label: string; items: OsintItem[] }>();
+    for (const item of items) {
+      const d = new Date(item.publishedAt || item.detectedAt);
+      const valid = !Number.isNaN(d.getTime());
+      // clave -1 = sin fecha confiable (se agrupan al final)
+      const day = valid ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() : -1;
+      let group = map.get(day);
+      if (!group) {
+        group = { label: valid ? dayLabel(item.publishedAt || item.detectedAt) : 'Sin fecha', items: [] };
+        map.set(day, group);
+      }
+      group.items.push(item);
+    }
+    const groups = [...map.entries()].map(([day, g]) => ({ day, ...g }));
+    groups.sort((a, b) => b.day - a.day); // lo más reciente arriba
+    for (const g of groups) {
+      g.items.sort(
+        (a, b) =>
+          Date.parse(b.publishedAt || b.detectedAt) - Date.parse(a.publishedAt || a.detectedAt),
+      );
+    }
+    return groups;
+  }, [lastSearch]);
+
   const results = lastSearch?.results || [];
   const enabledSources = (status?.sources || []).filter((s) => s.enabled);
   const problemSources = enabledSources.filter(
@@ -477,7 +607,9 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
           </h2>
           <p className="text-sm text-neutral-400 font-light mt-1 max-w-2xl">
             Búsquedas multi-fuente desde el backend, verificación de administración y
-            exportación a las herramientas editoriales. Ninguna clave sale del Worker.
+            exportación a las herramientas editoriales. Al abrir se traen solas las últimas
+            noticias, con el titular en su idioma original y su traducción al español.
+            Ninguna clave sale del Worker.
           </p>
         </div>
         <button
@@ -614,7 +746,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
-                  placeholder="Palabras clave: personas, organizaciones, acontecimientos…"
+                  placeholder="Palabras clave: personas, organizaciones, acontecimientos… (vacío = últimas noticias)"
                   className="w-full bg-neutral-900 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-[15px] text-white placeholder:text-neutral-600 focus:outline-none focus:border-emerald-500/50"
                 />
               </div>
@@ -625,7 +757,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                 className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/40 text-black font-bold text-[15px] flex items-center justify-center gap-2 transition-colors"
               >
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                {searching ? 'Buscando…' : 'Buscar'}
+                {searching ? 'Buscando…' : query.trim() ? 'Buscar' : 'Ver últimas'}
               </button>
             </div>
 
@@ -738,7 +870,9 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
                 />
               )}
               {!autoRefresh && (
-                <span className="text-[13px] text-neutral-500">Apagada por defecto: no consulta sin que lo pidas.</span>
+                <span className="text-[13px] text-neutral-500">
+                  Se consultan las últimas noticias al abrir; el refresco periódico está apagado por defecto.
+                </span>
               )}
             </div>
           </section>
@@ -761,32 +895,86 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
             </section>
           )}
 
-          {/* ------------- Tarjetas de resultados ------------- */}
+          {/* ------------- Tarjetas de resultados (agrupadas por día) ------------- */}
           {lastSearch && (
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
+            <section className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-[15px] font-bold text-white flex items-center gap-2">
                   <Inbox className="w-4 h-4 text-neutral-400" />
+                  {query.trim() ? '' : 'Últimas noticias · '}
                   {lastSearch.items.length} hallazgos · {lastSearch.clusters.length} acontecimientos agrupados
                 </h3>
+                {translating && (
+                  <span className="flex items-center gap-2 text-[13px] text-emerald-300 font-semibold">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Traduciendo titulares…
+                  </span>
+                )}
               </div>
+
+              {/* Aviso de la traducción en bloque (éxito honesto o fallo abierto) */}
+              {translateNotice && (
+                <div
+                  className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-[13px] leading-relaxed ${
+                    translateNotice.tone === 'emerald'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {translateNotice.tone === 'emerald' ? (
+                      <Languages className="w-4 h-4 mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                    )}
+                    <span>{translateNotice.text}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTranslateNotice(null)}
+                    aria-label="Cerrar aviso de traducción"
+                    className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               {lastSearch.items.length === 0 && !searching && (
                 <p className="text-sm text-neutral-400">
-                  Sin resultados para esa combinación. Prueba otro período, quita filtros o amplía las fuentes.
+                  {query.trim()
+                    ? 'Sin resultados para esa combinación. Prueba otro período, quita filtros o amplía las fuentes.'
+                    : 'Sin noticias recientes en este período. Amplía el período (7 días) o revisa las fuentes activas en la pestaña «Fuentes».'}
                 </p>
               )}
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {lastSearch.items.map((item) => (
-                  <ResultCard
-                    key={item.id}
-                    item={item}
-                    cluster={clustersById.get(item.clusterId)}
-                    saved={savedIds.has(item.id)}
-                    onPreview={() => setPreview(item)}
-                    onSave={() => saveItem(item)}
-                  />
-                ))}
-              </div>
+
+              {dayGroups.map((group) => (
+                <div key={group.day} className="space-y-3">
+                  {/* Cabecera de sección: línea de tiempo por día */}
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1.5 text-[13px] font-mono font-semibold uppercase tracking-widest text-neutral-300">
+                      <CalendarDays className="w-4 h-4 text-emerald-400" />
+                      {group.label}
+                    </span>
+                    <span className="h-px flex-1 bg-white/10" />
+                    <span className="text-[12px] font-mono text-neutral-500">
+                      {group.items.length} hallazgo{group.items.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {group.items.map((item) => (
+                      <ResultCard
+                        key={item.id}
+                        item={item}
+                        esTitle={esTitles[item.id]}
+                        cluster={clustersById.get(item.clusterId)}
+                        saved={savedIds.has(item.id)}
+                        onPreview={() => setPreview(item)}
+                        onSave={() => saveItem(item)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </section>
           )}
         </>
@@ -955,6 +1143,7 @@ export function OsintCenter({ onImportToPosts, onImportToArticle }: OsintCenterP
       {preview && (
         <PreviewDrawer
           item={preview}
+          esTitle={esTitles[preview.id]}
           cluster={clustersById.get(preview.clusterId)}
           saved={savedIds.has(preview.id)}
           importing={importing}
@@ -1127,17 +1316,21 @@ function SourceResultChip({ result }: { result: OsintSourceResult }) {
 
 function ResultCard({
   item,
+  esTitle,
   cluster,
   saved,
   onPreview,
   onSave,
 }: {
   item: OsintItem;
+  /** Titular traducido al español (traducción en bloque), si existe. */
+  esTitle?: string;
   cluster?: OsintCluster;
   saved: boolean;
   onPreview: () => void;
   onSave: () => void;
 }) {
+  const showEs = Boolean(esTitle && esTitle !== item.title);
   return (
     <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-4 flex flex-col gap-3 hover:border-white/20 transition-colors">
       <div className="flex items-start justify-between gap-3">
@@ -1149,24 +1342,45 @@ function ResultCard({
           {item.score}
         </span>
       </div>
-      <button type="button" onClick={onPreview} className="text-left">
+      {/* Titular ORIGINAL en su idioma + traducción al español al lado */}
+      <button type="button" onClick={onPreview} className="text-left space-y-1.5">
         <h4 className="text-[15px] font-semibold leading-snug text-white hover:text-emerald-300 transition-colors">
           {item.title}
         </h4>
+        {showEs && (
+          <p className="text-[14px] leading-snug text-emerald-200 flex items-start gap-1.5">
+            <Languages className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-400" />
+            <span>{esTitle}</span>
+          </p>
+        )}
       </button>
       {item.snippet && (
         <p className="text-[13px] text-neutral-400 leading-relaxed line-clamp-3">{item.snippet}</p>
       )}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-neutral-500">
-        {item.publishedAt && <span>Publicado {fmtDateTime(item.publishedAt)}</span>}
-        {item.language && <span className="uppercase">{item.language}</span>}
+      {/* Chips: hora · idioma original · país · fuentes agrupadas */}
+      <div className="flex flex-wrap gap-1.5 text-[12px]">
+        {item.publishedAt && (
+          <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-neutral-400">
+            {fmtDateTime(item.publishedAt)}
+          </span>
+        )}
+        {item.language && (
+          <span
+            title="Idioma original del titular"
+            className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono uppercase text-neutral-400"
+          >
+            {item.language}
+          </span>
+        )}
         {item.country && (
-          <span>
+          <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-neutral-400">
             {flagEmoji(item.country)} {countryName(item.country)}
           </span>
         )}
         {cluster && cluster.sourceIds.length > 1 && (
-          <span className="text-sky-400">Agrupado con {cluster.itemCount} fuentes</span>
+          <span className="rounded-md border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-sky-300">
+            {cluster.sourceIds.length} fuentes
+          </span>
         )}
       </div>
       <div className="flex items-center gap-2 mt-auto pt-1">
@@ -1198,6 +1412,7 @@ function ResultCard({
 
 function PreviewDrawer({
   item,
+  esTitle,
   cluster,
   saved,
   importing,
@@ -1207,6 +1422,8 @@ function PreviewDrawer({
   onSave,
 }: {
   item: OsintItem;
+  /** Titular traducido al español (traducción en bloque), si existe. */
+  esTitle?: string;
   cluster?: OsintCluster;
   saved: boolean;
   importing: null | 'posts' | 'article';
@@ -1215,6 +1432,7 @@ function PreviewDrawer({
   onImportArticle: () => void;
   onSave: () => void;
 }) {
+  const showEs = Boolean(esTitle && esTitle !== item.title);
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex justify-end" onClick={onClose}>
       <aside
@@ -1237,6 +1455,19 @@ function PreviewDrawer({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Traducción automática del titular: original + español, sin sustituir nada */}
+        {showEs && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-1.5">
+            <div className="text-[13px] font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+              <Languages className="w-3.5 h-3.5" /> Titular en español (traducción automática)
+            </div>
+            <p className="text-[15px] font-semibold text-white leading-snug">{esTitle}</p>
+            <p className="text-[13px] text-neutral-400 leading-relaxed">
+              Original ({item.language?.toUpperCase() || 'S/ID'}): {item.title}
+            </p>
+          </div>
+        )}
 
         {item.snippet ? (
           <p className="text-sm text-neutral-300 leading-relaxed">{item.snippet}</p>
@@ -1287,9 +1518,10 @@ function PreviewDrawer({
         {item.language !== 'es' && (
           <p className="text-[13px] text-neutral-500 leading-relaxed flex items-start gap-2">
             <Languages className="w-4 h-4 mt-0.5 shrink-0 text-neutral-500" />
-            Esta fuente no está en español: al importar se traduzirá automáticamente con la IA del
-            proyecto y el texto original quedará conservado. Si la IA no está disponible, se
-            importará el original tal cual.
+            Esta fuente no está en español: el titular se muestra traducido automáticamente
+            junto al original. Al importar, la IA del proyecto lo traduce y reescribe con
+            palabras propias (el texto original queda conservado). Si la IA no está
+            disponible, se importará el original tal cual.
           </p>
         )}
 
