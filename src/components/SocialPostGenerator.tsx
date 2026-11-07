@@ -1124,90 +1124,42 @@ const parseAiJson = (text: string): unknown | null => {
   }
 };
 
-/** Núcleo de instrucciones: identificación de la noticia, formato de salida,
- *  límites de cada campo, tweet, criterio editorial y reglas finales. Sin la
- *  presentación de la respuesta, que cambia según se llame por API (JSON puro)
- *  o se copie para una IA externa (JSON + tweet). */
+/** Núcleo de instrucciones: la plantilla corta que copia el usuario para que
+ *  otra IA devuelva el JSON del post y el tweet. Sin la presentación de la
+ *  respuesta, que cambia según se llame por API (JSON puro) o se copie para
+ *  una IA externa (JSON + tweet). */
 const buildEditorialPromptCore = (categories: string[]): string =>
   [
-    "Actúa como editor periodístico de BlackNews, un medio internacional independiente. Tu tarea es transformar el contexto proporcionado en una publicación informativa y un texto para redes sociales.",
+    "Actúa como editor periodístico de BlackNews, un medio internacional independiente: transforma el contexto proporcionado en una publicación informativa y en el cuerpo de su tweet.",
     "",
-    "## 1. IDENTIFICAR LA NOTICIA",
-    "- Identifica el tema principal a partir de la noticia, instrucciones y contexto proporcionados.",
-    "- Trabaja exclusivamente sobre ese tema. No cambies de noticia ni mezcles acontecimientos independientes.",
-    "- Los titulares y bajadas existentes son referencias que pueden corregirse, no instrucciones para conservar una noticia anterior.",
-    "- Si existen varios temas, prioriza el que la redacción indique como principal.",
-    `- Si no existe información suficiente para identificar una noticia, pregunta: ${NO_CONTEXT_QUESTION}`,
-    "- No inventes información para completar datos faltantes.",
+    "## 1. LA NOTICIA",
+    "- Redacta SOBRE la noticia del contexto: no cambies de tema ni mezcles acontecimientos independientes.",
+    "- El titular y la bajada actuales son una referencia que puedes corregir, no algo que debas conservar.",
+    `- Si falta información para identificar la noticia, pregunta: ${NO_CONTEXT_QUESTION}`,
+    "- No inventes cifras, fechas, nombres ni fuentes: lo que no aparece, no se afirma.",
     "",
-    "## 2. FORMATO DE SALIDA",
-    "Entrega un objeto JSON válido con esta estructura exacta:",
+    "## 2. SALIDA",
+    "Un único objeto JSON válido, sin markdown y sin propiedades extra:",
     '{"content":{"title":"...","description":"...","category":"...","photoCaption":"...","selectedCountries":[]},"tweetBody":"..."}',
-    "No agregues propiedades.",
     "",
-    "## 3. REDACCIÓN",
+    "## 3. CAMPOS",
+    "- title: el hecho principal, en EXACTAMENTE 3 líneas separadas por \\n, de 5 o 6 palabras y 21 a 26 caracteres cada una (65 a 78 en total, tope 120). Grafía normal, sin mayúsculas completas y sin detalles secundarios.",
+    "- description: 1 o 2 frases en UNA sola línea, de 120 a 170 caracteres, con cifras, fechas, protagonistas o consecuencias que no estén en el titular.",
+    `- category: una sola de la lista: ${categories.join(", ") || "(ninguna habilitada)"}`,
+    '- photoCaption: crédito o descripción de la fotografía, máximo 60 caracteres; si no procede, "".',
+    "- selectedCountries: de 0 a 4 países de la noticia, con código ISO de 2 letras en mayúsculas, nombre en español y bandera correcta; si no procede, [].",
     "",
-    "**TITLE**",
-    "- Describe el hecho principal.",
-    "- Exactamente 3 líneas, separadas por \\n.",
-    "- Entre 5 y 6 palabras por línea.",
-    "- Entre 21 y 26 caracteres por línea (65 a 78 en total; tope duro 120).",
-    "- Grafía normal, sin mayúsculas completas.",
-    "- No desarrolles detalles secundarios.",
-    "",
-    "**DESCRIPTION**",
-    "- Entre 120 y 170 caracteres.",
-    "- Una o dos frases en una sola línea, sin \\n.",
-    "- Amplía el titular con cifras, fechas, protagonistas, antecedentes o consecuencias.",
-    "- Evita repetir información ya expresada en el titular.",
-    "",
-    "**CATEGORY**",
-    "Selecciona una sola categoría de esta lista:",
-    categories.join(", ") || "(ninguna habilitada)",
-    "",
-    "**PHOTOCAPTION**",
-    "- Máximo 60 caracteres.",
-    "- Crédito o descripción de la fotografía.",
-    '- Si no corresponde, utiliza "".',
-    "",
-    "**SELECTEDCOUNTRIES**",
-    "- Entre 0 y 4 países relacionados directamente con la noticia.",
-    "- Utiliza código ISO de dos letras en mayúsculas, nombre en español y bandera correcta.",
-    "- Ordena por relevancia.",
-    "- Si no corresponde, utiliza [].",
-    "",
-    "## 4. TWEET / REDES SOCIALES",
-    "",
-    "Genera un texto complementario sobre el mismo acontecimiento.",
-    "- Una sola línea.",
-    "- Máximo 215 caracteres.",
-    "- Aporta un dato, antecedente, reacción o consecuencia que no esté desarrollado en el titular ni en la descripción.",
-    "- No repitas innecesariamente información.",
-    "- Sin emojis, hashtags, enlaces, comillas ni opiniones personales.",
-    "- No agregues [banderas], el símbolo » ni #BlackNews: la plataforma los incorpora automáticamente.",
+    "## 4. TWEET (tweetBody)",
+    "- Sólo el cuerpo: UNA sola línea y máximo 215 caracteres.",
+    "- Aporta un dato, antecedente, reacción o consecuencia que no estén en el titular ni en la bajada.",
+    "- Sin emojis, hashtags, enlaces, comillas ni opiniones.",
+    "- No lleves [banderas], » ni #BlackNews: la plataforma los añade sola.",
     "",
     "## 5. CRITERIO EDITORIAL",
+    "Español neutro y estilo profesional, directo y contundente, basado en hechos verificables. Distingue hechos, propuestas, denuncias y especulaciones, y atribuye cada declaración a su fuente. No presentes acusaciones como probadas, no elogies ni condenes automáticamente a gobiernos, partidos o instituciones, y no uses lenguaje propagandístico ni adjetivos de más. Si tienes búsqueda, verifica los datos antes de redactar.",
     "",
-    "- Español neutro.",
-    "- Estilo profesional, directo, preciso y contundente.",
-    "- Prioriza hechos verificables, cifras y fuentes identificables.",
-    "- Diferencia hechos confirmados, propuestas, denuncias, investigaciones y especulaciones.",
-    "- Atribuye las declaraciones a sus respectivas fuentes.",
-    "- No presentes acusaciones como hechos probados.",
-    "- No elogies ni condenes automáticamente a gobiernos, partidos o instituciones.",
-    "- No utilices lenguaje propagandístico, burocrático ni adjetivos innecesarios.",
-    "- No inventes cifras, fechas, nombres, declaraciones ni fuentes.",
-    "- Si tienes acceso a herramientas de búsqueda, verifica los datos antes de redactar.",
-    "",
-    "## 6. REGLAS FINALES",
-    "",
-    "Antes de responder, comprueba que:",
-    "- Los tres textos se refieren al mismo acontecimiento.",
-    "- Cada campo aporta información diferente.",
-    "- Se respetan las extensiones y formatos.",
-    "- La categoría pertenece al catálogo.",
-    "- Los países y sus banderas son correctos.",
-    "- El JSON es válido y no contiene propiedades adicionales.",
+    "## 6. COMPROBACIÓN FINAL",
+    "JSON válido y sin extras · title en 3 líneas de 21-26 caracteres y description en una sola línea de 120-170 · tweet en una sola línea y por debajo de 216, sin banderas ni firma · categoría del catálogo y banderas correctas · los tres textos con información distinta entre sí · nada inventado.",
   ].join("\n");
 
 export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
@@ -3005,56 +2957,46 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       `Si el apartado 1 determina que no hay información suficiente para identificar la noticia, no inventes: devuelve exactamente {"question":"${NO_CONTEXT_QUESTION}"} y ninguna otra propiedad.`,
     ].join("\n");
 
-  /** Plantilla BASE del prompt para pegar en una IA externa: el documento
-   *  «BLACKNEWS — GENERADOR DE PUBLICACIONES · v2» (identificación de la
-   *  noticia, formato JSON, redacción, tweet, criterio editorial, reglas
-   *  finales y presentación) con la noticia cargada al final. La comparten
-   *  los botones «Prompt» y «Todo», así no pueden desincronizarse con el
-   *  sistema de la llamada directa. */
+  /** Plantilla BASE del prompt para pegar en una IA externa: la plantilla
+   *  corta de la redacción con la noticia cargada al final. La comparten los
+   *  botones «Prompt» y «Todo», así no pueden desincronizarse con el sistema
+   *  de la llamada directa. */
   const buildAiPromptBase = () => {
     const t = aiTopic.trim() || title.trim() || description.trim();
-    return `BLACKNEWS — GENERADOR DE PUBLICACIONES · v2
+    // El titular y la bajada sólo se listan si aportan algo distinto a la
+    // noticia: repetirlos sólo ensucia el prompt.
+    const ref: string[] = [];
+    if (title.trim() && title.trim() !== t)
+      ref.push(
+        `Titular actual (referencia, corrígelo si no es esta noticia): ${title.trim()}`,
+      );
+    if (description.trim() && description.trim() !== t)
+      ref.push(`Bajada actual (referencia): ${description.trim()}`);
+    return `BLACKNEWS — GENERADOR DE PUBLICACIONES
 
 ${buildEditorialPromptCore(enabledCategories)}
 
-## 7. PRESENTACIÓN
+## 7. ENTREGA
 
-Entrega siempre en este orden:
+**A. JSON PARA BLACKNEWS 4:5 GENERATOR** — bloque de código JSON editable con el objeto del apartado 2.
+**B. TWEET / REDES SOCIALES** — tweetBody tal cual, sin modificar.
 
-**A. JSON PARA BLACKNEWS 4:5 GENERATOR**
-Un bloque de código JSON válido y editable con el objeto del apartado 2.
-
-**B. TWEET / REDES SOCIALES**
-El contenido exacto de tweetBody, sin modificaciones.
-
-No agregues explicaciones ni comentarios adicionales.
-Si el apartado 1 determina que no hay información suficiente para identificar la noticia: NO entregues A ni B; responde únicamente con la pregunta del apartado 1.
+Sin explicaciones ni comentarios. Si no hay información suficiente para identificar la noticia (apartado 1), no entregues A ni B: responde sólo con la pregunta.
 
 === CONTEXTO ===
-Noticia e instrucciones de la redacción (redacta sobre esto):
+Noticia (redacta sobre esto):
 ${t || "(vacío)"}
-Referencia actual del post — el titular y la bajada se corrigen si no son esta noticia:
-Título actual: ${title || "(vacío)"}
-Bajada actual: ${description || "(vacío)"}
-Secciones habilitadas: ${enabledCategories.join(", ") || "(ninguna)"}
-Países del post: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
+${ref.length ? `${ref.join("\n")}\n` : ""}Países ya etiquetados en el post (ajústalos a la noticia): ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
   };
 
-  /** Texto que copia el botón «Todo»: SIEMPRE empieza por la base del
-   *  prompt (para que una IA redacte el post y el tweet) y añade lo ya
-   *  generado más el contexto completo de la noticia. Si aún no hay JSON o
-   *  tweet se avisa en su sección en vez de dejarlas vacías. */
+  /** Texto que copia el botón «Todo»: el prompt completo y, sólo si existen,
+   *  el JSON y el tweet ya generados. Sin secciones vacías ni contexto
+   *  duplicado: el que llama va justo al final del prompt. */
   const buildAiTodoClipboard = () => {
-    const pending =
-      "(aun no generado — pega el PROMPT de arriba en una IA para obtenerlo)";
-    const json = aiJsonText.trim()
-      ? `=== JSON ===\n${aiJsonText}`
-      : `=== JSON ===\n${pending}`;
-    const tweet = aiTweet.trim()
-      ? `=== TWEET ===\n${aiTweet}`
-      : `=== TWEET ===\n${pending}`;
-    const ctx = `=== CONTEXT ===\nNoticia e instrucciones (redacta sobre esto): ${aiTopic.trim() || title || description || "(no definida)"}\nReferencia del post (se corrige si no es esta noticia) — Título: ${title || "(vacío)"} | Bajada: ${description || "(vacío)"}\nCategorías: ${enabledCategories.join(", ") || "(ninguna)"}\nPaíses: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno)"}`;
-    return `=== PROMPT ===\n${buildAiPromptBase()}\n\n${json}\n\n${tweet}\n\n${ctx}`;
+    const parts = [`=== PROMPT ===\n${buildAiPromptBase()}`];
+    if (aiJsonText.trim()) parts.push(`=== JSON ===\n${aiJsonText.trim()}`);
+    if (aiTweet.trim()) parts.push(`=== TWEET ===\n${aiTweet.trim()}`);
+    return parts.join("\n\n");
   };
 
   const callGroqDirect = async (
@@ -9128,10 +9070,10 @@ Países del post: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(buildAiTodoClipboard());
-                showToast("✓ Todo copiado (prompt + JSON + tweet + contexto)");
+                showToast("✓ Todo copiado (prompt + JSON + tweet)");
               } catch {}
             }}
-            title="Copia la base del prompt para la IA + el JSON + el tweet + el contexto"
+            title="Copia el prompt para otra IA y, si ya existen, el JSON y el tweet"
             className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium cursor-pointer"
           >
             Todo
@@ -9372,14 +9314,15 @@ Países del post: ${selectedCountries.map((c) => c.name).join(", ") || "(ninguno
                     <button
                       type="button"
                       onClick={async () => {
-                        const combined = `=== JSON GENERADO ===\n${aiJsonText || "(no disponible)"}\n\n=== TWEET ===\n${aiTweet || "(no disponible)"}\n\n=== PROMPT PARA REUTILIZAR EN IA ===\n${aiTopic.trim() ? `Tema: ${aiTopic.trim()}` : ""}\nCategorías: ${enabledCategories.join(", ")}\nPaíses: ${countryCatalog.map((c) => c.name).join(", ")}`;
                         try {
-                          await navigator.clipboard.writeText(combined);
-                          showToast("✓ JSON + Tweet + Prompt copiado");
+                          await navigator.clipboard.writeText(
+                            buildAiTodoClipboard(),
+                          );
+                          showToast("✓ Prompt + JSON + Tweet copiado");
                         } catch {}
                       }}
                       className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                      title="Copia el JSON completo, el tweet y el contexto para pegarlo en otra IA"
+                      title="Copia el prompt para pegarlo en otra IA y, si ya existen, el JSON y el tweet generados"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copiar Todo (JSON+Tweet)</span>
