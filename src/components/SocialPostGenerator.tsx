@@ -1506,6 +1506,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bgAudio, mediaType, postDesign]);
 
+  // Fases del aviso en la vista previa: `warningActive` mientras suena el
+  // cartel y `warningFrameActive` durante la portada de 3 s. Declarados aquí
+  // (y no en el bloque del aviso, más abajo) porque el efecto del tema de
+  // fondo, justo debajo, los usa para no sonar en esas fases: en el archivo
+  // el tema espera a que termine el aviso.
+  const [warningActive, setWarningActive] = useState(false);
+  const [warningFrameActive, setWarningFrameActive] = useState(false);
+
   // Fase del tema: encendido cuando el texto empieza a irse (o desde el
   // arranque si «texto → vídeo» está apagado) y apagado con fade al entrar el
   // outro o al pausar la vista previa. El «latch» evita que el tema se corte
@@ -1527,6 +1535,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       bgAudio &&
       isVideoPlaying &&
       !outroActive &&
+      // Durante el aviso el archivo mantiene el tema mudo (sube al llegar el
+      // clip): la vista previa no debe sonar en la portada ni en el cartel.
+      !(fadeArmed && (warningActive || warningFrameActive)) &&
       (fadeArmed ? bgAudioLatchedRef.current : true);
     const prev = bgAudioOnRef.current;
     bgAudioOnRef.current = wantSound;
@@ -1548,6 +1559,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     mediaType,
     postFormat,
     postDesign,
+    warningActive,
+    warningFrameActive,
   ]);
 
   // Cambio del volumen elegido: lo guarda la rampa y, si el tema suena,
@@ -1713,10 +1726,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const [warningFrameDur] = useState(3); // segundos del frame previo
   const [warningDuration, setWarningDuration] = useState(0); // actualizado al cargar el mp4
   const warningDurFallback = 16.02; // duración aproximada de Advertencia.mp4
-  // true mientras el aviso ocupa la vista previa antes del clip.
-  const [warningActive, setWarningActive] = useState(false);
+  // Espejos en ref de los dos estados de fase (arriba), para leerlos desde
+  // callbacks sin esperar al re-render.
   const warningActiveRef = useRef(false);
   const warningRef = useRef<HTMLVideoElement>(null);
+  // Fase de portada (los 3 s que preceden al cartel): es la miniatura que
+  // ven las redes. Se pausa y se reanuda con el mismo botón de play, así que
+  // guarda su fecha límite y los ms que queden cuando se congela.
+  const warningFrameActiveRef = useRef(false);
+  const warningFrameTimerRef = useRef(0); // setTimeout de la portada
+  const warningFrameEndRef = useRef(0); // fecha límite (performance.now)
+  const warningFrameRemainRef = useRef(0); // ms restantes al pausar
   // Muestra del aviso de contenido sensible: se rellena con el MP4 importado.
   const warningVideoSrcValue = warningVideoSrc;
 
@@ -2060,6 +2080,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     el: HTMLVideoElement;
     node: MediaElementAudioSourceNode;
   } | null>(null);
+  // Mismo criterio para el cartel del aviso: su audio entra en la pista de
+  // la exportación a través de su propio nodo cacheado.
+  const warningAudioNodeRef = useRef<{
+    el: HTMLVideoElement;
+    node: MediaElementAudioSourceNode;
+  } | null>(null);
   // WebAudio graph for the preview video (created on first export with sound and
   // reused afterwards: a media element can only be routed through one source node)
   const audioGraphRef = useRef<{
@@ -2107,13 +2133,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (!(e > s)) return null;
     return Math.round(((e - s) / videoSpeed) * 10) / 10;
   })();
-  // Total con el cierre BlackNews encendido: lo que de verdad durará el
-  // archivo. La intro TV16:9 no se suma aquí porque sólo alarga la salida.
+  // Total con el aviso de contenido sensible y el cierre BlackNews
+  // encendidos: lo que de verdad durará el archivo. La intro TV 16:9 no se
+  // suma aquí porque sólo alarga la salida.
+  const warningPadSeconds = contentWarning
+    ? warningFrameDur +
+      (warningDuration > 0 ? warningDuration : warningDurFallback)
+    : 0;
   const exportTotalSeconds =
     exportClipSeconds === null
       ? null
       : Math.round(
-          (exportClipSeconds + (videoOutro ? outroDuration : 0)) * 10,
+          (exportClipSeconds +
+            (videoOutro ? outroDuration : 0) +
+            warningPadSeconds) *
+            10,
         ) / 10;
 
   // Toggle country selection — la identidad es el nombre: dos países
@@ -2306,7 +2340,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       podcastMusicOn &&
       isVideoPlaying &&
       !outroActive &&
-      !isRecordingVideo;
+      !isRecordingVideo &&
+      // El archivo arranca la pista tras el aviso (portada + cartel): aquí
+      // tampoco debe sonar durante esas fases.
+      !warningActive &&
+      !warningFrameActive;
     if (shouldPlay) {
       if (m.paused) void m.play().catch(() => {});
     } else if (!m.paused) {
@@ -2320,6 +2358,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     isRecordingVideo,
     postDesign,
     mediaType,
+    warningActive,
+    warningFrameActive,
   ]);
 
   /** Imagen de fondo del podcast: una imagen plana (blob/data/https). */
@@ -2386,6 +2426,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         maxVideoDuration,
         // Cierre de marca (Blacknews.mp4) al final del vídeo. Por defecto false.
         videoOutro,
+        // Aviso de contenido sensible antes del clip (portada + cartel).
+        contentWarning,
+        warningFrameOrigin,
         mediaUrl: mediaSrc.startsWith("blob:") ? null : mediaSrc,
         // Diseño del post (noticias o podcast) y ajustes de la variante de
         // audio. La onda se recalcula al cargar el archivo: aquí sólo va lo
@@ -2583,6 +2626,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
         if (typeof data.mediaSettings.videoOutro === "boolean")
           setVideoOutro(data.mediaSettings.videoOutro);
+        // Aviso de contenido sensible: se restaura con su frame de portada.
+        if (typeof data.mediaSettings.contentWarning === "boolean")
+          setContentWarning(data.mediaSettings.contentWarning);
+        if (
+          data.mediaSettings.warningFrameOrigin === "cover" ||
+          data.mediaSettings.warningFrameOrigin === "first" ||
+          data.mediaSettings.warningFrameOrigin === "last"
+        )
+          setWarningFrameOrigin(data.mediaSettings.warningFrameOrigin);
         // Variante podcast: diseño, serie, episodio y fondo (si la URL sigue
         // viva). El diseño se aplica aunque el audio se haya perdido, para
         // que un JSON siga abriendo el post tal y como se dejó.
@@ -6368,6 +6420,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     let decoder: VideoDecoder | null = null;
     let outroDecoder: VideoDecoder | null = null;
+    let warningDecoder: VideoDecoder | null = null;
     let encoder: VideoEncoder | null = null;
     let audioEncoder: AudioEncoder | null = null;
     // Tiempos por fase: visibles en DevTools con nivel "Verbose" ([export-rapida])
@@ -6394,6 +6447,58 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         rot: 0,
         codec: "avc1.640028",
       };
+
+      // ── 1b. Aviso de contenido sensible (Blacknews-Advertencia.mp4) ──
+      // Fase previa [portada de 3 s + cartel] ANTES de todo lo demás. Como el
+      // cierre, es un extra: si algo falla aquí se omite y el vídeo sale sin
+      // aviso, nunca aborta la exportación (`warnPad` queda en 0 y no se
+      // desplaza ni el reloj ni el audio).
+      let warningClip: DemuxedAvcClip | null = null;
+      let warningAudio: AudioBuffer | null = null;
+      let warnPad = 0;
+      let warnCoverDur = 0;
+      if (contentWarning) {
+        try {
+          const wRaw = await (await fetch(warningVideoSrc)).arrayBuffer();
+          if (wRaw.byteLength > 256) {
+            warningClip = await demuxAvcClip(wRaw);
+            if (warningClip && warningClip.samples.length < 2)
+              warningClip = null;
+            if (warningClip && !mutedForExport) {
+              try {
+                const probe = new OfflineAudioContext(1, 1, 44100);
+                const full = await probe.decodeAudioData(wRaw.slice(0));
+                const oac = new OfflineAudioContext(
+                  2,
+                  Math.max(1, Math.ceil(full.duration * 48000)),
+                  48000,
+                );
+                const node = oac.createBufferSource();
+                node.buffer = full;
+                node.connect(oac.destination);
+                node.start(0);
+                warningAudio = await oac.startRendering();
+              } catch {
+                warningAudio = null; // el cartel sale mudo
+              }
+            }
+          }
+        } catch {
+          warningClip = null;
+          warningAudio = null;
+        }
+        if (warningClip) {
+          warnCoverDur = warningFrameDur;
+          warnPad =
+            warnCoverDur +
+            (warningClip.srcDur > 0
+              ? warningClip.srcDur
+              : warningClip.samples.length / 30);
+        } else {
+          console.warn("[export-rapida] aviso omitido: sin muestras AVC");
+        }
+        snap("warning-prep");
+      }
 
       // ── 2. Ventana de exportación (mismo criterio que la ruta clásica) ──
       const ts = clip?.ts ?? 1;
@@ -6486,8 +6591,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         textFadeOut &&
         postDesign !== "podcast" &&
         (postFormat === "4:5" || postFormat === "9:16");
-      const themeInAt = themeFadeArmed ? introPad + textFadeOutDur : 0;
-      const themeOutAt = introPad + outDur;
+      const themeInAt =
+        warnPad + (themeFadeArmed ? introPad + textFadeOutDur : 0);
+      const themeOutAt = warnPad + introPad + outDur;
       const themeWanted = bgAudio && !audioOnly && bgVolume > 0;
       let renderedAudio: AudioBuffer | null = null;
       let hasTheme = false;
@@ -6495,8 +6601,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           const decoderCtx = new OfflineAudioContext(1, 1, 44100);
           const outRate = 48000;
-          // Pasada de intro + clip: la voz entra al terminar la intro.
-          const mixDur = introPad + outDur;
+          // Fase de aviso + pasada de intro + clip: la voz entra al terminar
+          // la intro y el cartel del aviso suena donde le toca, por delante.
+          const mixDur = warnPad + introPad + outDur;
           const oac = new OfflineAudioContext(
             2,
             Math.max(1, Math.ceil(mixDur * outRate)),
@@ -6510,7 +6617,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               srcNode.buffer = fullAudio;
               srcNode.playbackRate.value = speed;
               srcNode.connect(oac.destination);
-              srcNode.start(introPad, start);
+              srcNode.start(warnPad + introPad, start);
               hasVoice = true;
             } catch {
               // Voz no decodificable: si hay cama o tema, sigue sonando.
@@ -6532,7 +6639,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               mGain.gain.value = podcastMusicVol;
               mNode.connect(mGain);
               mGain.connect(oac.destination);
-              mNode.start(introPad);
+              mNode.start(warnPad + introPad);
               hasMusic = true;
             } catch {
               // Cama no disponible: se exporta sin ella (nunca aborta).
@@ -6554,7 +6661,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               // Tema no disponible: se exporta sin él (nunca aborta).
             }
           }
-          if (hasVoice || hasMusic || hasTheme)
+          // Audio del cartel: suena tras los 3 s de portada (que van en
+          // silencio) y termina justo cuando empieza la pasada de intro.
+          let hasWarning = false;
+          if (warnPad > 0 && warningAudio) {
+            try {
+              const wNode = oac.createBufferSource();
+              wNode.buffer = warningAudio;
+              wNode.connect(oac.destination);
+              wNode.start(warnCoverDur);
+              hasWarning = true;
+            } catch {
+              // Cartel sin audio: la fase previa sale muda (nunca aborta).
+            }
+          }
+          if (hasVoice || hasMusic || hasTheme || hasWarning)
             renderedAudio = await oac.startRendering();
         } catch {
           renderedAudio = null; // sin audio exportable → el MP4 sale mudo
@@ -6635,7 +6756,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       };
       const hardStop =
         performance.now() +
-        Math.max(45000, (introPad + outDur + outroDurSec) * 1000 + 45000);
+        Math.max(
+          45000,
+          (warnPad + introPad + outDur + outroDurSec) * 1000 + 45000,
+        );
       const waitWhile = async (cond: () => boolean): Promise<void> => {
         while (cond()) {
           if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
@@ -6757,9 +6881,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       // ── 6. Bucle decodificar → componer → codificar con cola FIFO sin bloqueos ──
       let draining = false;
-      // Cada fotograma lleva su bandera: `outro` se pinta a sangre con
-      // paintOutroFrame (sin chyron/ticker), el resto pasa por renderToCanvas.
-      const decodedQueue: Array<{ frame: VideoFrame; outro: boolean }> = [];
+      // Cada fotograma lleva su bandera: `warn` es el cartel del aviso (a
+      // sangre con paintOutroFrame), `outro` es el sello de cierre, y el
+      // resto pasa por renderToCanvas.
+      const decodedQueue: Array<{
+        frame: VideoFrame;
+        outro: boolean;
+        warn: boolean;
+      }> = [];
       const targetFps = 30;
       const targetFrameDurationUs = Math.round(1_000_000 / targetFps);
 
@@ -6770,9 +6899,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // hacía el contador de emisiones— desincroniza el cierre con cualquier
       // fuente que no sea de 30 fps: un clip de 32 fps alargaba el tramo
       // principal un 6,7 % y el sello entraba con el audio ya sonando.
+      const warnSlots = warnPad > 0 ? Math.round(warnPad * targetFps) : 0;
+      const coverSlots =
+        warnPad > 0 ? Math.min(warnSlots, Math.round(warnCoverDur * targetFps)) : 0;
       const introSlots = Math.round(introPad * targetFps);
       const mainSlots = Math.max(2, Math.round(outDur * targetFps));
-      const outroBaseSlot = introSlots + mainSlots;
+      const outroBaseSlot = warnSlots + introSlots + mainSlots;
       // El cierre dura lo que dure su audio o su vídeo (el mayor): así el
       // vídeo nunca termina antes que el sonido.
       const outroEndSlot = outroClip
@@ -6847,11 +6979,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             // allá del borde (intro→clip o clip→cierre) y no deben colarse
             // en la fase siguiente ni adelantarle el sitio al audio.
             const rawSlot = Math.round((frame.timestamp / 1e6) * targetFps);
-            const slot = item.outro
-              ? outroBaseSlot + Math.max(0, rawSlot)
-              : frame.timestamp < introPad * 1e6
-                ? Math.min(rawSlot, Math.max(0, introSlots - 1))
-                : Math.min(rawSlot, outroBaseSlot - 1);
+            // Ranura en la rejilla: el aviso ocupa [0, warnSlots) — la
+            // portada del 0 al coverSlots y el cartel después —, la intro y
+            // el clip se desplazan por warnSlots y el cierre sigue rematando
+            // desde outroBaseSlot. Los fotogramas de más se recortan a SU
+            // fase para no colarse en la siguiente.
+            const slot = item.warn
+              ? Math.min(
+                  coverSlots + Math.max(0, rawSlot),
+                  Math.max(coverSlots, warnSlots - 1),
+                )
+              : item.outro
+                ? outroBaseSlot + Math.max(0, rawSlot)
+                : warnSlots +
+                  (frame.timestamp < introPad * 1e6
+                    ? Math.min(rawSlot, Math.max(0, introSlots - 1))
+                    : Math.min(rawSlot, introSlots + mainSlots - 1));
             if (slot < nextSlot) {
               // De más: la fuente va más rápida que 30 fps o la ranura ya
               // quedó cubierta; se descarta sin romper la cadena.
@@ -6862,7 +7005,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             // este fotograma, para que los huecos muestren el cuadro
             // anterior y no adelanten el cambio.
             if (paintedOnce) await padUntil(slot);
-            if (item.outro) {
+            if (item.warn) {
+              // Cartel del aviso: a sangre sobre negro, sin overlays.
+              paintOutroFrame(
+                canvas,
+                POST_W,
+                POST_H,
+                frame,
+                frame.displayWidth,
+                frame.displayHeight,
+                warningClip ? warningClip.rot : 0,
+              );
+            } else if (item.outro) {
               // Cierre: sello a sangre sobre negro, sin overlays ni velos.
               paintOutroFrame(
                 canvas,
@@ -6885,7 +7039,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   height: frame.displayHeight,
                   rotation: rot,
                 },
-                (slot * targetFrameDurationUs) / 1e6,
+                // Segundo de salida SIN la fase de aviso: la intro TV y las
+                // animaciones conservan su reloj de siempre.
+                ((slot - warnSlots) * targetFrameDurationUs) / 1e6,
                 // Segundo de contenido: sin el desfase de la pasada de intro
                 // (los fotogramas de esa pasada quedan en 0, con texto).
                 Math.max(0, frame.timestamp / 1e6 - introPad),
@@ -6907,13 +7063,160 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
       };
 
+      // ── 6a. Fase previa del aviso: portada (3 s) + cartel ──
+      // Se emite ANTES de tocar el clip: las ranuras son monotónicas y el
+      // primer fotograma pintado es el que rellena los huecos previos, así
+      // que la portada y el cartel no pueden llegar después del clip.
+      if (warnSlots > 0 && warningClip) {
+        // Frame de la portada: un fotograma síncrono real del clip (el más
+        // cercano al inicio, o al final con «Último fotograma»). Decoder
+        // aparte y descartable: sólo aporta un cuadro, y si no decodifica la
+        // portada sale igual, sin foto debajo de la composición.
+        const coverOut: { frame: VideoFrame | null } = { frame: null };
+        if (!audioOnly) {
+          const at = warningFrameOrigin === "last" ? end : start;
+          let best: (typeof inRange)[number] | null = null;
+          for (const s of inRange) {
+            if (!s.is_sync) continue;
+            if (
+              !best ||
+              Math.abs(s.cts / ts - at) < Math.abs(best.cts / ts - at)
+            )
+              best = s;
+          }
+          if (best) {
+            try {
+              const cd = new VideoDecoder({
+                output: (f) => {
+                  coverOut.frame = f;
+                },
+                error: (e) =>
+                  console.warn("[export-rapida] portada sin frame:", e),
+              });
+              cd.configure({ codec, description });
+              cd.decode(
+                new EncodedVideoChunk({
+                  type: "key",
+                  timestamp: 0,
+                  duration: targetFrameDurationUs,
+                  data: best.data,
+                }),
+              );
+              await cd.flush();
+              cd.close();
+            } catch {
+              coverOut.frame = null;
+            }
+          }
+        }
+        const coverFrame = coverOut.frame;
+        if (
+          !audioOnly &&
+          postDesign !== "podcast" &&
+          warningFrameOrigin !== "cover" &&
+          coverFrame
+        ) {
+          // «Primer/Último fotograma»: el frame crudo, a sangre. En podcast
+          // no: allí la vista previa pinta la composición (onda y reloj) y el
+          // archivo tiene que hacer lo mismo.
+          paintOutroFrame(
+            canvas,
+            POST_W,
+            POST_H,
+            coverFrame,
+            coverFrame.displayWidth,
+            coverFrame.displayHeight,
+            rot,
+          );
+        } else {
+          // «Portada con titular» (y podcast): la composición del post con
+          // el frame real como fondo; sin frame, sobre negro.
+          await renderToCanvas(
+            canvas,
+            audioOnly ? (podcastBgRef.current ?? undefined) : undefined,
+            cachedFlags,
+            false,
+            !audioOnly && coverFrame
+              ? {
+                  source: coverFrame,
+                  width: coverFrame.displayWidth,
+                  height: coverFrame.displayHeight,
+                  rotation: rot,
+                }
+              : undefined,
+            // Reloj del podcast = posición del frame elegido (lo que marca
+            // la vista previa al pausar sobre él); con intro TV, la portada
+            // se pinta en el estado HOLD (el mismo del PNG): titular
+            // desplegado sobre la imagen en B&N.
+            postDesign === "podcast"
+              ? Math.max(
+                  0,
+                  (warningFrameOrigin === "last" ? end : start) - trimStart,
+                )
+              : tvIntro
+                ? tvIntroDur * 0.5
+                : 0,
+            0,
+          );
+        }
+        paintedOnce = true;
+        // Los 3 s de portada ocupan sus ranuras con este único cuadro.
+        for (let slot = 0; slot < coverSlots; slot++) {
+          if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
+          if (fail) throw fail;
+          await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 6);
+          emitSlot(slot);
+        }
+        coverFrame?.close();
+        snap("warning-cover");
+        // Cartel: sus fotogramas entran al mismo codificador con la bandera
+        // `warn` y ocupan las ranuras que quedan hasta el final de la fase.
+        const wc = warningClip;
+        const wd = new VideoDecoder({
+          output: (frame) => {
+            decodedQueue.push({ frame, outro: false, warn: true });
+            void processQueue();
+            notify();
+          },
+          error: failWith,
+        });
+        warningDecoder = wd;
+        wd.configure({ codec: wc.codec, description: wc.description });
+        for (const s of wc.samples) {
+          await waitWhile(() => wd.decodeQueueSize > 32);
+          wd.decode(
+            new EncodedVideoChunk({
+              type: s.is_sync ? "key" : "delta",
+              timestamp: Math.round((s.cts / wc.ts) * 1e6),
+              duration: Math.max(1, Math.round((s.duration / wc.ts) * 1e6)),
+              data: s.data,
+            }),
+          );
+        }
+        await wd.flush();
+        snap("warning-feed");
+        await waitWhile(
+          () =>
+            decodedQueue.length > 0 ||
+            draining ||
+            (encoder as VideoEncoder).encodeQueueSize > 0,
+        );
+        snap("warning-encode");
+        // Borde exacto aviso → intro: la fase dura exactamente warnSlots
+        // ranuras (si el cartel venía corto se sostiene su último cuadro; si
+        // venía largo, processQueue ya lo recortó).
+        await padUntil(warnSlots);
+      }
+
       if (audioOnly) {
         // Sin pista de vídeo que decodificar: cada ranura de la rejilla se
         // pinta a mano con drawPodcastFrame (fondo, onda y reloj en su
         // instante) y se emite. Sólo este bucle escribe en el codificador,
         // así que el orden de las ranuras es estricto y el audio calza.
         const bgEl = podcastBgRef.current ?? undefined;
-        for (let slot = 0; slot < outroBaseSlot; slot++) {
+        // Las ranuras [0, warnSlots) ya las ocupó la fase del aviso: este
+        // bucle arranca donde la deja y el reloj se mide desde ahí.
+        for (let slot = warnSlots; slot < outroBaseSlot; slot++) {
           if (isCancelledRef.current) throw new Error("EXPORT_CANCELLED");
           if (fail) throw fail;
           await waitWhile(() => (encoder as VideoEncoder).encodeQueueSize > 6);
@@ -6923,7 +7226,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             cachedFlags,
             false,
             undefined,
-            slot / targetFps,
+            (slot - warnSlots) / targetFps,
           );
           paintedOnce = true;
           // Huecos previos: se rellenan antes de emitir este fotograma para
@@ -6940,7 +7243,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       } else {
         decoder = new VideoDecoder({
           output: (frame) => {
-            decodedQueue.push({ frame, outro: false });
+            decodedQueue.push({ frame, outro: false, warn: false });
             void processQueue();
             notify();
           },
@@ -6986,7 +7289,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (oc && oc.samples.length > 0) {
         const od = new VideoDecoder({
           output: (frame) => {
-            decodedQueue.push({ frame, outro: true });
+            decodedQueue.push({ frame, outro: true, warn: false });
             void processQueue();
             notify();
           },
@@ -7025,16 +7328,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const ae = audioEncoder;
       if (ae) {
         const frameSize = 1024;
-        // Intro TV: la mezcla (`ra`) cubre ya la pasada de intro + el clip, y
-        // sólo el tema suena durante la intro (la voz entra al reiniciarse el
-        // vídeo). Sin mezcla, la intro se rellena de silencio. Si hay cierre,
-        // su audio (o silencio si el sello va mudo) cierra la pista y la
-        // iguala a la duración del vídeo.
-        const introSamples = introPad > 0 ? Math.round(introPad * 48000) : 0;
-        // La mezcla (`ra`) ya incluye la pasada de intro, así que va pegada al
-        // inicio de la pista; sin ella, el hueco de la intro se rellena de
+        // Aviso + intro TV: la mezcla (`ra`) cubre ya la fase previa (con el
+        // cartel sonando tras su portada), la pasada de intro y el clip, y
+        // sólo el tema suena durante esas fases (la voz entra al reiniciarse
+        // el vídeo). Sin mezcla, aviso e intro se rellenan de silencio. Si hay
+        // cierre, su audio (o silencio si el sello va mudo) cierra la pista y
+        // la iguala a la duración del vídeo.
+        const leadSamples = Math.round((warnPad + introPad) * 48000);
+        // La mezcla (`ra`) ya incluye aviso e intro, así que va pegada al
+        // inicio de la pista; sin ella, el hueco de esas fases se rellena de
         // silencio como antes para que el cierre caiga en su segundo exacto.
-        const mainStart = ra ? 0 : introSamples;
+        const mainStart = ra ? 0 : leadSamples;
         const mainLen = ra
           ? ra.length
           : outroAudioLen > 0
@@ -7110,8 +7414,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         videoOutro && (!outroClip || outroClip.samples.length === 0)
           ? " ⚠️ El cierre BlackNews no pudo incluirse: el archivo sale sin el sello final."
           : "";
+      const warnNote =
+        contentWarning && !warningClip
+          ? " ⚠️ El aviso de contenido sensible no pudo incluirse: el archivo sale sin la fase previa."
+          : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!${outroNote}`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!${warnNote}${outroNote}`,
       );
       snap("finalize");
       return "done";
@@ -7127,6 +7435,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       try {
         if (outroDecoder && outroDecoder.state !== "closed")
           outroDecoder.close();
+      } catch {}
+      try {
+        if (warningDecoder && warningDecoder.state !== "closed")
+          warningDecoder.close();
       } catch {}
       try {
         if (encoder && encoder.state !== "closed") encoder.close();
@@ -7308,6 +7620,35 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         await seekTo(start);
       }
 
+      // Aviso de contenido sensible: fase previa [portada + cartel] antes del
+      // clip. Se espera a los metadatos del <video> (preload="auto": casi
+      // siempre ya están cargados) para conocer su duración exacta; sin ellos
+      // no se inserta nada, para no descolocar el reloj de salida.
+      const warnEl = contentWarning ? warningRef.current : null;
+      if (warnEl && warnEl.readyState < 1) {
+        await new Promise<void>((res) => {
+          const done = () => {
+            warnEl.removeEventListener("loadedmetadata", done);
+            res();
+          };
+          warnEl.addEventListener("loadedmetadata", done);
+          window.setTimeout(done, 3000);
+        });
+      }
+      const warnPad =
+        contentWarning && warnEl && warnEl.duration > 0
+          ? warningFrameDur + warnEl.duration
+          : 0;
+      const warnNote =
+        contentWarning && warnPad === 0
+          ? " ⚠️ El aviso de contenido sensible no pudo incluirse: el archivo sale sin la fase previa."
+          : "";
+      // Con «Último fotograma» la portada se pinta sobre el final del clip;
+      // con portada o primer frame, el clip ya está aparcado en su inicio.
+      if (warnPad > 0 && warningFrameOrigin === "last") {
+        await seekTo(Math.max(start, end - 0.05));
+      }
+
       // Pasada de intro y duración del clip de salida: los mismos valores que
       // usa `step()` más abajo. Se calculan aquí porque el tema de fondo los
       // necesita para programar sus fundidos antes de arrancar la grabación.
@@ -7325,11 +7666,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         textFadeOut &&
         postDesign !== "podcast" &&
         (postFormat === "4:5" || postFormat === "9:16");
-      // Segundos de SALIDA en que el tema empieza a subir (la pasada de intro
-      // es muda si el fundido texto→vídeo está armado) y en el que debe quedar
-      // en 0, que es justo cuando entra el cierre de marca.
-      const themeInAt = themeFadeArmed ? introPad + textFadeOutDur : 0;
-      const themeOutAt = introPad + clipOutDur;
+      // Segundos de SALIDA en que el tema empieza a subir (la fase de aviso y
+      // la pasada de intro van mudas si el fundido texto→vídeo está armado) y
+      // en el que debe quedar en 0, que es justo cuando entra el cierre.
+      const themeInAt =
+        warnPad + (themeFadeArmed ? introPad + textFadeOutDur : 0);
+      const themeOutAt = warnPad + introPad + clipOutDur;
       if (!mutedForExport || themeWanted) {
         try {
           // Un MediaElementSource por elemento (sólo se puede crear uno): el
@@ -7470,25 +7812,48 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       let outroDrew = false;
       // Instante en que el sello empezó a intentar despegar de su final.
       let outroStartAt = 0;
+      // Fase de aviso (portada → cartel) ANTES de la intro/clip: espejo de
+      // `outroPhase`. `stepWarning` pinta y `schedule` elige el elemento
+      // vivo; la portada corre con setTimeout porque el clip está en pausa y
+      // rVFC no dispara con un elemento parado.
+      let warnPhase: "frame" | "card" | null = null;
+      let warnFrameStartAt = 0;
+      let warnCardStartAt = 0;
+      let warnDrew = false;
+      // Segundo de SALIDA absoluto (la fase de aviso va incluida): manda para
+      // el progreso y para decidir qué se pinta en cada fase.
       const outTNow = () => {
+        if (warnPhase === "frame") {
+          return Math.min(
+            warningFrameDur,
+            (performance.now() - warnFrameStartAt) / 1000,
+          );
+        }
+        if (warnPhase === "card") {
+          return warningFrameDur + (warnEl?.currentTime ?? 0);
+        }
         if (outroPhase) {
-          return introPad + clipOutDur + (outroEl?.currentTime ?? 0);
+          return warnPad + introPad + clipOutDur + (outroEl?.currentTime ?? 0);
         }
         const mediaT = Math.max(
           0,
           (video.currentTime - start) / Math.max(videoSpeed, 0.01),
         );
-        if (!tvIntro) return mediaT;
+        if (!tvIntro) return warnPad + mediaT;
         if (!introPhase2) {
-          return Math.min(
-            introWall0 > 0 ? (performance.now() - introWall0) / 1000 : 0,
-            tvIntroDur,
+          return (
+            warnPad +
+            Math.min(
+              introWall0 > 0 ? (performance.now() - introWall0) / 1000 : 0,
+              tvIntroDur,
+            )
           );
         }
-        return introPad + mediaT;
+        return warnPad + introPad + mediaT;
       };
       let hardDeadline =
         performance.now() +
+        warnPad * 1000 +
         introPad * 1000 +
         clipOutDur * 1000 +
         outroSec * 1000 +
@@ -7513,9 +7878,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         try {
           if (outroEl) outroEl.pause();
         } catch {}
+        try {
+          if (warnEl) {
+            warnEl.pause();
+            warnEl.currentTime = 0;
+          }
+        } catch {}
         outroPhase = false;
+        warnPhase = null;
         outroActiveRef.current = false;
         setOutroActive(false);
+        warningActiveRef.current = false;
+        setWarningActive(false);
+        setWarningFrameActive(false);
         setIsVideoPlaying(false);
       };
 
@@ -7577,7 +7952,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const frameStats = { n: 0, sum: 0, max: 0, slow: 0, lastMediaT: start };
       const reportProgress = () => {
         const dur = clipOutDur;
-        const totalOut = introPad + dur + outroSec;
+        const totalOut = warnPad + introPad + dur + outroSec;
         const frac = Math.min(1, Math.max(0, outTNow() / totalOut));
         const pct = Math.min(99, Math.max(lastPct, Math.round(14 + frac * 85)));
         if (pct > lastPct) {
@@ -7634,6 +8009,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           outroPhase = false;
           outroActiveRef.current = false;
           setOutroActive(false);
+          try {
+            if (warnEl) {
+              warnEl.pause();
+              warnEl.currentTime = 0;
+            }
+          } catch {}
+          warnPhase = null;
+          warningActiveRef.current = false;
+          setWarningActive(false);
+          setWarningFrameActive(false);
           const summary =
             `${reason} frames=${frameStats.n} ` +
             `avgMs=${frameStats.n ? (frameStats.sum / frameStats.n).toFixed(1) : 0} ` +
@@ -7735,7 +8120,205 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           console.debug("[export-clasica] entra-el-cierre");
           return true;
         };
+
+        // ── Aviso: portada (3 s) → cartel Blacknews-Advertencia.mp4 ──
+        // Espejo del cierre: `stepWarning` pinta cada fase y `schedule` elige
+        // el elemento vivo. Al terminar, el clip (o su pasada de intro) arranca
+        // desde trimStart con su propio reloj.
+        const enterClipAfterWarning = async (): Promise<void> => {
+          warnPhase = null;
+          if (warnEl) {
+            try {
+              warnEl.pause();
+              warnEl.currentTime = 0;
+            } catch {}
+          }
+          warningActiveRef.current = false;
+          setWarningActive(false);
+          setWarningFrameActive(false);
+          // La portada pudo dejar el clip aparcado al final del recorte: se
+          // vuelve a su inicio y la intro TV coge su reloj justo aquí.
+          if (Math.abs(video.currentTime - start) > 0.05) {
+            await seekTo(start);
+          }
+          introWall0 = performance.now();
+          if (video.paused) video.play().catch(() => {});
+          schedule();
+        };
+        const enterWarningCard = () => {
+          const el = warnEl;
+          if (!el) return;
+          warnPhase = "card";
+          warnCardStartAt = 0;
+          warnDrew = false;
+          setWarningFrameActive(false);
+          try {
+            video.pause();
+          } catch {}
+          el.muted = mutedForExport;
+          try {
+            el.currentTime = 0;
+          } catch {}
+          // El cartel entra en la misma pista de audio que el clip: un
+          // elemento sólo puede enrutarce una vez, por eso queda cacheado.
+          const warnGraph = (
+            mediaType === "audio" ? audioOnlyGraphRef : audioGraphRef
+          ).current;
+          if (!mutedForExport && warnGraph) {
+            try {
+              const graph = warnGraph;
+              if (
+                !warningAudioNodeRef.current ||
+                warningAudioNodeRef.current.el !== el
+              ) {
+                const node = graph.ctx.createMediaElementSource(el);
+                node.connect(graph.dest);
+                node.connect(graph.ctx.destination);
+                warningAudioNodeRef.current = { el, node };
+              }
+              if (graph.ctx.state === "suspended") void graph.ctx.resume();
+            } catch (audioErr) {
+              console.warn("Audio del aviso no disponible:", audioErr);
+            }
+          }
+          // El <video> queda visible en la vista previa, como el sello, para
+          // que se vea qué se está grabando.
+          warningActiveRef.current = true;
+          setWarningActive(true);
+          el.play().catch(() => {});
+          console.debug("[export-clasica] entra-el-aviso");
+        };
+        /** Fotograma pintado en la tarjeta: contabiliza como el resto. */
+        const noteWarnFrame = (ms: number, mediaT: number) => {
+          frameStats.n++;
+          frameStats.sum += ms;
+          if (ms > frameStats.max) frameStats.max = ms;
+          if (ms > 33) frameStats.slow++;
+          frameStats.lastMediaT = mediaT;
+        };
+        const stepWarning = async () => {
+          if (!active || !warnPhase) return;
+          if (isCancelledRef.current) return finish("cancelado");
+          if (stopped) return finish("detenido");
+          if (warnPhase === "frame") {
+            // Portada: cuadro estático durante warningFrameDur s. Es la
+            // miniatura que las redes toman del enlace.
+            if (
+              performance.now() - warnFrameStartAt >=
+              warningFrameDur * 1000
+            ) {
+              if (warnEl) {
+                enterWarningCard();
+                return schedule();
+              }
+              await enterClipAfterWarning();
+              return;
+            }
+            const tRender = performance.now();
+            if (
+              warningFrameOrigin === "cover" ||
+              mediaType !== "video" ||
+              postDesign === "podcast"
+            ) {
+              await renderToCanvas(
+                canvas,
+                bgEl,
+                cachedFlags,
+                false,
+                undefined,
+                // Igual que la ruta rápida: reloj del podcast = posición del
+                // frame elegido; con intro TV, portada en estado HOLD (el
+                // mismo del PNG: titular desplegado sobre B&N).
+                postDesign === "podcast"
+                  ? Math.max(
+                      0,
+                      (warningFrameOrigin === "last" ? end : start) -
+                        trimStart,
+                    )
+                  : tvIntro
+                    ? tvIntroDur * 0.5
+                    : 0,
+                0,
+              );
+            } else {
+              // «Primer/Último fotograma»: el cuadro crudo del clip (en
+              // podcast no: allí manda la composición, como la vista previa).
+              const raw = video as HTMLVideoElement;
+              paintOutroFrame(
+                canvas,
+                POST_W,
+                POST_H,
+                raw,
+                raw.videoWidth,
+                raw.videoHeight,
+              );
+            }
+            noteWarnFrame(performance.now() - tRender, video.currentTime);
+            if (!active) return;
+            if (vTrack && typeof (vTrack as any).requestFrame === "function") {
+              (vTrack as any).requestFrame();
+            }
+            reportProgress();
+            schedule();
+            return;
+          }
+          // Fase de cartel: sus cuadros a sangre hasta que termina.
+          const el = warnEl;
+          if (!el) {
+            await enterClipAfterWarning();
+            return;
+          }
+          const dur = el.duration > 0 ? el.duration : warningDurFallback;
+          const atEnd = el.ended || (dur > 0 && el.currentTime >= dur - 0.03);
+          if (atEnd) {
+            if (warnDrew) {
+              await enterClipAfterWarning();
+              return;
+            }
+            // El cartel puede seguir aparcado en su final (tras sonar en la
+            // vista previa): se rebobina y se espera OUTRO_START_GRACE_MS a
+            // que el reloj confirme el arranque. Si no arranca, se sale de la
+            // fase para no atascar la exportación.
+            if (warnCardStartAt === 0) warnCardStartAt = performance.now();
+            if (performance.now() - warnCardStartAt > OUTRO_START_GRACE_MS) {
+              console.warn(
+                "[export-clasica] el aviso no arrancó: se sale sin cartel",
+              );
+              await enterClipAfterWarning();
+              return;
+            }
+            try {
+              el.currentTime = 0;
+            } catch {}
+            if (el.paused) el.play().catch(() => {});
+            // rVFC no dispara con el elemento parado: reintento con reloj.
+            window.setTimeout(() => void stepWarning(), 60);
+            return;
+          }
+          warnCardStartAt = 0;
+          if (el.readyState >= 2) {
+            const tRender = performance.now();
+            paintOutroFrame(
+              canvas,
+              POST_W,
+              POST_H,
+              el,
+              el.videoWidth,
+              el.videoHeight,
+            );
+            noteWarnFrame(performance.now() - tRender, el.currentTime);
+            warnDrew = true;
+            if (!active) return;
+            if (vTrack && typeof (vTrack as any).requestFrame === "function") {
+              (vTrack as any).requestFrame();
+            }
+          }
+          reportProgress();
+          schedule();
+        };
         const onEnded = () => {
+          // Durante el aviso manda su propia máquina (stepWarning).
+          if (warnPhase) return;
           // En la intro el clip se da vuelta hasta completar tvIntroDur.
           if (tvIntro && !introPhase2) {
             video.currentTime = start;
@@ -7748,6 +8331,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         const doneReason = () => {
           if (isCancelledRef.current) return "cancelado";
           if (stopped) return "detenido";
+          // Ya manda el aviso: se cierra por su propio reloj (stepWarning).
+          if (warnPhase) return null;
           // Ya manda el cierre: se cierra por su propio reloj (stepOutro).
           if (outroPhase) return null;
           if (tvIntro && !introPhase2) return null; // la intro se repite
@@ -7758,8 +8343,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         };
         const schedule = () => {
           if (!active) return;
-          // En la fase de cierre el reloj lo marca el <video> del sello.
-          const el = (outroPhase && outroEl) || video;
+          // En la fase de portada el clip está en pausa y rVFC no dispara:
+          // se muestrea con el mismo respaldo temporal que usa la intro.
+          if (warnPhase === "frame") {
+            window.setTimeout(() => void step(), Math.round(1000 / targetFps));
+            return;
+          }
+          // El reloj lo marca el elemento vivo: el cartel o el sello.
+          const el =
+            (outroPhase && outroEl) ||
+            (warnPhase === "card" && warnEl) ||
+            video;
           const anyVideo = el as unknown as {
             requestVideoFrameCallback?: (cb: () => void) => number;
           };
@@ -7827,6 +8421,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         };
         const step = async () => {
           if (!active) return;
+          // La fase de aviso tiene su propio pintado (portada o cartel).
+          if (warnPhase) return stepWarning();
           const early = doneReason();
           if (early) return finish(early);
           // doneReason pudo dar paso al cierre de marca: no se pinta ya el clip.
@@ -7858,9 +8454,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             }
           }
           // Segundo de salida (pasada de intro): manda el render y el audio.
+          // `outT` es absoluto (incluye la fase de aviso): para la intro TV
+          // sólo cuenta el tiempo desde que termina el aviso.
           const outT = outTNow();
           if (tvIntro) {
-            const wantMuted = mutedForExport || outT < tvIntroDur;
+            const wantMuted = mutedForExport || outT - warnPad < tvIntroDur;
             if (video.muted !== wantMuted) video.muted = wantMuted;
           }
           // Segundo de contenido para la transición «texto → vídeo» (4:5):
@@ -7879,7 +8477,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             cachedFlags,
             false,
             undefined,
-            outT,
+            // Sin la fase de aviso: las animaciones conservan su reloj.
+            Math.max(0, outT - warnPad),
             contentT,
           );
           const ms = performance.now() - tRender;
@@ -7904,15 +8503,30 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         // política de reproducción, pestaña oculta…), se cierra igualmente.
         deadlineTimer = window.setTimeout(
           () => finish("plazo-de-seguridad"),
-          (introPad + (end - start) / Math.max(videoSpeed, 0.01) + outroSec) *
+          (warnPad +
+            introPad +
+            (end - start) / Math.max(videoSpeed, 0.01) +
+            outroSec) *
             1000 +
             6000,
         );
-        introWall0 = performance.now();
-        video
-          .play()
-          .then(() => schedule())
-          .catch((playErr) => finish(`play-error ${playErr}`));
+        if (warnPad > 0) {
+          // Arranca la fase de aviso: primero la portada estática; el cartel
+          // y después el clip los encadena stepWarning / step.
+          warnPhase = "frame";
+          warnFrameStartAt = performance.now();
+          setWarningFrameActive(true);
+          try {
+            video.pause();
+          } catch {}
+          schedule();
+        } else {
+          introWall0 = performance.now();
+          video
+            .play()
+            .then(() => schedule())
+            .catch((playErr) => finish(`play-error ${playErr}`));
+        }
       });
 
       setRecordingProgress(99);
@@ -7944,7 +8558,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             : " ⚠️ El cierre BlackNews no pudo arrancar: se exportó sin el sello final."
           : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}${outroNote}`,
+        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}${warnNote}${outroNote}`,
       );
     } catch (err: any) {
       if (!isCancelledRef.current) {
@@ -7960,6 +8574,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setRecordingPaused(false);
       // Devuelve el estado de audio normal aunque la exportación falle.
       video.muted = isMuted;
+      // El cartel del aviso puede quedar a media reproducción: se aparca.
+      try {
+        warningRef.current?.pause();
+      } catch {}
+      warningActiveRef.current = false;
+      setWarningActive(false);
+      setWarningFrameActive(false);
       // Apaga el tema si la exportación se cortó antes de que lo hicieran
       // `finish`/`enterOutro` (un lazo sonando en segundo plano no sirve de nada).
       try {
@@ -8100,15 +8721,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tvIntro, postFormat, postDesign, mediaType, mediaSrc, tvIntroDur]);
 
+  // Portada del aviso en «Primer/Último fotograma»: el archivo pinta el frame
+  // crudo a sangre (paintOutroFrame: encuadre «contain» sobre negro, sin
+  // filtros, sin escala y sin overlays), así que durante esos 3 s la vista
+  // previa sube el media por encima de la composición y lo encaja igual, para
+  // no prometer una portada con titular que el MP4 no lleva. Sólo aplica al
+  // vídeo de noticias: en podcast el archivo también pinta la composición y
+  // en audio no hay frame crudo que mostrar.
+  const warningCoverClean =
+    warningFrameActive &&
+    warningFrameOrigin !== "cover" &&
+    mediaType === "video" &&
+    postDesign !== "podcast";
   // Fase de la intro para la vista previa: con vídeo se sigue el tiempo real;
   // con imagen se pinta el estado "HOLD" (el mismo que exporta el PNG). Sólo
   // la señal de TV 16:9 lleva chyron y fases animadas; en 4:5 y 9:16 la intro
-  // es la misma pasada muda con reinicio, pero sin overlay de TV.
+  // es la misma pasada muda con reinicio, pero sin overlay de TV. Durante la
+  // portada del aviso se fuerza el HOLD: la exportación pinta la portada en
+  // ese mismo estado (el del PNG), con el titular ya desplegado.
   const tvPhaseT =
     postFormat === "16:9" && tvIntro
-      ? mediaType === "video"
-        ? tvIntroT
-        : tvIntroDur * 0.5
+      ? warningFrameActive || mediaType !== "video"
+        ? tvIntroDur * 0.5
+        : tvIntroT
       : null;
   const tvInIntro = tvPhaseT !== null && tvPhaseT < tvIntroDur;
   const tvExitQ = tvInIntro ? tvIntroExit(tvPhaseT as number, tvIntroDur) : 0;
@@ -8262,6 +8897,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
   }, [videoOutro, mediaType]);
 
+  // Con el aviso apagado (o al cambiar de medio) se corta cualquier fase en
+  // marcha: la portada no puede quedarse congelada sobre la tarjeta.
+  useEffect(() => {
+    cancelPreviewWarning();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentWarning, mediaType]);
+
   const filteredCountries = searchCountries(countrySearch, countryCatalog);
 
   // ── Cierre de marca en la vista previa ──
@@ -8297,33 +8939,120 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   };
 
   // ─── Aviso de contenido sensible en la vista previa ───────────────────────
-  // Se dispara al empezar la reproducción del clip si el aviso está activado.
-  // Frame opcional (portada/primer/último) → cartel → clip.
+  // Secuencia al arrancar desde el principio con el interruptor encendido:
+  // portada de 3 s (la miniatura que ven las redes) → cartel
+  // Blacknews-Advertencia.mp4 → clip desde trimStart. La portada se pausa y
+  // se reanuda con el mismo botón de play; un salto manual la cancela.
+  const cancelPreviewWarning = () => {
+    // Durante la exportación manda el grabador (usa el mismo <video>).
+    if (isRecordingRef.current) return;
+    if (warningFrameTimerRef.current) {
+      window.clearTimeout(warningFrameTimerRef.current);
+      warningFrameTimerRef.current = 0;
+    }
+    warningFrameActiveRef.current = false;
+    setWarningFrameActive(false);
+    if (warningActiveRef.current) {
+      warningActiveRef.current = false;
+      setWarningActive(false);
+    }
+    const el = warningRef.current;
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch {}
+    }
+  };
+  /** Fin del aviso (cartel terminado o inutilizable): arranca el clip. */
   const endPreviewWarning = () => {
-    if (!warningActiveRef.current) return;
+    if (warningFrameTimerRef.current) {
+      window.clearTimeout(warningFrameTimerRef.current);
+      warningFrameTimerRef.current = 0;
+    }
+    warningFrameActiveRef.current = false;
+    setWarningFrameActive(false);
     warningActiveRef.current = false;
     setWarningActive(false);
-    // Al terminar el aviso, arranca el clip desde trimStart.
+    const el = warningRef.current;
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch {}
+    }
+    // Al terminar el aviso, arranca el clip desde trimStart: la portada pudo
+    // dejarlo aparcado al final del recorte («Último fotograma»).
     const main = activeMediaEl();
     if (main) {
-      if (trimEnd > trimStart) main.currentTime = trimStart;
+      const dur = videoDuration || main.duration || 0;
+      const lo = trimEnd > trimStart ? trimStart : 0;
+      const hi = trimEnd > trimStart ? trimEnd : dur;
+      if (main.currentTime < lo || main.currentTime > Math.max(hi - 0.1, lo)) {
+        try {
+          main.currentTime = lo;
+        } catch {}
+      }
       main.play().catch(() => {});
     }
     setIsVideoPlaying(true);
   };
-  const startPreviewWarning = (): boolean => {
-    if (warningActiveRef.current) return true;
+  /** Portada agotada: entra el cartel (o se salta al clip si no puede). */
+  const showWarningCard = () => {
+    warningFrameTimerRef.current = 0;
+    warningFrameActiveRef.current = false;
+    setWarningFrameActive(false);
     const el = warningRef.current;
-    if (!el || el.readyState < 1) return false;
-    warningActiveRef.current = true;
-    setWarningActive(true);
-    el.muted = isMuted;
-    try {
-      el.currentTime = 0;
-    } catch {}
-    el.play().catch(() => {});
+    if (!el || el.readyState < 1) {
+      endPreviewWarning();
+      return;
+    }
+    if (!warningActiveRef.current) {
+      warningActiveRef.current = true;
+      setWarningActive(true);
+      el.muted = isMuted;
+      try {
+        el.currentTime = 0;
+      } catch {}
+      el.play().catch(() => endPreviewWarning());
+    }
     activeMediaEl()?.pause();
     setIsVideoPlaying(true);
+  };
+  /** Arranca la secuencia (portada → cartel). false si no procede. */
+  const startPreviewWarning = (): boolean => {
+    if (warningActiveRef.current || warningFrameActiveRef.current) return true;
+    if (!contentWarning || !exportsVideo) return false;
+    const el = warningRef.current;
+    const main = activeMediaEl();
+    if (!el || !main) return false;
+    // Portada: el clip queda en pausa sobre el frame elegido durante 3 s.
+    main.pause();
+    // La portada se pinta como contenido en 0 (titular entero, como en el
+    // archivo): el reloj del fundido «texto → vídeo» se reinicia para que un
+    // fade anterior no siga corriendo en pausa y me desvanezca el bloque.
+    fadeStartWallRef.current = 0;
+    setTextFadeP(0);
+    const dur = videoDuration || main.duration || 0;
+    const target =
+      warningFrameOrigin === "last" && dur > 0
+        ? Math.max(0, Math.min(trimEnd > trimStart ? trimEnd : dur, dur) - 0.05)
+        : trimStart;
+    if (Math.abs(main.currentTime - target) > 0.05) {
+      try {
+        main.currentTime = target;
+      } catch {}
+    }
+    warningFrameActiveRef.current = true;
+    setWarningFrameActive(true);
+    setIsVideoPlaying(true);
+    warningFrameRemainRef.current = warningFrameDur * 1000;
+    warningFrameEndRef.current =
+      performance.now() + warningFrameRemainRef.current;
+    warningFrameTimerRef.current = window.setTimeout(
+      showWarningCard,
+      warningFrameRemainRef.current,
+    );
     return true;
   };
 
@@ -8377,6 +9106,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const hi = trimEnd > trimStart ? trimEnd : dur;
     const inRange = t >= lo && t < hi;
     const wasOutro = outroActiveRef.current;
+    // Un salto manual cancela el aviso en curso (portada o cartel): manda la
+    // barra, no la secuencia.
+    const wasWarning =
+      warningActiveRef.current || warningFrameActiveRef.current;
+    if (wasWarning) cancelPreviewWarning();
     if (wasOutro) {
       outroActiveRef.current = false;
       setOutroActive(false);
@@ -8399,7 +9133,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     if (!inRange) {
       v.pause();
       setIsVideoPlaying(false);
-    } else if (wasOutro) {
+    } else if (wasOutro || wasWarning) {
       v.play().catch(() => {});
       setIsVideoPlaying(true);
     }
@@ -8416,6 +9150,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const startScrub = () => {
     const v = activeMediaEl();
     if (!v || isRecordingRef.current) return;
+    // Arrastrar la barra corta el aviso en marcha: decide la posición manual.
+    cancelPreviewWarning();
     scrubbingRef.current = true;
     scrubResumeRef.current = outroActiveRef.current || !v.paused;
     if (!v.paused) {
@@ -8460,9 +9196,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
       return;
     }
+    // El aviso (portada o cartel) manda mientras dure: el botón lo pausa y
+    // lo reanuda con su propio reloj (la portada guarda los ms restantes).
+    if (warningActiveRef.current || warningFrameActiveRef.current) {
+      if (isVideoPlaying) {
+        if (warningFrameActiveRef.current) {
+          if (warningFrameTimerRef.current) {
+            window.clearTimeout(warningFrameTimerRef.current);
+            warningFrameTimerRef.current = 0;
+          }
+          warningFrameRemainRef.current = Math.max(
+            0,
+            warningFrameEndRef.current - performance.now(),
+          );
+        } else {
+          warningRef.current?.pause();
+        }
+        setIsVideoPlaying(false);
+      } else if (warningFrameActiveRef.current) {
+        const remain =
+          warningFrameRemainRef.current > 0
+            ? warningFrameRemainRef.current
+            : warningFrameDur * 1000;
+        warningFrameEndRef.current = performance.now() + remain;
+        warningFrameTimerRef.current = window.setTimeout(
+          showWarningCard,
+          remain,
+        );
+        setIsVideoPlaying(true);
+      } else {
+        warningRef.current?.play().catch(() => endPreviewWarning());
+        setIsVideoPlaying(true);
+      }
+      return;
+    }
     const v = activeMediaEl();
     if (!v) return;
     if (v.paused) {
+      // Arranque desde el principio con el aviso encendido: portada + cartel
+      // antes que el clip, igual que saldrá en el archivo exportado. Una
+      // reproducción que se reanuda un poco más adelante no repite el aviso.
+      const lo = trimEnd > trimStart ? trimStart : 0;
+      if (
+        contentWarning &&
+        exportsVideo &&
+        v.currentTime <= lo + 0.1 &&
+        startPreviewWarning()
+      )
+        return;
       v.play().catch(() => {});
       setIsVideoPlaying(true);
     } else {
@@ -8607,7 +9388,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         loop
         muted={isMuted}
         playsInline
-        style={{ filter: mediaFilterCss }}
+        style={{
+          // Portada cruda del aviso: el archivo pinta el frame tal cual sale
+          // del decodificador (sin filtro, «contain» sobre negro); el media
+          // sube a z-1 para quedar por encima de los velos de su capa.
+          filter: warningCoverClean ? "none" : mediaFilterCss,
+          objectFit: warningCoverClean ? "contain" : "cover",
+          backgroundColor: warningCoverClean ? "#000000" : undefined,
+          position: warningCoverClean ? "relative" : undefined,
+          zIndex: warningCoverClean ? 1 : undefined,
+        }}
         className="w-full h-full object-cover"
         onLoadedMetadata={(e) => {
           const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
@@ -11077,9 +11867,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         Aviso de contenido sensible
                       </span>
                       <span className="text-[11px] text-neutral-400 font-light">
-                        {warningFrameDur} s de portada + {warningDuration.toFixed(1)} s de cartel
-                        antes del clip. El frame opcional es la miniatura que
-                        ven las redes: el cartel no se muestra en el preview.
+                        {warningFrameDur} s de portada +{" "}
+                        {(warningDuration > 0
+                          ? warningDuration
+                          : warningDurFallback
+                        ).toFixed(1)}{" "}
+                        s de cartel antes del clip. Se reproduce en la vista
+                        previa al arrancar desde el principio; el frame
+                        opcional es además la miniatura que ven las redes.
                       </span>
                     </div>
                     <button
@@ -11599,15 +12394,29 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {/* Media a sangre + velos de legibilidad. El inferior
                         sólo existe con el chyron (intro): al terminar la
                         intro queda vídeo limpio, igual que en el lienzo. */}
-                    <div className="absolute inset-0 overflow-hidden bg-black">
+                    <div
+                      className="absolute inset-0 overflow-hidden bg-black"
+                      style={{
+                        // Portada cruda del aviso: la capa de media sube por
+                        // encima de bug, chyron, ticker y pie, que quedan
+                        // tapados por el frame a sangre.
+                        zIndex: warningCoverClean ? 45 : undefined,
+                      }}
+                    >
                       {/* «Escala»/«Reposición»: mismo transform que el lienzo
                           (origen en el centro, offsets en px de tarjeta
                           nominal ×4 para pasar de 480 a los 1920 del lienzo). */}
                       <div
                         className="absolute inset-0"
                         style={{
-                          transform: `scale(${mediaZoom}) translate(${mediaOffsetX * (TV_W / previewCardWidthFor("16:9"))}px, ${mediaOffsetY * (TV_W / previewCardWidthFor("16:9"))}px)`,
+                          // Portada cruda del aviso: sin escala/reposición
+                          // (el archivo encaja el frame tal cual) y z-1 para
+                          // quedar por encima de los velos, sus hermanos.
+                          transform: warningCoverClean
+                            ? "none"
+                            : `scale(${mediaZoom}) translate(${mediaOffsetX * (TV_W / previewCardWidthFor("16:9"))}px, ${mediaOffsetY * (TV_W / previewCardWidthFor("16:9"))}px)`,
                           transformOrigin: "center center",
+                          zIndex: warningCoverClean ? 1 : undefined,
                         }}
                       >
                         {previewMediaEl}
@@ -12193,9 +13002,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div
                   className="absolute inset-0 overflow-hidden"
                   style={{
-                    top: `${previewMediaTopPct * (1 - textFadeP)}%`,
-                    zIndex: textFadeP > 0 ? 30 : 0,
-                    transform: `scale(${mediaZoom}) translate(${mediaOffsetX}px, ${mediaOffsetY}px)`,
+                    // Portada cruda del aviso: a sangre sobre la tarjeta
+                    // entera, sin escala y por encima de texto, tweet y sello
+                    // (z-45 < z-50 del cartel, que llega después).
+                    top: warningCoverClean
+                      ? "0%"
+                      : `${previewMediaTopPct * (1 - textFadeP)}%`,
+                    zIndex: warningCoverClean ? 45 : textFadeP > 0 ? 30 : 0,
+                    transform: warningCoverClean
+                      ? "none"
+                      : `scale(${mediaZoom}) translate(${mediaOffsetX}px, ${mediaOffsetY}px)`,
                     transformOrigin: 'center center',
                   }}
                 >
@@ -12410,9 +13226,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   const dur = Math.round((e.currentTarget.duration || 0) * 10) / 10;
                   if (dur > 0) setWarningDuration(dur);
                 }}
-                onEnded={endPreviewOutro}
-                onError={endPreviewOutro}
+                onEnded={() => endPreviewWarning()}
+                onError={() => {
+                  // Si se rompe mientras suena, se salta al clip; si falló al
+                  // cargar, la portada llega a showWarningCard y decide ahí.
+                  if (warningActiveRef.current) endPreviewWarning();
+                }}
               />
+            )}
+
+            {/* Indicador de fase: avisa de que está corriendo la portada o el
+                cartel (también mientras exporta, para ver qué se graba). */}
+            {(warningActive || warningFrameActive) && (
+              <div className="absolute left-2 top-2 z-[60] flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-400/95 text-black text-[10px] font-bold shadow-lg pointer-events-none select-none">
+                <AlertTriangle className="w-3 h-3" />
+                {warningFrameActive
+                  ? `Portada (miniatura) · ${warningFrameDur} s → cartel`
+                  : "Aviso de contenido sensible"}
+              </div>
             )}
           </div>
 
