@@ -8662,6 +8662,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // del fade es de pared (no del currentTime) porque, al reiniciarse el vídeo,
   // currentTime vuelve a 0 y el progreso retrocedería.
   const fadeStartWallRef = useRef(0);
+  // Último tick del reloj del fundido: sirve para congelarlo mientras la
+  // vista previa está en pausa (si no, el progreso seguiría corriendo en
+  // pared y el texto seguiría desapareciendo con el vídeo parado).
+  const fadePrevNowRef = useRef(0);
+  // Última posición vista del clip: un salto hacia atrás (vuelta del lazo o
+  // reinicio del vídeo) deja el reloj de pared desfasado y manda soltarlo.
+  const fadePrevVtRef = useRef(0);
   const isMutedRef = useRef(isMuted);
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -9147,6 +9154,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       }
     }
     v.currentTime = t;
+    // La búsqueda también es un salto: se anota la posición para que el
+    // detector de lazo del reloj del fundido no la confunda con una vuelta.
+    fadePrevVtRef.current = t;
+    // El pase «texto → vídeo» se mide con un reloj de PARED desde que se arma
+    // (al cruzar el umbral el vídeo se reinicia y el currentTime ya no sirve
+    // de guía). Una búsqueda tiene que reanclar ese reloj a la posición
+    // destino: si queda antes del umbral se suelta del todo y el titular
+    // vuelve; si queda después, continúa desde ahí sin reiniciar el clip.
+    // Sin este ancla `p` sigue creciendo solo y el texto se queda invisible
+    // para siempre — ni buscando al inicio ni en cada vuelta del lazo.
+    const contentAt = Math.max(0, t - trimStart);
+    fadeStartWallRef.current =
+      contentAt > textFadeOutDur
+        ? performance.now() - (contentAt - textFadeOutDur) * 1000
+        : 0;
     // Con la barra arrastrada el valor del <input> ya lo pinta el navegador:
     // ahí sólo se mueve el contador.
     writePreviewPos(t, !scrubbingRef.current);
@@ -9355,24 +9377,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       raf = requestAnimationFrame(tick);
       const v = videoRef.current;
       if (!v) return;
+      const now = performance.now();
+      // En pausa el fundido se congela: el reloj de pared se empuja hacia
+      // delante el tiempo detenido, para que `contentTime` no siga creciendo
+      // mientras el vídeo está parado.
+      if (fadeStartWallRef.current > 0 && v.paused) {
+        const prev = fadePrevNowRef.current;
+        if (prev > 0 && now > prev) fadeStartWallRef.current += now - prev;
+      }
+      fadePrevNowRef.current = now;
+      // Vuelta del lazo (o reinicio del clip): el currentTime salta hacia
+      // atrás y el reloj de pared ya no describe la posición real; se suelta
+      // para que el titular vuelva a calcularse desde el vídeo, como manda el
+      // pase. Los reinicios propios —armar el fundido o una búsqueda—
+      // actualizan la referencia y no cuentan como vuelta.
+      if (
+        fadeStartWallRef.current > 0 &&
+        fadePrevVtRef.current - v.currentTime > 0.5
+      ) {
+        fadeStartWallRef.current = 0;
+      }
+      fadePrevVtRef.current = v.currentTime;
       // Tiempo de contenido: mientras el texto está visible se mide con el
       // currentTime; cuando empieza a desvanecerse se reinicia el vídeo y el
       // reloj pasa a ser de pared, manteniendo la continuidad del fade.
       let contentTime: number;
       if (fadeStartWallRef.current > 0) {
-        contentTime = (performance.now() - fadeStartWallRef.current) / 1000 + textFadeOutDur;
+        contentTime = (now - fadeStartWallRef.current) / 1000 + textFadeOutDur;
       } else {
         contentTime = Math.max(0, v.currentTime - trimStart);
       }
       const p = clamp01((contentTime - textFadeOutDur) / TEXT_FADE_MOVE);
       // Al cruzar el umbral (texto empieza a irse): reiniciar video y arrancar
-      // el reloj de pared con la continuidad exacta del momento.
-      if (p > 0 && fadeStartWallRef.current === 0) {
-        fadeStartWallRef.current = performance.now() - textFadeOutDur * 1000;
+      // el reloj de pared con la continuidad exacta del momento. Sólo en
+      // reproducción: con el clip en pausa el cruce se resuelve con la
+      // posición (no se reinicia ni se arranca nada solo).
+      if (p > 0 && fadeStartWallRef.current === 0 && !v.paused) {
+        fadeStartWallRef.current = now - textFadeOutDur * 1000;
         if (Math.abs(v.currentTime - trimStart) > 0.05) v.currentTime = trimStart;
+        // El propio reinicio es un salto hacia atrás: se anota para que el
+        // detector de lazo de arriba no lo confunda con una vuelta.
+        fadePrevVtRef.current = trimStart;
         v.play().catch(() => {});
       }
-      if (p === 0 && fadeStartWallRef.current > 0) {
+      // El reloj por debajo del umbral está desfasado (sólo puede ocurrir
+      // tras un salto que seekPreview ya reancla): se suelta para volver a
+      // medir con la posición. Nunca en pausa, para no rearmar el fundido
+      // encima de un clip detenido.
+      if (p === 0 && fadeStartWallRef.current > 0 && !v.paused) {
         fadeStartWallRef.current = 0;
       }
       // Sólo se re-renderiza cuando el progreso avanza de verdad (los extremos
@@ -9389,6 +9441,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postFormat, textFadeOut, mediaType, trimStart, textFadeOutDur, postDesign]);
+
+  // Cargar otro medio suelta el reloj del fundido «texto → vídeo»: el pase
+  // vuelve a medirse desde la posición del clip nuevo y el titular arranca
+  // visible (si no, el reloj de la fuente anterior lo dejaría invisible).
+  useEffect(() => {
+    fadeStartWallRef.current = 0;
+    fadePrevNowRef.current = 0;
+    setTextFadeP(0);
+  }, [mediaSrc]);
 
   // Estilo compartido de los botones de salto de la fila de transporte:
   // minimalista, sin bordes duros, sólo contraste al pasar el cursor.
@@ -9451,6 +9512,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 !tvIntroDoneRef.current;
               if (videoOutro && !introLooming && startPreviewOutro()) return;
               v.currentTime = trimStart;
+              // Vuelta del lazo: el titular vuelve con el clip. El reloj del
+              // fundido «texto → vídeo» es de pared y, si sigue armado, `p` no
+              // bajaría nunca: se suelta para que el pase se recalcule desde
+              // la posición (lo mismo que hace seekPreview al buscar).
+              fadeStartWallRef.current = 0;
             } else if (v.currentTime < trimStart) {
               v.currentTime = trimStart;
             }
