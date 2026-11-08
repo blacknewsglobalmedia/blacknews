@@ -11825,33 +11825,56 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </p>
                 </CollapseSection>
 
-                {/* Cierre de marca opcional: Blacknews.mp4 al final */}
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
-                  <div className="min-w-0">
-                    <span className="text-xs font-semibold text-neutral-200 block">
-                      Cierre BlackNews (sello final)
-                    </span>
-                    <span className="text-[11px] text-neutral-400 font-light">
-                      Añade {outroDuration.toFixed(1)} s de sello de marca al
-                      final del vídeo exportado y de la vista previa, con su
-                      audio (salvo que exportes en silencio). Desactivado por
-                      defecto.
-                    </span>
-                  </div>
+                {/* Cierre de marca opcional: Blacknews.mp4 al final.
+                    La fila entera es el interruptor: en táctil el blanco tiene
+                    que ser toda la zona, no la píldora minúscula del final. */}
+                <div className="pt-3 border-t border-white/5">
                   <button
                     type="button"
                     role="switch"
                     aria-checked={videoOutro}
+                    aria-label="Cierre BlackNews (sello final)"
                     onClick={() => setVideoOutro((v) => !v)}
-                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
-                      videoOutro
-                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/50"
-                        : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
-                    }`}
+                    className="w-full flex items-center justify-between gap-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors hover:bg-white/5"
                     title="Reproduce Blacknews.mp4 al finalizar el clip"
                   >
-                    <Play className="w-3.5 h-3.5" />
-                    {videoOutro ? "Activado" : "Apagado"}
+                    <span className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-neutral-200 block">
+                        Cierre BlackNews (sello final)
+                      </span>
+                      <span className="text-[11px] text-neutral-400 font-light">
+                        Añade {outroDuration.toFixed(1)} s de sello de marca al
+                        final del vídeo exportado y de la vista previa, con su
+                        audio (salvo que exportes en silencio). Desactivado por
+                        defecto.
+                      </span>
+                    </span>
+                    <span className="shrink-0 flex items-center gap-2">
+                      <span
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                          videoOutro
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/50"
+                            : "bg-neutral-950 text-neutral-400 border-white/10"
+                        }`}
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        {videoOutro ? "Activado" : "Apagado"}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`relative inline-block w-9 h-5 rounded-full border transition-colors ${
+                          videoOutro
+                            ? "bg-emerald-500/80 border-emerald-400"
+                            : "bg-neutral-950 border-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                            videoOutro ? "translate-x-4" : ""
+                          }`}
+                        />
+                      </span>
+                    </span>
                   </button>
                 </div>
 
@@ -11861,36 +11884,60 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     titular), así que el cartel de advertencia nunca se ve en
                     el preview de subida. Sólo disponible con vídeo. */}
                 {exportsVideo && (
-                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
-                    <div className="min-w-0">
-                      <span className="text-xs font-semibold text-neutral-200 block">
-                        Aviso de contenido sensible
-                      </span>
-                      <span className="text-[11px] text-neutral-400 font-light">
-                        {warningFrameDur} s de portada +{" "}
-                        {(warningDuration > 0
-                          ? warningDuration
-                          : warningDurFallback
-                        ).toFixed(1)}{" "}
-                        s de cartel antes del clip. Se reproduce en la vista
-                        previa al arrancar desde el principio; el frame
-                        opcional es además la miniatura que ven las redes.
-                      </span>
-                    </div>
+                  <div className="pt-3 border-t border-white/5">
+                    {/* Fila entera clicable: el toque en el texto (el área que
+                        ve y pega el dedo el usuario) también conmuta, y el
+                        track grande da feedback visual del estado. */}
                     <button
                       type="button"
                       role="switch"
                       aria-checked={contentWarning}
+                      aria-label="Aviso de contenido sensible"
                       onClick={() => setContentWarning((v) => !v)}
-                      className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
-                        contentWarning
-                          ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
-                          : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
-                      }`}
+                      className="w-full flex items-center justify-between gap-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors hover:bg-white/5"
                       title="Inserta un frame de portada y el cartel de advertencia antes del clip"
                     >
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      {contentWarning ? "Activado" : "Apagado"}
+                      <span className="min-w-0 flex-1">
+                        <span className="text-xs font-semibold text-neutral-200 block">
+                          Aviso de contenido sensible
+                        </span>
+                        <span className="text-[11px] text-neutral-400 font-light">
+                          {warningFrameDur} s de portada +{" "}
+                          {(warningDuration > 0
+                            ? warningDuration
+                            : warningDurFallback
+                          ).toFixed(1)}{" "}
+                          s de cartel antes del clip. Se reproduce en la vista
+                          previa al arrancar desde el principio; el frame
+                          opcional es además la miniatura que ven las redes.
+                        </span>
+                      </span>
+                      <span className="shrink-0 flex items-center gap-2">
+                        <span
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            contentWarning
+                              ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
+                              : "bg-neutral-950 text-neutral-400 border-white/10"
+                          }`}
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          {contentWarning ? "Activado" : "Apagado"}
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          className={`relative inline-block w-9 h-5 rounded-full border transition-colors ${
+                            contentWarning
+                              ? "bg-amber-500/80 border-amber-400"
+                              : "bg-neutral-950 border-white/20"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                              contentWarning ? "translate-x-4" : ""
+                            }`}
+                          />
+                        </span>
+                      </span>
                     </button>
                   </div>
                 )}
@@ -11911,7 +11958,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           key={v}
                           type="button"
                           onClick={() => setWarningFrameOrigin(v)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-colors cursor-pointer ${
+                          className={`min-h-[36px] px-3 py-2 rounded-lg text-[10px] font-mono border transition-colors cursor-pointer ${
                             warningFrameOrigin === v
                               ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
                               : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
