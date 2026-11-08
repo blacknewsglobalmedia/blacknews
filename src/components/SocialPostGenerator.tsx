@@ -409,10 +409,13 @@ const drawCoverFrame = (
 
 /** Pinta un fotograma del cierre de marca a sangre del lienzo SIN overlays
  *  (sin chyron, sin ticker, sin velos): es un sello de cierre, no una toma del
- *  reportaje. Encuadre «contain» sobre negro para no recortar el sello en los
- *  formatos verticales; con el negro AMOLED las bandas pasan desapercibidas y
- *  en 16:9 (1920×1000 en 1920×1080) apenas se notan 40 px. Los tamaños van en
- *  enteros para no dejar costuras de medio píxel contra el negro. */
+ *  reportaje. Por defecto encuadre «contain» sobre negro para no recortar el
+ *  sello en los formatos verticales; con el negro AMOLED las bandas pasan
+ *  desapercibidas y en 16:9 (1920×1000 en 1920×1080) apenas se notan 40 px.
+ *  `fit: "cover"` encaja por ALTO (recorta los laterales): es el encuadre del
+ *  cartel de advertencia, que se ajusta a la altura del post en vez de quedar
+ *  encajado por ancho. Los tamaños van en enteros para no dejar costuras de
+ *  medio píxel contra el negro. */
 const paintOutroFrame = (
   targetCanvas: HTMLCanvasElement,
   W: number,
@@ -421,6 +424,7 @@ const paintOutroFrame = (
   sw: number,
   sh: number,
   rot = 0,
+  fit: "contain" | "cover" = "contain",
 ): void => {
   if (targetCanvas.width !== W) targetCanvas.width = W;
   if (targetCanvas.height !== H) targetCanvas.height = H;
@@ -436,10 +440,17 @@ const paintOutroFrame = (
   const spin = ((rot % 360) + 360) % 360;
   const dispW = spin % 180 === 90 ? sh : sw;
   const dispH = spin % 180 === 90 ? sw : sh;
-  const scale = Math.min(W / dispW, H / dispH);
+  // «contain» = el mínimo de ambos ejes (encaja entero); «cover» = el máximo,
+  // que llena el alto y deja sobrar el ancho (se recorta centrado).
+  const scale =
+    fit === "cover"
+      ? Math.max(W / dispW, H / dispH)
+      : Math.min(W / dispW, H / dispH);
   const dw = Math.round(dispW * scale);
   const dh = Math.round(dispH * scale);
   if (!spin) {
+    // Con sobrante (cover) el hueco es negativo y el drawImage se sale centrado:
+    // el canvas recorta solo.
     ctx.drawImage(
       source,
       Math.round((W - dw) / 2),
@@ -456,7 +467,13 @@ const paintOutroFrame = (
   ctx.save();
   ctx.translate(W / 2, H / 2);
   ctx.rotate((spin * Math.PI) / 180);
-  ctx.drawImage(source, -bw / 2, -bh / 2, bw, bh);
+  ctx.drawImage(
+    source,
+    Math.round(-bw / 2),
+    Math.round(-bh / 2),
+    bw,
+    bh,
+  );
   ctx.restore();
 };
 
@@ -7006,7 +7023,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             // anterior y no adelanten el cambio.
             if (paintedOnce) await padUntil(slot);
             if (item.warn) {
-              // Cartel del aviso: a sangre sobre negro, sin overlays.
+              // Cartel del aviso: a sangre sobre negro, sin overlays. Encaje
+              // por ALTO: el cartel 16:9 llena la altura del post (4:5/9:16)
+              // recortando laterales en vez de quedar encajado por ancho.
               paintOutroFrame(
                 canvas,
                 POST_W,
@@ -7015,6 +7034,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 frame.displayWidth,
                 frame.displayHeight,
                 warningClip ? warningClip.rot : 0,
+                "cover",
               );
             } else if (item.outro) {
               // Cierre: sello a sangre sobre negro, sin overlays ni velos.
@@ -8298,6 +8318,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           warnCardStartAt = 0;
           if (el.readyState >= 2) {
             const tRender = performance.now();
+            // Cartel del aviso: encaje por ALTO, como en la vista previa y en
+            // la ruta rápida (el 16:9 llena la altura del post).
             paintOutroFrame(
               canvas,
               POST_W,
@@ -8305,6 +8327,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               el,
               el.videoWidth,
               el.videoHeight,
+              0,
+              "cover",
             );
             noteWarnFrame(performance.now() - tRender, el.currentTime);
             warnDrew = true;
@@ -13255,12 +13279,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               />
             )}
 
-            {/* Aviso de contenido sensible antes del clip */}
+            {/* Aviso de contenido sensible antes del clip. Encaje por ALTO
+                (object-cover): el cartel 16:9 llena la altura del post y
+                recorta los laterales negros, igual que paintOutroFrame en la
+                exportación, en vez de encajarse por ancho y quedar pequeño. */}
             {exportsVideo && contentWarning && (
               <video
                 ref={warningRef}
                 src={warningVideoSrcValue}
-                className="absolute inset-0 w-full h-full object-contain bg-black pointer-events-none select-none"
+                className="absolute inset-0 w-full h-full object-cover bg-black pointer-events-none select-none"
                 style={{
                   zIndex: 50,
                   opacity: warningActive ? 1 : 0,
