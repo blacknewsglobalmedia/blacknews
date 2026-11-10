@@ -4317,7 +4317,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 7) Crédito de foto (derecha, sobre el ticker). Con sombra suave: en el
     //    vídeo limpio ya no hay velo detrás y debe seguir legible, igual que
-    //    el crédito del formato 4:5/9:16.
+    //    el crédito del formato 4:5/9:16. Hasta 3 líneas ancladas por abajo
+    //    (la última sobre el ticker), así el bloque crece hacia arriba.
     if (photoCaption && photoCaption.trim()) {
       ctx.save();
       ctx.font = `500 ${TV_CAP_FS}px 'Lexend', sans-serif`;
@@ -4328,14 +4329,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       const maxCapW = W - TV_PAD - (TV_PAD + TV_STACK_W + tvUi(40));
-      let cap = photoCaption.trim();
-      if (maxCapW > 80 && ctx.measureText(cap).width > maxCapW) {
-        while (ctx.measureText(cap + "…").width > maxCapW && cap.length > 3) {
-          cap = cap.slice(0, -1);
-        }
-        cap += "…";
-      }
-      ctx.fillText(cap, W - TV_PAD, H - TV_TICKER_H - 44);
+      const capWrapped =
+        maxCapW > 80
+          ? capLines(wrapText(ctx, photoCaption.trim(), maxCapW), 3)
+          : [photoCaption.trim()];
+      const capLineH = 28; // la misma altura de línea del credit en la vista previa
+      const capBaseY = H - TV_TICKER_H - 44; // tope de la última línea
+      capWrapped.forEach((line, i) => {
+        const y = capBaseY - (capWrapped.length - 1 - i) * capLineH;
+        ctx.fillText(line, W - TV_PAD, y);
+      });
       ctx.restore();
     }
   };
@@ -5644,26 +5647,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.shadowBlur = 6;
     ctx.fillText("BlackNews", padX + logoBoxSize + 16, logoY);
 
-    // 6.1 Compact Photo Caption / Personaje at Bottom-Right (same height as logo, only if present)
+    // 6.1 Compact Photo Caption / Personaje at Bottom-Right. Hasta 3 líneas
+    //     ancladas por la base en `logoY` (la última), así el bloque crece
+    //     HACIA ARRIBA — igual que la vista previa (line-clamp-3 + items-end).
     if (photoCaption && photoCaption.trim()) {
       ctx.font = `500 24px 'Lexend', sans-serif`;
+      ctx.letterSpacing = "0px"; // igual que al medir en la vista previa
       ctx.fillStyle = "#E2E8F0";
       ctx.textAlign = "right";
+      ctx.textBaseline = "alphabetic";
       ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
       ctx.shadowBlur = 6;
 
       const maxCapWidth = contentWidth - (logoBoxSize + 16 + 260);
-      let capText = photoCaption.trim();
-      if (ctx.measureText(capText).width > maxCapWidth) {
-        while (
-          ctx.measureText(capText + "...").width > maxCapWidth &&
-          capText.length > 3
-        ) {
-          capText = capText.slice(0, -1);
-        }
-        capText += "...";
-      }
-      ctx.fillText(capText, W - padX, logoY);
+      const capLineH = 32; // 24 px × 1,35 ≈ 32: misma cadencia relativa que el pie
+      const capWrapped = capLines(
+        wrapText(ctx, photoCaption.trim(), Math.max(maxCapWidth, 80)),
+        3,
+      );
+      capWrapped.forEach((line, i) => {
+        const y = logoY - (capWrapped.length - 1 - i) * capLineH;
+        ctx.fillText(line, W - padX, y);
+      });
     }
     ctx.restore();
   };
@@ -12970,10 +12975,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </div>
 
                     {/* Crédito de foto (derecha, sobre el ticker). Sombra
-                        suave: en el vídeo limpio no hay velo detrás. */}
+                        suave: en el vídeo limpio no hay velo detrás. Anclado
+                        por abajo (`bottom`) + line-clamp-3: crece hacia
+                        arriba, igual que en el lienzo exportado. */}
                     {photoCaption && photoCaption.trim() && (
                       <div
-                        className="absolute overflow-hidden text-right font-medium"
+                        className="absolute overflow-hidden text-right font-medium line-clamp-3"
                         style={{
                           right: TV_PAD,
                           bottom: TV_TICKER_H + 24,
@@ -13340,7 +13347,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     que siempre pinta por encima — nunca se oculta. */}
                 <div
                   ref={previewFooterRef}
-                  className="p-6 sm:p-7 flex items-center justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent"
+                  className="p-6 sm:p-7 flex items-end justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent"
                   style={{ zIndex: textFadeP > 0 ? 30 : 20 }}
                 >
                   <div className="flex items-center gap-2 shrink-0">
@@ -13350,11 +13357,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     </span>
                   </div>
 
-                  {/* Right-aligned compact photo caption / character text (Only if present, at same height) */}
-                  <div className="flex items-center gap-2.5 justify-end flex-1 min-w-0 pl-3">
+                  {/* Right-aligned compact photo caption / character text (Only if present, at same height).
+                      `items-end` en el pie y aquí: el bloque crece HACIA ARRIBA
+                      desde la línea base del logo (como en el lienzo exportado),
+                      con un máximo de 3 líneas (line-clamp-3). */}
+                  <div className="flex items-end gap-2.5 justify-end flex-1 min-w-0 pl-3">
                     {photoCaption && photoCaption.trim() ? (
                       <span
-                        className="text-[10px] sm:text-[11.5px] font-normal text-neutral-300 font-['Lexend'] tracking-wide truncate block text-right drop-shadow-md select-none max-w-[280px] sm:max-w-[400px]"
+                        className="text-[10px] sm:text-[11.5px] leading-[1.35] font-normal text-neutral-300 font-['Lexend'] tracking-wide line-clamp-3 text-right drop-shadow-md select-none max-w-[280px] sm:max-w-[400px] break-words"
                         title={photoCaption.trim()}
                       >
                         {photoCaption.trim()}
