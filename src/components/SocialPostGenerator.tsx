@@ -694,14 +694,16 @@ const previewCardWidthFor = (format: "4:5" | "9:16" | "16:9") =>
  *
  *  `contentT` y `clipDur` van en las MISMAS unidades (segundos de contenido
  *  ya normalizados a la velocidad de reproducción). Sin reloj —imagen o PNG—
- *  o con el modo «todo el vídeo», se ve siempre. */
+ *  o con los modos «texto» y «todo el vídeo», se ve siempre: en «texto» quien
+ *  la apaga es el fundido del bloque de texto (el fadeP de renderToCanvas /
+ *  textFadeP de la vista previa), que es el reloj del titular. */
 const tweetShownAt = (
-  mode: "always" | "start" | "end",
+  mode: "text" | "always" | "start" | "end",
   secs: number,
   contentT: number | undefined,
   clipDur: number,
 ): boolean => {
-  if (mode === "always") return true;
+  if (mode === "always" || mode === "text") return true;
   if (typeof contentT !== "number" || !(clipDur > 0)) return true;
   if (mode === "start") return contentT < secs;
   return contentT >= Math.max(0, clipDur - secs);
@@ -1435,13 +1437,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   // Líneas del cuerpo del tweet que se muestran (1–8). El archivo recorta en
   // el mismo punto, así que la tarjeta de pantalla y la exportada coinciden.
   const [tweetBodyLines, setTweetBodyLines] = useState(5);
-  // Cuándo se ve la tarjeta en vídeo: todo el clip, sólo los primeros N s o
-  // sólo los últimos N s (en PNG sale siempre). `tweetOn` es el estado ya
-  // resuelto del reloj: sólo cambia al cruzar el umbral, para no repintar
-  // en cada fotograma.
+  // Cuándo se ve la tarjeta en vídeo: «text» (por defecto) la ata al bloque de
+  // texto —se ve mientras el titular está en pantalla y se va con él en el
+  // fundido texto→vídeo—, «always» la deja todo el clip y «start»/«end» la
+  // limitan a los primeros/últimos N s (en PNG sale siempre). `tweetOn` es el
+  // estado ya resuelto del reloj: sólo cambia al cruzar el umbral, para no
+  // repintar en cada fotograma.
   const [tweetShowMode, setTweetShowMode] = useState<
-    "always" | "start" | "end"
-  >("always");
+    "text" | "always" | "start" | "end"
+  >("text");
   const [tweetShowSecs, setTweetShowSecs] = useState(5);
   const [tweetOn, setTweetOn] = useState(true);
   // Altura real del sello «BlackNews» de abajo: la tarjeta del tweet se apoya
@@ -1627,8 +1631,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         }
         if (handle) setTweetHandle(handle);
         // Avatar público (sin API key) salvo que el usuario haya puesto el suyo.
+        // `/x/` en vez de `/twitter/`: éste redirige y la redirección no pasa
+        // CORS, así que en el archivo exportado no llegaba a pintarse.
         if (!tweetAvatarManualRef.current) {
-          setTweetAvatar(handle ? `https://unavatar.io/twitter/${handle}` : "");
+          setTweetAvatar(
+            handle ? `https://unavatar.io/x/${encodeURIComponent(handle)}` : "",
+          );
         }
         // Cuerpo y fecha desde el HTML del bloque.
         if (data.html) {
@@ -5139,15 +5147,31 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     // contenido ya normalizados a `videoSpeed`, igual que en la vista previa);
     // sin reloj —imagen o composición estática— se ve siempre.
     const speedTweet = videoSpeed > 0 ? videoSpeed : 1;
+    // Duración de CONTENIDO que acaba saliendo en el archivo (trim + «Duración
+    // máxima del clip» + tope de 60 s, ya normalizada a la velocidad): es la
+    // base de «Últimos N segundos», que si no mediría contra la ventana sin
+    // recortar y se saldría del archivo.
     const tweetClipDur =
+      exportClipSeconds ??
       (trimEnd > trimStart ? trimEnd - trimStart : videoDuration) / speedTweet;
+    // Modo «text» (el de por defecto): la tarjeta vive mientras vive el bloque
+    // de texto —`fadeP` es el mismo progreso que desvanece al titular— y se
+    // apaga con él en el fundido texto→vídeo. Los demás modos siguen con su
+    // propia ventana (o siempre, si no hay reloj).
     const tweetHere =
       postDesign !== "podcast" &&
       (postFormat === "4:5" || postFormat === "9:16") &&
       !!(tweetText || tweetHtml) &&
       (forceTweet ||
         (typeof contentTime === "number"
-          ? tweetShownAt(tweetShowMode, tweetShowSecs, contentTime, tweetClipDur)
+          ? tweetShowMode === "text"
+            ? fadeP < 1
+            : tweetShownAt(
+                tweetShowMode,
+                tweetShowSecs,
+                contentTime,
+                tweetClipDur,
+              )
           : tweetOn));
     const tweetAvatarImg = tweetHere
       ? await loadTweetAvatarImg(tweetAvatar)
@@ -5637,6 +5661,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const k = W / previewCardWidthFor(postFormat);
       const footerPx = previewFooterH > 0 ? previewFooterH : 95 / k;
       ctx.save();
+      // Modo «text»: la tarjeta se desvanece con el bloque de texto (mismo
+      // `textAlpha` que el titular), así sale del clip cuando sale él. En PNG
+      // y copia (`forceTweet`) la portada la pinta opaca pase lo que pase.
+      ctx.globalAlpha =
+        tweetShowMode === "text" && !forceTweet ? textAlpha : 1;
       drawTweetCard(ctx, {
         W,
         k,
@@ -5744,13 +5773,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tweetAvatarImgCache = useRef<Map<string, HTMLImageElement | null>>(
     new Map(),
   );
-  const loadTweetAvatarImg = async (
-    src: string,
-  ): Promise<HTMLImageElement | null> => {
-    if (!src) return null;
-    const hit = tweetAvatarImgCache.current.get(src);
-    if (hit !== undefined) return hit;
-    const img = await new Promise<HTMLImageElement | null>((resolve) => {
+  /** unavatar.io atiende en `/x/` y en `/twitter/`, pero éste redirige y esa
+   *  redirección NO pasa la comprobación CORS: la vista previa (sin
+   *  crossOrigin) sí pintaba la foto y el archivo salía con la letra inicial.
+   *  Se intenta primero el camino directo y el otro queda como respaldo. */
+  const tweetAvatarCandidates = (src: string): string[] => {
+    const fromTwitter = src.match(/^https:\/\/unavatar\.io\/twitter\/(.+)$/i);
+    const fromX = src.match(/^https:\/\/unavatar\.io\/x\/(.+)$/i);
+    if (fromTwitter) return [`https://unavatar.io/x/${fromTwitter[1]}`, src];
+    if (fromX) return [src, `https://unavatar.io/twitter/${fromX[1]}`];
+    return [src];
+  };
+  const loadAvatarOnce = (src: string): Promise<HTMLImageElement | null> =>
+    new Promise((resolve) => {
       const el = new Image();
       if (!src.startsWith("data:") && !src.startsWith("blob:")) {
         el.crossOrigin = "anonymous";
@@ -5759,8 +5794,27 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       el.onerror = () => resolve(null);
       el.src = src;
     });
+  const loadTweetAvatarImg = async (
+    src: string,
+  ): Promise<HTMLImageElement | null> => {
+    if (!src) return null;
+    const hit = tweetAvatarImgCache.current.get(src);
+    if (hit !== undefined) return hit;
+    let img: HTMLImageElement | null = null;
+    for (const candidate of tweetAvatarCandidates(src)) {
+      img = await loadAvatarOnce(candidate);
+      if (img) break;
+    }
     tweetAvatarImgCache.current.set(src, img);
     return img;
+  };
+  /** Un fallo puntual (sin red, rate-limit de unavatar) no deja la tarjeta
+   *  sin foto el resto de la sesión: al empezar a exportar se limpian los
+   *  fallos cacheados y se vuelve a intentar una vez. */
+  const resetTweetAvatarFailures = () => {
+    for (const [key, value] of tweetAvatarImgCache.current) {
+      if (value === null) tweetAvatarImgCache.current.delete(key);
+    }
   };
 
   // Export High-Res PNG
@@ -5769,6 +5823,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       setIsExporting(true);
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
+      // Un avatar que falló (red, rate-limit) no debe dejar de pintarse para
+      // el resto de la sesión: en cada exportación se reintenta una vez.
+      resetTweetAvatarFailures();
 
       if (postDesign === "podcast") {
         // Post podcast: el PNG es el frame que se ve en la vista previa, con
@@ -7544,6 +7601,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       showToast("Carga un video o un audio antes de exportar.");
       return;
     }
+    // Un avatar que falló (red, rate-limit) no debe salir como letra inicial
+    // en toda la sesión: al empezar a exportar se reintenta una vez.
+    resetTweetAvatarFailures();
     // En modo podcast la exportación nunca sale muda: el sonido ES el
     // contenido. `isMuted` sólo goberna la vista previa.
     const mutedForExport = mediaType === "audio" ? false : isMuted;
@@ -9385,22 +9445,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
   // Cuándo se ve la tarjeta del tweet en vídeo: se resuelve con un reloj rAF
   // que sólo llama a `setState` al cruzar el umbral (el resto de fotogramas
-  // no re-renderiza nada). Sin tweet, sin vídeo o con el modo «todo», la
-  // tarjeta está siempre visible.
+  // no re-renderiza nada). Sin tweet, sin vídeo, con el modo «todo» o con el
+  // modo «text» —que la ata al bloque de texto y la apaga su propio fundido,
+  // en el JSX de la tarjeta— la tarjeta está siempre «encendida».
   useEffect(() => {
     const wanted =
       (!tweetText && !tweetHtml) ||
       mediaType !== "video" ||
       postDesign === "podcast" ||
-      tweetShowMode === "always";
+      tweetShowMode === "always" ||
+      tweetShowMode === "text";
     if (wanted) {
       setTweetOn(true);
       return;
     }
     let raf = 0;
     const speed = videoSpeed > 0 ? videoSpeed : 1;
+    // Segundos de contenido que acaban saliendo (trim + «Duración máxima» +
+    // tope de 60 s): la ventana de «Últimos N segundos» se mide contra eso,
+    // igual que en el archivo.
     const clipDur =
-      trimEnd > trimStart ? (trimEnd - trimStart) / speed : videoDuration;
+      exportClipSeconds ??
+      (trimEnd > trimStart ? (trimEnd - trimStart) / speed : videoDuration / speed);
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const v = videoRef.current;
@@ -9423,6 +9489,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     trimEnd,
     videoSpeed,
     videoDuration,
+    exportClipSeconds,
   ]);
 
   // Reloj de la transición «texto → vídeo» (4:5 y 9:16): mientras el vídeo
@@ -12429,30 +12496,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     ))}
                   </select>
                 </label>
-                {/* Cuándo se ve en vídeo: todo el clip o sólo unos segundos.
-                    En el PNG la tarjeta sale siempre. */}
+                {/* Cuándo se ve en vídeo: por defecto vive con el bloque de
+                    texto; también todo el clip o sólo unos segundos. En el PNG
+                    la tarjeta sale siempre. */}
                 {mediaType === "video" && (
                   <>
                     <label
                       className="flex items-center gap-1.5 cursor-pointer select-none"
-                      title="Cuándo se muestra la tarjeta en el vídeo (en el PNG sale siempre)"
+                      title="Cuándo se muestra la tarjeta en el vídeo («Con el texto» se va con el titular; en el PNG sale siempre)"
                     >
                       <span className="text-[11px] text-neutral-500">Ver</span>
                       <select
                         value={tweetShowMode}
                         onChange={(e) =>
                           setTweetShowMode(
-                            e.target.value as "always" | "start" | "end",
+                            e.target.value as
+                              | "text"
+                              | "always"
+                              | "start"
+                              | "end",
                           )
                         }
                         className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:border-white/30 transition-colors cursor-pointer"
                       >
+                        <option value="text">Con el texto</option>
                         <option value="always">Todo el video</option>
                         <option value="start">Primeros segundos</option>
                         <option value="end">Últimos segundos</option>
                       </select>
                     </label>
-                    {tweetShowMode !== "always" && (
+                    {(tweetShowMode === "start" ||
+                      tweetShowMode === "end") && (
                       <label
                         className="flex items-center gap-1.5 cursor-pointer select-none"
                         title={
@@ -13360,7 +13434,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {/* Tarjeta «tweet embebido»: simula el embed de X sin API key.
                     Se apoya sobre el sello inferior (medido) y admite subida
                     extra con «Altura», para que nunca quede «muy abajo».
-                    `tweetOn` la limita a los segundos elegidos en vídeo. */}
+                    `tweetOn` la limita a los segundos elegidos en vídeo y, en
+                    el modo «text», su fundido la ata al bloque de texto. */}
                 {tweetOn && (tweetText || tweetHtml) && (
                   <div
                     className="absolute inset-x-0 px-3 pb-3 pt-6"
@@ -13370,6 +13445,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       // debajo del cierre z-40: la tarjeta manda sobre el clip, no al reves.
                       zIndex: textFadeP > 0 ? 35 : 25,
                       bottom: previewFooterH + tweetLift,
+                      // Modo «text»: la tarjeta se desvanece con el titular
+                      // (mismo `textFadeP`) y, al 100 %, se aparta del DOM para
+                      // que el backdrop-blur no deje rastro sobre el vídeo.
+                      opacity: tweetShowMode === "text" ? 1 - textFadeP : 1,
+                      display:
+                        tweetShowMode === "text" && textFadeP >= 1
+                          ? "none"
+                          : undefined,
                     }}
                   >
                     <div className="rounded-2xl border border-white/15 bg-neutral-950/85 backdrop-blur-md px-3 py-2.5 shadow-2xl">
@@ -13382,7 +13465,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                               alt=""
                               className="w-full h-full object-cover"
                               onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                                // Mismo reparto de candidatos que el lienzo
+                                // exportado: si falla la URL directa se prueba
+                                // la otra y sólo entonces se aparta la foto.
+                                const el =
+                                  e.currentTarget as HTMLImageElement;
+                                const cur = el.getAttribute("src") || "";
+                                const alt = tweetAvatarCandidates(
+                                  cur || tweetAvatar,
+                                ).find((u) => u !== cur);
+                                if (alt && !el.dataset.avatarRetried) {
+                                  el.dataset.avatarRetried = "1";
+                                  el.src = alt;
+                                  return;
+                                }
+                                el.style.display = "none";
                               }}
                             />
                           ) : (
