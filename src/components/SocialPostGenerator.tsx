@@ -13527,41 +13527,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </div>
           )}
 
-          {/* Miniatura de portada: la misma composición que se descarga,
-              pintada en vivo. El botón queda debajo, a un clic de la vista
-              previa que lo muestra. */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between px-0.5">
-              <span className="text-[11px] font-semibold text-neutral-400">
-                Miniatura · Portada 16:9
-              </span>
-              <span className="text-[11px] font-mono text-neutral-500">
-                1920×1080
-              </span>
-            </div>
-
-            <div className="rounded-xl overflow-hidden border border-white/15 bg-black shadow-lg">
-              <canvas
-                ref={portadaCanvasRef}
-                width={1920}
-                height={1080}
-                className="block w-full h-auto"
-                aria-label="Vista previa de la portada 16:9"
-              />
-            </div>
-
-            <button
-              type="button"
-              disabled={isExporting || isRecordingVideo}
-              onClick={handleExportPortada}
-              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold rounded-xl border border-white/15 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
-            >
-              <ImageIcon className="w-4 h-4" />
-              <span>Descargar Portada · 1920×1080</span>
-            </button>
-          </div>
-
           {/* Export Action Buttons */}
           <div className="space-y-2.5 pt-2">
             {/* Primary: Export Video or Export PNG depending on mediaType */}
@@ -13694,6 +13659,41 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {exportsVideo &&
                 " El video se compone en tu navegador: no se sube a ningún servidor."}
             </p>
+          </div>
+
+          {/* Miniatura de portada: la misma composición que se descarga,
+              pintada en vivo. Cierra la columna para que la vista previa y
+              sus botones de exportación queden juntos, sin interrupciones. */}
+          <div className="space-y-2 pt-1 border-t border-white/5">
+            <div className="flex items-center justify-between px-0.5">
+              <span className="text-[11px] font-semibold text-neutral-400">
+                Miniatura · Portada 16:9
+              </span>
+              <span className="text-[11px] font-mono text-neutral-500">
+                1920×1080
+              </span>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border border-white/15 bg-black">
+              <canvas
+                ref={portadaCanvasRef}
+                width={1920}
+                height={1080}
+                className="block w-full h-auto"
+                aria-label="Vista previa de la portada 16:9"
+              />
+            </div>
+
+            <button
+              type="button"
+              disabled={isExporting || isRecordingVideo}
+              onClick={handleExportPortada}
+              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold rounded-xl border border-white/15 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>Descargar Portada · 1920×1080</span>
+            </button>
           </div>
         </div>
       </div>
