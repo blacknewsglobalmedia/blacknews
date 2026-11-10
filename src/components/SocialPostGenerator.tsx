@@ -39,6 +39,9 @@ import {
   FileDown,
   User,
   AlertTriangle,
+  Music,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { Report } from "../types/news";
 import type { OsintPostImport } from "../types/osint";
@@ -1026,13 +1029,13 @@ const CollapseSection: React.FC<{
         aria-expanded={open}
         className="group flex w-full cursor-pointer items-center justify-between gap-2 text-left"
       >
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-400 transition-colors group-hover:text-white">
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 transition-colors group-hover:text-white">
           {icon}
           <span>{title}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           {open && value ? (
-            <span className="font-mono text-[10px] text-neutral-500">
+            <span className="font-mono text-[11px] text-neutral-500">
               {value}
             </span>
           ) : null}
@@ -1967,6 +1970,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const allSectionsOpen = COLLAPSE_SECTION_KEYS.every(
     (key) => openSections[key],
   );
+  /** Columna de controles plegada: la vista previa pasa a ocupar el ancho
+   *  completo. El estado sobrevive a un refresco (sólo en escritorio: en
+   *  móvil la vista previa va primero de todos modos). */
+  const [controlsOpen, setControlsOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("blacknews_controls_open");
+      if (saved !== null) return saved === "1";
+    } catch {}
+    return true;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("blacknews_controls_open", controlsOpen ? "1" : "0");
+    } catch {}
+  }, [controlsOpen]);
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
   const [groqKeySaved, setGroqKeySaved] = useState(false);
   const [openRouterKeySaved, setOpenRouterKeySaved] = useState(false);
@@ -2469,7 +2487,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const config = getPostConfigObject();
       const jsonStr = JSON.stringify(config, null, 2);
       navigator.clipboard.writeText(jsonStr);
-      showToast("✓ ¡Configuración JSON copiada al portapapeles!");
+      showToast("Configuración JSON copiada al portapapeles");
     } catch {
       showToast("No se pudo copiar directamente al portapapeles.");
     }
@@ -2487,7 +2505,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-");
       triggerDownload(url, `blacknews-post-${slug || "draft"}.json`);
-      showToast("✓ Archivo JSON descargado");
+      showToast("Archivo JSON descargado");
     } catch {
       showToast("Error al descargar archivo JSON.");
     }
@@ -2696,7 +2714,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         setIsJsonModalOpen(false);
         setJsonError(null);
         setJsonInputText("");
-        showToast("✓ ¡Post restaurado con éxito desde JSON!");
+        showToast("Post restaurado desde JSON");
       }
     } catch (err: any) {
       // Un borrador ilegible no debe romper el generador ni poner un error en
@@ -3059,10 +3077,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         ? { kind: "warn", text: `⚠︎ ${notes.join(" · ")}` }
         : {
             kind: "ok",
-            text: "✓ Post autocompletado y tweet redactado. Ahora solo sube tu imagen o video.",
+            text: "Post autocompletado y tweet redactado. Ahora solo sube tu imagen o video.",
           },
     );
-    showToast("✓ ¡Post y tweet redactados con éxito!");
+    showToast("Post y tweet redactados");
     return true;
   };
 
@@ -3429,7 +3447,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (text) {
         setAiJsonText(text);
         setAiNotice(null);
-        showToast("✓ JSON pegado desde el portapapeles");
+        showToast("JSON pegado desde el portapapeles");
       }
     } catch {
       showToast("Usa Ctrl+V para pegar en el cuadro");
@@ -3465,7 +3483,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     }
     try {
       await navigator.clipboard.writeText(aiTweet);
-      showToast("✓ Tweet copiado al portapapeles");
+      showToast("Tweet copiado al portapapeles");
     } catch {
       showToast("No se pudo copiar directamente al portapapeles.");
     }
@@ -3502,7 +3520,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       if (rewritten) {
         const cleaned = rewritten.replace(/^["']|["']$/g, "").replace(/^Texto reescrito:\s*/, "").replace(/^Reescrito:\s*/, "");
         setText(cleaned.trim());
-        showToast(`✓ Reescrito en tono "${tone}"`);
+        showToast(`Reescrito en tono "${tone}"`);
       }
     } catch {
       setAiNotice({ kind: "error", text: "No se pudo reescribir con ese tono. Intenta de nuevo." });
@@ -5787,7 +5805,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               triggerDownload(dataUrl, filename);
               setExportedImageUrl(dataUrl);
               showToast(
-                `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+                `Post ${postFormat} exportado en PNG (${POST_W}×${POST_H})`,
               );
             } catch (canvasErr) {
               console.error(canvasErr);
@@ -5802,7 +5820,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           triggerDownload(url, filename);
           setExportedImageUrl(url);
           showToast(
-            `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+            `Post ${postFormat} exportado en PNG (${POST_W}×${POST_H})`,
           );
           setIsExporting(false);
         }, "image/png");
@@ -5813,7 +5831,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           triggerDownload(dataUrl, filename);
           setExportedImageUrl(dataUrl);
           showToast(
-            `¡Post ${postFormat} exportado en PNG con éxito (${POST_W}×${POST_H})!`,
+            `Post ${postFormat} exportado en PNG (${POST_W}×${POST_H})`,
           );
         } catch {
           showToast(
@@ -6138,7 +6156,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             const dataUrl = canvas.toDataURL("image/png");
             triggerDownload(dataUrl, filename);
             setExportedImageUrl(dataUrl);
-            showToast(`¡Portada descargada! (1920×1080)`);
+            showToast(`Portada descargada (1920×1080)`);
           } catch {
             showToast(
               "La imagen tiene restricciones de origen. Prueba subiendo la foto directamente.",
@@ -6150,7 +6168,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         const url = URL.createObjectURL(blob);
         triggerDownload(url, filename);
         setExportedImageUrl(url);
-        showToast(`¡Portada descargada! (1920×1080)`);
+        showToast(`Portada descargada (1920×1080)`);
         setIsExporting(false);
       }, "image/png");
     } catch (err) {
@@ -6205,7 +6223,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             new ClipboardItem({ "image/png": blob }),
           ]);
           setCopySuccess(true);
-          showToast("¡Imagen copiada al portapapeles!");
+          showToast("Imagen copiada al portapapeles");
           setTimeout(() => setCopySuccess(false), 3000);
         } catch {
           showToast("Usa el botón de descargar PNG.");
@@ -6251,7 +6269,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             new ClipboardItem({ "image/png": blob }),
           ]);
           setCopySuccess(true);
-          showToast("¡Portada copiada al portapapeles!");
+          showToast("Portada copiada al portapapeles");
           setTimeout(() => setCopySuccess(false), 3000);
         } catch {
           showToast("Usa el botón de descargar portada.");
@@ -7439,7 +7457,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           ? " ⚠️ El aviso de contenido sensible no pudo incluirse: el archivo sale sin la fase previa."
           : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted}) — exportación acelerada!${warnNote}${outroNote}`,
+        `Video ${postFormat} exportado en tu navegador (${sizeFormatted})${warnNote}${outroNote}`,
       );
       snap("finalize");
       return "done";
@@ -8582,7 +8600,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             : " ⚠️ El cierre BlackNews no pudo arrancar: se exportó sin el sello final."
           : "";
       showToast(
-        `¡Video ${postFormat} exportado en tu navegador (${sizeFormatted})!${formatNote}${warnNote}${outroNote}`,
+        `Video ${postFormat} exportado en tu navegador (${sizeFormatted})${formatNote}${warnNote}${outroNote}`,
       );
     } catch (err: any) {
       if (!isCancelledRef.current) {
@@ -9668,8 +9686,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           importado mientras el editor trabaja (no forma parte del JSON
           del borrador). Se cierra sin tocar los campos ya precompletados. */}
       {osintSource && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] text-emerald-200">
-          <span className="font-bold uppercase tracking-wider">Hallazgo OSINT importado</span>
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[13px] text-neutral-300">
+          <span className="font-semibold">Hallazgo OSINT importado</span>
           <span className="text-neutral-300">
             {osintSource.name}
             {osintSource.publishedAt
@@ -9686,11 +9704,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </a>
           {osintSource.machineTranslated && (
             <>
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+              <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-neutral-300">
                 Texto adaptado por IA (reescrito)
               </span>
               <details className="w-full sm:w-auto">
-                <summary className="cursor-pointer text-[13px] text-amber-300/90 hover:text-amber-200">
+                <summary className="cursor-pointer text-[13px] text-neutral-400 hover:text-white">
                   Ver texto original de la fuente
                 </summary>
                 <div className="mt-1 space-y-1 text-neutral-300 leading-relaxed">
@@ -9799,22 +9817,42 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-6 border-b border-white/10 gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] sm:text-xs font-sans uppercase tracking-widest text-neutral-400 font-semibold mb-1">
-            <Smartphone className="w-3.5 h-3.5 text-white shrink-0" />
-            <span>FORMATO VERTICAL {postFormat} · SUPER AMOLED BLACK</span>
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-sans text-neutral-500 mb-1">
+            <Smartphone className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+            <span>Editor de posts {postFormat}</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
             Generador de Posts {postFormat}
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-light max-w-2xl leading-relaxed">
-            Publicaciones visuales de alto impacto con fondo negro absoluto,
-            tipografía Lexend, atribución geográfica por países, filtros
-            fotográficos y controles de audio para video.
+            Imagen, vídeo o audio con países, filtros fotográficos y controles
+            de audio, listos para exportar.
           </p>
         </div>
 
         {/* Header Actions: Quick Report Pre-fill Dropdown & JSON Backup buttons */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Plegar la columna de controles: la vista previa ocupa todo el
+              ancho. En móvil no se ofrece: ahí la vista previa va primero. */}
+          <button
+            type="button"
+            onClick={() => setControlsOpen((v) => !v)}
+            className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer border border-white/10"
+            title={
+              controlsOpen
+                ? "Plegar los controles y ampliar la vista previa"
+                : "Mostrar los controles"
+            }
+            aria-expanded={controlsOpen}
+          >
+            {controlsOpen ? (
+              <PanelLeftClose className="w-3.5 h-3.5" />
+            ) : (
+              <PanelLeftOpen className="w-3.5 h-3.5" />
+            )}
+            <span>{controlsOpen ? "Plegar controles" : "Controles"}</span>
+          </button>
+
           {/* JSON Export / Import Buttons */}
           <div className="flex items-center gap-1.5 bg-neutral-950 border border-white/10 p-1 rounded-xl shadow-lg">
             <button
@@ -9823,7 +9861,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
               title="Copiar configuración completa del post como JSON"
             >
-              <Copy className="w-3.5 h-3.5 text-amber-400" />
+              <Copy className="w-3.5 h-3.5 text-neutral-300" />
               <span>Copiar JSON</span>
             </button>
 
@@ -9837,7 +9875,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
               title="Pegar o restaurar configuración desde JSON"
             >
-              <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+              <FileCode className="w-3.5 h-3.5 text-neutral-400" />
               <span>Pegar JSON</span>
             </button>
           </div>
@@ -9856,7 +9894,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   disabled
                   className="bg-neutral-900 text-neutral-400"
                 >
-                  ⚡ Autocompletar desde despacho...
+                  Autocompletar desde despacho
                 </option>
                 {reports.map((r) => (
                   <option
@@ -9940,7 +9978,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   setAiTopic(e.target.value);
                   setAiNotice(null);
                 }}
-                placeholder="Tema, titular de partida o contexto (ej: Bombardeos de precisión en instalaciones nucleares en Isfahán provocan alerta máxima en el Golfo Pérsico...)"
+                placeholder="Tema, titular de partida o contexto"
                 className="flex-1 min-h-0 w-full resize-none bg-neutral-950 border border-white/10 rounded-xl p-2.5 text-[13px] text-neutral-100 leading-relaxed placeholder-neutral-600 focus:outline-none focus:border-white/25 font-['Lexend']"
               />
 
@@ -9976,7 +10014,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </button>
                 )}
 
-                <span className="ml-auto text-[10px] font-mono text-neutral-600 tabular-nums">
+                <span className="ml-auto text-[11px] font-mono text-neutral-600 tabular-nums">
                   {aiTopic.trim().length} car.
                 </span>
               </div>
@@ -9988,28 +10026,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
         {/* Barra flotante limpia */}
         <aside className="rounded-2xl bg-neutral-950/95 border border-white/10 backdrop-blur-md shadow-2xl p-2 flex items-center gap-2 flex-wrap">
-          <button type="button" onClick={() => aiComposerOpen ? handleGenerateAi() : setAiComposerOpen(true)} disabled={aiBusy} title={aiBusy ? "Redactando con IA..." : aiComposerOpen ? "Redactar y autocompletar" : "Abrir asistente IA"} className="h-9 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:bg-emerald-500/30 text-black text-[11px] font-bold uppercase tracking-wide transition-colors flex items-center gap-2 shadow-lg shadow-emerald-500/10"><Sparkles className="w-4 h-4" /><span className="truncate">{aiBusy ? "Redactando..." : aiComposerOpen ? "Redactar" : "Generar 4:5"}</span></button>
+          <button type="button" onClick={() => aiComposerOpen ? handleGenerateAi() : setAiComposerOpen(true)} disabled={aiBusy} title={aiBusy ? "Redactando con IA..." : aiComposerOpen ? "Redactar y autocompletar" : "Abrir asistente IA"} className="h-9 px-3 rounded-lg bg-white hover:bg-neutral-200 disabled:bg-white/30 text-black text-[11px] font-semibold transition-colors flex items-center gap-2"><Sparkles className="w-4 h-4" /><span className="truncate">{aiBusy ? "Redactando…" : aiComposerOpen ? "Redactar" : "Redactar con IA"}</span></button>
           <div className="h-6 w-px bg-white/10 mx-1" />
-          <div className="flex items-center gap-1 bg-neutral-900 rounded-lg border border-white/5 px-2 py-0.5 overflow-x-auto max-w-[42vw] sm:max-w-xs"><span className="text-[9px] text-neutral-500 font-mono shrink-0">Modelo:</span>{[
+          <div className="flex items-center gap-1 bg-neutral-900 rounded-lg border border-white/5 px-2 py-0.5 overflow-x-auto max-w-[42vw] sm:max-w-xs"><span className="text-[11px] text-neutral-500 font-mono shrink-0">Modelo:</span>{[
             { key: "groq-llama", label: "L3.3" }, { key: "gemini-flash", label: "Flash" }, { key: "or-gpt", label: "GPT-4o" }, { key: "or-llama", label: "L3.3" }, { key: "or-gemini", label: "Flash" },
-          ].map(m => <button key={m.key} type="button" onClick={() => setAiModelChoice(m.key)} className={`text-[10px] px-1.5 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-rose-500/20 text-rose-300 font-semibold" : "text-neutral-400 hover:text-white"}`}>{m.label}</button>)}</div>
+          ].map(m => <button key={m.key} type="button" onClick={() => setAiModelChoice(m.key)} className={`text-[11px] px-1.5 py-0.5 rounded-md whitespace-nowrap transition-colors cursor-pointer ${aiModelChoice === m.key ? "bg-white/15 text-white font-semibold" : "text-neutral-400 hover:text-white"}`}>{m.label}</button>)}</div>
           <div className="h-6 w-px bg-white/10 mx-1" />
-          <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(buildAiPromptBase()); showToast("✓ Prompt copiado"); } catch {} }} className="text-[10px] px-2 py-1 rounded-md bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium cursor-pointer" title="Copia la plantilla tal cual para pegarla en otra IA">Prompt</button>
-          <button type="button" onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(()=>{}); showToast("✓ Tweet"); } else showToast("Sin tweet aun"); }} className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-medium cursor-pointer">Tweet</button>
+          <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(buildAiPromptBase()); showToast("Prompt copiado"); } catch {} }} className="text-[11px] px-2 py-1 rounded-md bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white transition-colors font-medium cursor-pointer" title="Copia la plantilla tal cual para pegarla en otra IA">Prompt</button>
+          <button type="button" onClick={() => { if (aiTweet) { navigator.clipboard.writeText(aiTweet).catch(()=>{}); showToast("Tweet copiado"); } else showToast("Sin tweet aún"); }} className="text-[11px] px-2 py-1 rounded-md bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white transition-colors font-medium cursor-pointer">Tweet</button>
           <button
             type="button"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(buildAiTodoClipboard());
-                showToast("✓ Prompt copiado");
+                showToast("Prompt copiado");
               } catch {}
             }}
             title="Copia la plantilla tal cual para pegarla en otra IA"
-            className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors font-medium cursor-pointer"
+            className="text-[11px] px-2 py-1 rounded-md bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white transition-colors font-medium cursor-pointer"
           >
             Todo
           </button>
-          <button type="button" onClick={handleToggleAiSettings} title="Claves de IA" className="h-8 w-8 rounded-lg grid place-items-center text-amber-300 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><Zap className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={handleToggleAiSettings} title="Claves de IA" className="h-8 w-8 rounded-lg grid place-items-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><Zap className="w-3.5 h-3.5" /></button>
           {aiComposerOpen && <button type="button" onClick={() => setAiComposerOpen(false)} title="Cerrar" className="h-8 w-8 rounded-lg grid place-items-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
         </aside>
 
@@ -10017,8 +10055,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
         {/* LEFT COLUMN: Controls & Settings (7 cols).
             En móvil va DESPUÉS de la vista previa (order-2) para que el
-            resultado sea lo primero que se ve al abrir la pestaña. */}
-        <div className="lg:col-span-7 space-y-6 order-2 lg:order-1">
+            resultado sea lo primero que se ve al abrir la pestaña. Plegada
+            en escritorio, desaparece y la vista previa toma las 12 cols. */}
+        <div
+          className={`lg:col-span-7 space-y-6 order-2 lg:order-1 ${
+            controlsOpen ? "" : "lg:hidden"
+          }`}
+        >
           {/* Abrir o plegar todas las secciones de la columna de una vez.
               Discreto a propósito: no debe competir con el asistente IA. */}
           <div className="flex justify-end">
@@ -10047,13 +10090,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             (aiNotice && !aiComposerOpen)) && (
             <div
               ref={aiCardRef}
-              className="bg-linear-to-b from-neutral-900/90 via-neutral-950/90 to-neutral-950 border border-emerald-500/30 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden"
+              className="bg-neutral-950 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 relative overflow-hidden"
             >
               {/* Aviso: éxito, salvaguarda o error. Con el compositor abierto
                 se enseña allí, que es donde se está trabajando. */}
               {aiNotice && !aiComposerOpen && (
                 <div
-                  className={`p-3.5 rounded-xl text-xs font-medium leading-relaxed border ${
+                  className={`p-4 rounded-xl text-xs font-medium leading-relaxed border ${
                     aiNotice.kind === "error"
                       ? "bg-red-500/10 border-red-500/30 text-red-400"
                       : aiNotice.kind === "warn"
@@ -10070,8 +10113,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div className="bg-neutral-900/90 border border-white/10 rounded-xl p-4 space-y-4 animate-in fade-in">
                   <div className="flex items-center justify-between border-b border-white/5 pb-2">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      <Zap className="w-4 h-4 text-neutral-400" />
+                      <span className="text-xs font-semibold text-white">
                         Proveedores de IA 100% Gratuitos (Sin Tarjeta)
                       </span>
                     </div>
@@ -10091,9 +10134,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </p>
 
                   {/* Opción 1: Groq Cloud (Recomendada · 14.400 req/día) */}
-                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-white flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-orange-400"></span>
                         Groq Cloud · Llama 3.3 70B (Recomendado)
                       </span>
@@ -10101,7 +10144,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         href="https://console.groq.com/keys"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-orange-400 hover:text-orange-300 underline font-medium"
+                        className="text-[11px] text-neutral-400 hover:text-white underline font-medium"
                       >
                         Obtener clave gratis (14.400/día) →
                       </a>
@@ -10115,7 +10158,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           setGroqKeySaved(false);
                         }}
                         placeholder="gsk_..."
-                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-orange-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-white/40 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
                       />
                       <button
                         type="button"
@@ -10129,21 +10172,21 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           setGroqKeySaved(true);
                           showToast(
                             k
-                              ? "✓ Clave de Groq guardada"
+                              ? "Clave de Groq guardada"
                               : "Clave de Groq borrada",
                           );
                         }}
-                        className="px-3.5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                        className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
                       >
-                        {groqKeySaved ? "✓ Guardada" : "Guardar"}
+                        {groqKeySaved ? "Guardada" : "Guardar"}
                       </button>
                     </div>
                   </div>
 
                   {/* Opción 2: Google Gemini (1.500 req/día) */}
-                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-white flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-blue-400"></span>
                         Google Gemini · Flash Lite
                       </span>
@@ -10151,7 +10194,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-blue-400 hover:text-blue-300 underline font-medium"
+                        className="text-[11px] text-neutral-400 hover:text-white underline font-medium"
                       >
                         Obtener clave gratis (1.500/día) →
                       </a>
@@ -10165,7 +10208,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           setGeminiKeySaved(false);
                         }}
                         placeholder="AIza..."
-                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-blue-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
+                        className="flex-1 bg-neutral-900 border border-white/10 focus:border-white/40 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none"
                       />
                       <button
                         type="button"
@@ -10180,33 +10223,33 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           setGeminiKeySaved(true);
                           showToast(
                             k
-                              ? "✓ Clave de Gemini guardada"
+                              ? "Clave de Gemini guardada"
                               : "Clave de Gemini borrada",
                           );
                         }}
-                        className="px-3.5 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+                        className="px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0"
                       >
-                        {geminiKeySaved ? "✓ Guardada" : "Guardar"}
+                        {geminiKeySaved ? "Guardada" : "Guardar"}
                       </button>
                     </div>
                   </div>
 
                   {/* Opción 3: OpenRouter (modelos gratuitos: openai/gpt-4o-mini, meta-llama/llama-3.3-70b, google/gemini-2.0-flash-lite) */}
-                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                  <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                      <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-neutral-500"></span>
                         OpenRouter · Gratis
                       </span>
-                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-rose-400 hover:text-rose-300 underline font-medium">Obtener clave →</a>
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-[11px] text-neutral-400 hover:text-white underline font-medium">Obtener clave →</a>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="password" value={openRouterKey} onChange={(e) => { setOpenRouterKey(e.target.value); setOpenRouterKeySaved(false); }} placeholder="sk-or-v1-..." className="flex-1 bg-neutral-900 border border-white/10 focus:border-rose-400 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none" />
-                      <button type="button" onClick={() => { const k = openRouterKey.trim(); try { if (k) localStorage.setItem("blacknews_openrouter_key", k); else localStorage.removeItem("blacknews_openrouter_key"); } catch {} setOpenRouterKeySaved(true); showToast(k ? "✓ Clave de OpenRouter guardada" : "Clave borrada"); }} className="px-3.5 py-2 bg-rose-500 hover:bg-rose-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0">{openRouterKeySaved ? "✓ Guardada" : "Guardar"}</button>
+                      <input type="password" value={openRouterKey} onChange={(e) => { setOpenRouterKey(e.target.value); setOpenRouterKeySaved(false); }} placeholder="sk-or-v1-..." className="flex-1 bg-neutral-900 border border-white/10 focus:border-white/40 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 font-mono focus:outline-none" />
+                      <button type="button" onClick={() => { const k = openRouterKey.trim(); try { if (k) localStorage.setItem("blacknews_openrouter_key", k); else localStorage.removeItem("blacknews_openrouter_key"); } catch {} setOpenRouterKeySaved(true); showToast(k ? "Clave de OpenRouter guardada" : "Clave borrada"); }} className="px-4 py-2 bg-white hover:bg-neutral-200 text-black font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0">{openRouterKeySaved ? "Guardada" : "Guardar"}</button>
                     </div>
                     <div className="flex gap-1 flex-wrap">
                       {["openai/gpt-4o-mini","meta-llama/llama-3.3-70b-instruct","google/gemini-2.0-flash-lite"].map((m) => (
-                        <button key={m} type="button" onClick={() => setOpenRouterModel(m)} className={`text-[9px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${openRouterModel === m ? "bg-rose-500/20 text-rose-300 border-rose-400/50 font-bold" : "bg-neutral-900 text-neutral-400 border-white/10 hover:text-white"}`}>{m}</button>
+                        <button key={m} type="button" onClick={() => setOpenRouterModel(m)} className={`text-[11px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${openRouterModel === m ? "bg-white/10 text-white border-white/30 font-semibold" : "bg-neutral-900 text-neutral-400 border-white/10 hover:text-white"}`}>{m}</button>
                       ))}
                     </div>
                   </div>
@@ -10218,12 +10261,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <div className="bg-neutral-900/90 border border-white/15 rounded-xl p-4 space-y-2.5 animate-in fade-in">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      <Zap className="w-4 h-4 text-neutral-300" />
+                      <span className="text-xs font-semibold text-white">
                         Tweet Redactado (X)
                       </span>
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
                           aiTweet.length > AI_TWEET_LIMIT
                             ? "bg-red-500/20 text-red-400 border-red-500/40"
                             : "bg-neutral-800 text-neutral-300 border-white/10"
@@ -10236,7 +10279,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <button
                       type="button"
                       onClick={handleCopyAiTweet}
-                      className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/15 text-neutral-200 border border-white/15 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       <span>Copiar Tweet</span>
@@ -10249,10 +10292,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           await navigator.clipboard.writeText(
                             buildAiTodoClipboard(),
                           );
-                          showToast("✓ Prompt copiado");
+                          showToast("Prompt copiado");
                         } catch {}
                       }}
-                      className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/15 text-neutral-200 border border-white/15 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Copia la plantilla tal cual para pegarla en otra IA"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -10264,7 +10307,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     rows={3}
                     value={aiTweet}
                     onChange={(e) => setAiTweet(e.target.value)}
-                    className="w-full bg-neutral-950 border border-white/10 rounded-lg p-3 text-xs text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-amber-400 resize-y"
+                    className="w-full bg-neutral-950 border border-white/10 rounded-lg p-3 text-xs text-neutral-200 font-mono leading-relaxed focus:outline-none focus:border-white/40 resize-y"
                   />
                 </div>
               )}
@@ -10279,7 +10322,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   )}
                   {aiSources.length > 0 && (
                     <div className="space-y-1.5">
-                      <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-semibold">
+                      <span className="text-[11px] text-neutral-500 font-semibold">
                         Fuentes web consultadas:
                       </span>
                       <ul className="space-y-1">
@@ -10309,8 +10352,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {showAdvancedJson && (
                 <div className="bg-neutral-950/80 border border-white/10 rounded-xl p-4 space-y-3 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+                      <FileCode className="w-3.5 h-3.5 text-neutral-400" />
                       <span>JSON Técnico del Post</span>
                     </span>
                     <div className="flex items-center gap-2">
@@ -10334,7 +10377,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           if (!aiJsonText) return;
                           try {
                             await navigator.clipboard.writeText(aiJsonText);
-                            showToast("✓ JSON copiado al portapapeles");
+                            showToast("JSON copiado al portapapeles");
                           } catch {}
                         }}
                         className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs rounded-lg transition-colors cursor-pointer border border-white/5"
@@ -10344,7 +10387,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={handleApplyAiJson}
-                        className="px-3 py-1 bg-white hover:bg-neutral-200 text-black text-xs font-bold rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
+                        className="px-3 py-1 bg-white hover:bg-neutral-200 text-black text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                       >
                         Aplicar al Post
                       </button>
@@ -10357,7 +10400,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     onChange={(e) => setAiJsonText(e.target.value)}
                     spellCheck={false}
                     placeholder='{\n  "version": 2,\n  "content": {\n    "title": "...",\n    "description": "..."\n  }\n}'
-                    className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-cyan-400 resize-y"
+                    className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3 font-mono text-[11px] text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-y"
                   />
                 </div>
               )}
@@ -10365,9 +10408,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           )}
 
           {/* Card 1: Text Content & Typography */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
                 <FileText className="w-4 h-4 text-white" />
                 <span>1. Contenido Editorial & Tipografía</span>
               </h3>
@@ -10379,14 +10422,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Headline / Titular */}
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
                   <Type className="w-3.5 h-3.5 text-neutral-400" />
                   <span>Titular (Lexend Bold)</span>
                 </label>
 
                 {/* Real-time size control & presets */}
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs font-mono font-bold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
+                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
                     {fontSizeTitle}px
                   </span>
                   <input
@@ -10411,9 +10454,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         type="button"
                         onClick={() => setFontSizeTitle(p.size)}
                         title={`Titular de ${p.size}px`}
-                        className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
+                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
                           fontSizeTitle === p.size
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10429,26 +10472,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Titular en impacto directo..."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-sm sm:text-base font-bold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-sm sm:text-base font-semibold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
               />
               <div className="flex items-center justify-between gap-2 mt-1.5">
                 <button
                   type="button"
                   onClick={() => setTitle((t) => toSentenceCase(t))}
-                  className="text-[10px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
                   title="Sentence Case — primera letra de cada oración en mayúscula"
                 >
                   Sc
                 </button>
-                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400 font-bold" : title.length > 90 ? "text-amber-200" : "text-neutral-400"} font-light`}>
+                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400 font-semibold" : title.length > 90 ? "text-amber-200" : "text-neutral-400"} font-light`}>
                   {title.length}/120
                 </span>
                 <div className="h-1 bg-neutral-800 rounded-full w-12 overflow-hidden">
                   <div className={`h-full rounded-full ${title.length > 120 ? "bg-amber-400" : title.length > 90 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (title.length / 120) * 100)}%` }} />
                 </div>
-                <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Tono:</span>
+                <span className="text-[11px] text-neutral-500">Tono:</span>
                 {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
-                  <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                  <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
                 ))}
               </div>
               <span className="text-[11px] text-neutral-500 font-light block mt-1">
@@ -10460,14 +10503,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Description / Bajada */}
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-neutral-400" />
                   <span>Descripción / Bajada (Lexend Normal)</span>
                 </label>
 
                 {/* Real-time size control */}
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs font-mono font-bold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
+                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
                     {fontSizeDesc}px
                   </span>
                   <input
@@ -10492,9 +10535,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         type="button"
                         onClick={() => setFontSizeDesc(p.size)}
                         title={`Bajada de ${p.size}px`}
-                        className={`px-1.5 py-0.5 text-[10px] font-mono rounded transition-colors ${
+                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
                           fontSizeDesc === p.size
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "bg-neutral-900 text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10509,20 +10552,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={() => setDescription((d) => toSentenceCase(d))}
-                  className="text-[10px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
                   title="Sentence Case — primera letra de cada oración en mayúscula"
                 >
                   Sc
                 </button>
-                <span className={`text-[10px] font-mono ${description.length > 150 ? "text-amber-400 font-bold" : description.length > 120 ? "text-amber-200" : description.length > 100 ? "text-amber-100" : "text-neutral-400"} font-light`}>
+                <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400 font-semibold" : description.length > 120 ? "text-amber-200" : description.length > 100 ? "text-amber-100" : "text-neutral-400"} font-light`}>
                   {description.length}/150
                 </span>
                 <div className="h-1 bg-neutral-800 rounded-full w-16 overflow-hidden">
                   <div className={`h-full rounded-full ${description.length > 150 ? "bg-amber-400" : description.length > 120 ? "bg-amber-300" : description.length > 100 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (description.length / 150) * 100)}%` }} />
                 </div>
-                <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Tono:</span>
+                <span className="text-[11px] text-neutral-500">Tono:</span>
                 {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
-                  <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[10px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                  <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
                 ))}
               </div>
               <textarea
@@ -10530,7 +10573,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Detalle o contexto clave que complementa el titular..."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-3.5 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
               />
             </div>
 
@@ -10550,7 +10593,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <span className="text-neutral-400">
                       Separación Titular ↔ Bajada
                     </span>
-                    <span className="font-mono text-white font-bold">
+                    <span className="font-mono text-white font-semibold">
                       {gapTitleToDesc}px
                     </span>
                   </div>
@@ -10568,9 +10611,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         key={gap}
                         type="button"
                         onClick={() => setGapTitleToDesc(gap)}
-                        className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
                           gapTitleToDesc === gap
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "bg-neutral-800 text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10590,7 +10633,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <span className="text-neutral-400">
                       Separación Cabecera ↔ Titular
                     </span>
-                    <span className="font-mono text-white font-bold">
+                    <span className="font-mono text-white font-semibold">
                       {gapCategoryToTitle}px
                     </span>
                   </div>
@@ -10610,9 +10653,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         key={gap}
                         type="button"
                         onClick={() => setGapCategoryToTitle(gap)}
-                        className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
                           gapCategoryToTitle === gap
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "bg-neutral-800 text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10639,9 +10682,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         key={ratio}
                         type="button"
                         onClick={() => setTitleLineHeightRatio(ratio)}
-                        className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
+                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
                           titleLineHeightRatio === ratio
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10659,9 +10702,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         key={ratio}
                         type="button"
                         onClick={() => setDescLineHeightRatio(ratio)}
-                        className={`px-2 py-0.5 text-[10px] font-mono rounded transition-colors ${
+                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
                           descLineHeightRatio === ratio
-                            ? "bg-white text-black font-bold"
+                            ? "bg-white text-black font-semibold"
                             : "text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -10675,9 +10718,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
 
           {/* Card 2: Categorías & Atribución de Países */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xl">
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
                 <Globe className="w-4 h-4 text-white" />
                 <span>2. Sección Editorial & Países Involucrados</span>
               </h3>
@@ -10688,7 +10731,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             {/* Category selection */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">
+              <label className="text-xs font-semibold text-neutral-400 block">
                 Sección Editorial (Escribe o elige una)
               </label>
 
@@ -10698,7 +10741,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   value={category}
                   onChange={(e) => setCategory(e.target.value.toUpperCase())}
                   placeholder="Ej: GEOPOLÍTICA, DEFENSA & INTELIGENCIA..."
-                  className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold text-white tracking-widest uppercase focus:outline-none focus:border-white/40"
+                  className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-white/40"
                 />
 
                 <select
@@ -10738,9 +10781,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       key={c}
                       type="button"
                       onClick={() => setCategory(c)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-all cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold tracking-wide transition-colors cursor-pointer ${
                         category === c
-                          ? "bg-white text-black font-bold shadow-sm"
+                          ? "bg-white text-black font-semibold shadow-sm"
                           : "bg-neutral-900 text-neutral-400 hover:text-white border border-white/5"
                       }`}
                     >
@@ -10755,7 +10798,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <div className="space-y-3 pt-3 border-t border-white/5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Países o Regiones del Acontecimiento</span>
                   </label>
@@ -10778,7 +10821,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       onClick={() => setCountryPlacement(p.value)}
                       className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
                         countryPlacement === p.value
-                          ? "bg-white text-black font-bold"
+                          ? "bg-white text-black font-semibold"
                           : "text-neutral-400 hover:text-white"
                       }`}
                       title={p.hint}
@@ -10821,7 +10864,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           onClick={() => setCountryFormat("names")}
                           className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                             countryFormat === "names"
-                              ? "bg-white text-black font-bold"
+                              ? "bg-white text-black font-semibold"
                               : "text-neutral-400 hover:text-white"
                           }`}
                           title="Solo nombres: ISRAEL · IRÁN"
@@ -10833,7 +10876,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           onClick={() => setCountryFormat("flags-names")}
                           className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                             countryFormat === "flags-names"
-                              ? "bg-white text-black font-bold"
+                              ? "bg-white text-black font-semibold"
                               : "text-neutral-400 hover:text-white"
                           }`}
                           title="Banderas y nombres: 🇮🇱 ISRAEL · 🇮🇷 IRÁN"
@@ -10845,7 +10888,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           onClick={() => setCountryFormat("flags-codes")}
                           className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                             countryFormat === "flags-codes"
-                              ? "bg-white text-black font-bold"
+                              ? "bg-white text-black font-semibold"
                               : "text-neutral-400 hover:text-white"
                           }`}
                           title="Ultra compacto para muchos países: 🇮🇱 IL · 🇮🇷 IR"
@@ -10857,7 +10900,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           onClick={() => setCountryFormat("flags-only")}
                           className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
                             countryFormat === "flags-only"
-                              ? "bg-white text-black font-bold"
+                              ? "bg-white text-black font-semibold"
                               : "text-neutral-400 hover:text-white"
                           }`}
                           title="Solo banderas: 🇮🇱 🇮🇷"
@@ -10917,7 +10960,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {/* Selected Countries Badges */}
               {selectedCountries.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-2 p-3 bg-neutral-900/90 rounded-xl border border-white/10">
-                  <span className="text-[11px] text-neutral-400 uppercase font-mono mr-1">
+                  <span className="text-[11px] text-neutral-400 font-mono mr-1">
                     Activos:
                   </span>
                   {selectedCountries.map((c) => (
@@ -10963,7 +11006,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   value={countrySearch}
                   onChange={(e) => setCountrySearch(e.target.value)}
                   placeholder={`Filtrar entre ${countryCatalog.length} países (Israel, Perú, Portugal...)`}
-                  className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+                  className="flex-1 bg-neutral-900 border border-white/10 rounded-xl px-4 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
                 />
 
                 <form
@@ -10998,9 +11041,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       key={c.name}
                       type="button"
                       onClick={() => handleToggleCountry(c)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors cursor-pointer ${
                         isSelected
-                          ? "bg-white text-black font-bold shadow-sm"
+                          ? "bg-white text-black font-semibold shadow-sm"
                           : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 hover:text-white border border-white/5"
                       }`}
                     >
@@ -11018,20 +11061,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
 
           {/* Card 3: Media Upload (Image, Video or Audio) */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
                 <Upload className="w-4 h-4 text-white" />
                 <span>3. Imagen, Video o Audio (Arrastra o Selecciona)</span>
               </h3>
               <span className="text-[11px] text-neutral-400 font-mono">
                 {mediaType === "audio"
                   ? postDesign === "podcast"
-                    ? "🎙️ Modo Podcast"
-                    : "🎙️ Audio · estilo noticia"
+                    ? "Modo podcast"
+                    : "Audio · estilo noticia"
                   : mediaType === "video"
-                    ? "🎬 Modo Video"
-                    : "🖼️ Modo Imagen"}
+                    ? "Modo vídeo"
+                    : "Modo imagen"}
               </span>
             </div>
 
@@ -11044,7 +11087,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
+              className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-colors ${
                 isDragOver
                   ? "border-white bg-white/10"
                   : "border-white/15 bg-neutral-900/60 hover:border-white/30 hover:bg-neutral-900"
@@ -11117,7 +11160,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             {/* Pie de foto / Personaje o Crédito */}
             <div className="pt-3 border-t border-white/5 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-neutral-400" />
                   <span>Pie de Foto / Personaje o Crédito (Opcional)</span>
                 </label>
@@ -11141,28 +11184,28 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 value={photoCaption}
                 onChange={(e) => setPhotoCaption(e.target.value)}
                 placeholder="Ej: Benjamin Netanyahu · Primer Ministro (o dejar en blanco)"
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
               />
             </div>
           </div>
 
           {/* Card 3b: Post podcast — variante AMOLED para notas en audio */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
                 <Volume2 className="w-4 h-4 text-white" />
                 <span>3b. Diseño del post</span>
               </h3>
               <span className="text-[11px] text-neutral-400 font-mono">
-                {postDesign === "podcast" ? "🎙️ Podcast" : "📰 Noticias"}
+                {postDesign === "podcast" ? "Podcast" : "Noticias"}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-1.5">
               {(
                 [
-                  { key: "news", label: "📰 Estilo noticia" },
-                  { key: "podcast", label: "🎙️ Estilo podcast" },
+                  { key: "news", label: "Estilo noticia" },
+                  { key: "podcast", label: "Estilo podcast" },
                 ] as const
               ).map((opt) => (
                 <button
@@ -11172,7 +11215,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     setPostDesign(opt.key);
                     if (opt.key === "podcast") setIsMuted(false);
                   }}
-                  className={`py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
+                  className={`py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer border ${
                     postDesign === opt.key
                       ? "bg-white text-black border-white"
                       : "bg-neutral-900 text-neutral-400 border-white/10 hover:text-white"
@@ -11195,7 +11238,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px] gap-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                    <label className="text-[11px] text-neutral-400">
                       Serie (opcional)
                     </label>
                     <input
@@ -11203,11 +11246,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       value={podcastSeries}
                       onChange={(e) => setPodcastSeries(e.target.value)}
                       placeholder="P. ej. Noticias en 1 minuto"
-                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
+                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-['Lexend']"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                    <label className="text-[11px] text-neutral-400">
                       EP (opcional)
                     </label>
                     <input
@@ -11216,14 +11259,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       onChange={(e) => setPodcastEpisode(e.target.value)}
                       placeholder="Vacío"
                       maxLength={6}
-                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-mono"
+                      className="w-full bg-neutral-900 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30 font-mono"
                     />
                   </div>
                 </div>
 
                 {/* Cómo se muestrean las banderas (países) en la tarjeta */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                  <label className="text-[11px] text-neutral-400">
                     Banderas (países)
                   </label>
                   <div className="flex flex-wrap gap-1.5">
@@ -11232,9 +11275,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         key={opt.value}
                         type="button"
                         onClick={() => setPodcastFlagStyle(opt.value)}
-                        className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer ${
+                        className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
                           podcastFlagStyle === opt.value
-                            ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                            ? "bg-white/10 border-white/30 text-white"
                             : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
                         }`}
                       >
@@ -11271,13 +11314,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <button
                     type="button"
                     onClick={() => setPodcastAutoTitle(!podcastAutoTitle)}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-[11px] font-semibold transition-colors cursor-pointer ${
                       podcastAutoTitle
-                        ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                        ? "bg-white/10 border-white/30 text-white"
                         : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
                     }`}
                   >
-                    <span>📅 Titular automático con la fecha</span>
+                    <span>Titular automático con la fecha</span>
                     <span className="font-mono">
                       {podcastAutoTitle ? "ON" : "OFF"}
                     </span>
@@ -11305,7 +11348,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <label className="text-[11px] text-neutral-400 uppercase tracking-wider">
+                    <label className="text-[11px] text-neutral-400">
                       Fondo (opcional · negro puro por defecto)
                     </label>
                     {podcastBgSrc && (
@@ -11324,10 +11367,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <button
                     type="button"
                     onClick={() => podcastBgInputRef.current?.click()}
-                    className="w-full py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border bg-neutral-900 text-neutral-300 border-white/10 hover:border-white/30 hover:text-white"
+                    className="w-full py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer border bg-neutral-900 text-neutral-300 border-white/10 hover:border-white/30 hover:text-white"
                   >
                     {podcastBgName
-                      ? `🖼️ ${podcastBgName}`
+                      ? podcastBgName
                       : "Elegir imagen de fondo"}
                   </button>
                   <input
@@ -11353,13 +11396,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <button
                       type="button"
                       onClick={() => setPodcastMusicOn(!podcastMusicOn)}
-                      className={`px-3 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer border ${
+                      className={`px-3 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer border ${
                         podcastMusicOn
-                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                          ? "bg-white/10 border-white/30 text-white"
                           : "bg-neutral-900 border-white/10 text-neutral-400 hover:text-white"
                       }`}
                     >
-                      🎵 Música de fondo
+                      <span className="inline-flex items-center gap-1.5">
+                        <Music className="w-3.5 h-3.5" />
+                        Música de fondo
+                      </span>
                     </button>
                     <span className="text-[11px] text-neutral-500 font-mono">
                       {podcastMusicOn
@@ -11377,7 +11423,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     onChange={(e) =>
                       setPodcastMusicVol(Number(e.target.value) / 100)
                     }
-                    className="w-full accent-emerald-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
+                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
                   />
                   <p className="text-[11px] text-neutral-400 font-light">
                     Cama de BlackNews siempre por debajo de la voz (12 % por
@@ -11392,8 +11438,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       ⏳ Analizando el audio para dibujar la onda…
                     </span>
                   ) : audioPeaks.length > 0 ? (
-                    <span className="text-emerald-400">
-                      ✓ Onda lista · {audioPeaks.length} barras
+                    <span className="text-neutral-400">
+                      Onda lista · {audioPeaks.length} barras
                     </span>
                   ) : mediaType === "audio" ? (
                     <span className="text-amber-400/90">
@@ -11411,37 +11457,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
 
           {/* Card 4: Filtros & Ajustes */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xl">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-4">
+            <h3 className="text-xs font-semibold text-white flex items-center gap-2">
               <Palette className="w-4 h-4 text-white" />
               <span>4. Filtros Fotográficos & Control de Audio</span>
             </h3>
 
             {/* Filter buttons */}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">
+              <label className="text-xs font-semibold text-neutral-400 block">
                 Filtro Editorial (Sin Color / B&N)
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setFilter("bw-high")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                     filter === "bw-high"
-                      ? "bg-white text-black font-bold shadow-md"
+                      ? "bg-white text-black font-semibold shadow-md"
                       : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
                   <span>B&N Contraste</span>
-                  <span className="text-[10px] opacity-70">(Ref.)</span>
+                  <span className="text-[11px] opacity-70">(Ref.)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setFilter("bw-smooth")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                     filter === "bw-smooth"
-                      ? "bg-white text-black font-bold shadow-md"
+                      ? "bg-white text-black font-semibold shadow-md"
                       : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
@@ -11451,9 +11497,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={() => setFilter("noir")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                     filter === "noir"
-                      ? "bg-white text-black font-bold shadow-md"
+                      ? "bg-white text-black font-semibold shadow-md"
                       : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
@@ -11463,9 +11509,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={() => setFilter("color")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
                     filter === "color"
-                      ? "bg-white text-black font-bold shadow-md"
+                      ? "bg-white text-black font-semibold shadow-md"
                       : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
@@ -11475,9 +11521,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={() => setFilter("muted-color")}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer col-span-2 sm:col-span-1 ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer col-span-2 sm:col-span-1 ${
                     filter === "muted-color"
-                      ? "bg-white text-black font-bold shadow-md"
+                      ? "bg-white text-black font-semibold shadow-md"
                       : "bg-neutral-900 text-neutral-300 hover:bg-neutral-850 border border-white/10"
                   }`}
                 >
@@ -11488,19 +11534,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             {/* Video Audio Control & Social Networks Optimization */}
             {exportsVideo && (
-              <div className="space-y-3.5 p-4 bg-neutral-900/90 border border-white/15 rounded-xl">
+              <div className="space-y-4 p-4 bg-neutral-900/90 border border-white/15 rounded-xl">
                 {/* Audio row */}
                 <div className="flex items-center justify-between pb-3 border-b border-white/5">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-white/10 rounded-xl text-white">
                       {isMuted ? (
-                        <VolumeX className="w-5 h-5 text-amber-400" />
+                        <VolumeX className="w-5 h-5 text-neutral-400" />
                       ) : (
-                        <Volume2 className="w-5 h-5 text-emerald-400" />
+                        <Volume2 className="w-5 h-5 text-white" />
                       )}
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      <h4 className="text-xs font-semibold text-white">
                         Audio del Video
                       </h4>
                       <p className="text-[11px] text-neutral-400 font-light">
@@ -11518,13 +11564,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       const el = activeMediaEl();
                       if (el) el.muted = !isMuted;
                     }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       isMuted
                         ? "bg-neutral-900 text-neutral-400 border border-white/15 hover:text-white"
-                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        : "bg-white text-black border-white"
                     }`}
                   >
-                    {isMuted ? "🔇 Silenciado" : "🔊 Con Audio (Activo)"}
+                    {isMuted ? "Silenciado" : "Con audio"}
                   </button>
                 </div>
 
@@ -11534,7 +11580,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   title="Formato, peso y velocidad"
                   open={openSections.formato}
                   onToggle={() => toggleSection("formato")}
-                  icon={<Film className="h-3.5 w-3.5 text-cyan-400" />}
+                  icon={<Film className="h-3.5 w-3.5 text-neutral-400" />}
                   value={`${videoFormat.toUpperCase()} · ${videoSpeed}x · ${
                     videoQuality === "social"
                       ? "3 Mbps"
@@ -11548,20 +11594,20 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoFormat("mp4")}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl text-left border transition-colors cursor-pointer ${
                           videoFormat === "mp4"
                             ? "bg-white text-black border-white shadow-md"
                             : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        <div className="text-[11px] font-bold uppercase tracking-wider flex items-center justify-between">
+                        <div className="text-[11px] font-semibold flex items-center justify-between">
                           <span>MP4 (.mp4)</span>
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-black text-[9px] font-extrabold tracking-normal">
+                          <span className="px-1.5 py-0.5 rounded bg-white text-black text-[11px] font-semibold tracking-normal">
                             PARA X / TWITTER
                           </span>
                         </div>
                         <div
-                          className={`text-[10px] mt-1 ${videoFormat === "mp4" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                          className={`text-[11px] mt-1 ${videoFormat === "mp4" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
                         >
                           Compatible con X, Instagram, Facebook y WhatsApp sin
                           errores de formato
@@ -11571,17 +11617,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoFormat("webm")}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl text-left border transition-colors cursor-pointer ${
                           videoFormat === "webm"
                             ? "bg-white text-black border-white shadow-md"
                             : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                        <div className="text-[11px] font-semibold">
                           WebM (.webm)
                         </div>
                         <div
-                          className={`text-[10px] mt-1 ${videoFormat === "webm" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                          className={`text-[11px] mt-1 ${videoFormat === "webm" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
                         >
                           Formato web abierto para Chrome o navegadores de
                           escritorio
@@ -11604,17 +11650,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoQuality("social")}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl text-left border transition-colors cursor-pointer ${
                           videoQuality === "social"
                             ? "bg-white text-black border-white shadow-md"
                             : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                        <div className="text-[11px] font-semibold">
                           Redes Sociales
                         </div>
                         <div
-                          className={`text-[10px] ${videoQuality === "social" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                          className={`text-[11px] ${videoQuality === "social" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
                         >
                           Equilibrado (X / Insta)
                         </div>
@@ -11623,17 +11669,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoQuality("compact")}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl text-left border transition-colors cursor-pointer ${
                           videoQuality === "compact"
                             ? "bg-white text-black border-white shadow-md"
                             : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                        <div className="text-[11px] font-semibold">
                           Ultra Ligero
                         </div>
                         <div
-                          className={`text-[10px] ${videoQuality === "compact" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                          className={`text-[11px] ${videoQuality === "compact" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
                         >
                           WhatsApp / Web rápida
                         </div>
@@ -11642,17 +11688,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoQuality("hq")}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                        className={`p-2.5 rounded-xl text-left border transition-colors cursor-pointer ${
                           videoQuality === "hq"
                             ? "bg-white text-black border-white shadow-md"
                             : "bg-neutral-950 text-neutral-300 border-white/10 hover:border-white/20"
                         }`}
                       >
-                        <div className="text-[11px] font-bold uppercase tracking-wider">
+                        <div className="text-[11px] font-semibold">
                           Master HQ
                         </div>
                         <div
-                          className={`text-[10px] ${videoQuality === "hq" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
+                          className={`text-[11px] ${videoQuality === "hq" ? "text-neutral-700 font-medium" : "text-neutral-500"}`}
                         >
                           Bitrate alto (6M)
                         </div>
@@ -11675,7 +11721,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           }}
                           className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border text-center ${
                             videoSpeed === speed
-                              ? "bg-white text-black font-bold border-white shadow-sm"
+                              ? "bg-white text-black font-semibold border-white shadow-sm"
                               : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
                           }`}
                         >
@@ -11689,11 +11735,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 {/* Video Trimmer (Start & End) */}
                 <div className="space-y-2.5 pt-2 border-t border-white/5">
                   <div className="flex items-center justify-between text-xs">
-                    <label className="font-semibold text-neutral-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <Scissors className="w-3.5 h-3.5 text-amber-400" />
+                    <label className="font-semibold text-neutral-200 flex items-center gap-1.5">
+                      <Scissors className="w-3.5 h-3.5 text-neutral-400" />
                       <span>Recorte del Video (Rango de Reproducción)</span>
                     </label>
-                    <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
+                    <span className="text-[11px] font-mono text-neutral-400 bg-white/5 px-2 py-0.5 rounded border border-white/10 font-semibold">
                       {videoDuration > 0
                         ? `Total: ${videoDuration}s`
                         : "Video cargado"}
@@ -11708,7 +11754,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         <span className="text-neutral-400">
                           Punto de Inicio:
                         </span>
-                        <span className="font-mono text-white font-bold">
+                        <span className="font-mono text-white font-semibold">
                           {trimStart.toFixed(1)}s
                         </span>
                       </div>
@@ -11727,7 +11773,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = val;
                         }}
-                        className="w-full accent-amber-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                        className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                       />
                       <button
                         type="button"
@@ -11741,7 +11787,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                             }
                           }
                         }}
-                        className="text-[10px] text-amber-400/90 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
+                        className="text-[11px] text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
                       >
                         ⏱️ Fijar inicio en segundo actual
                       </button>
@@ -11751,7 +11797,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-neutral-400">Punto de Fin:</span>
-                        <span className="font-mono text-white font-bold">
+                        <span className="font-mono text-white font-semibold">
                           {trimEnd > 0
                             ? trimEnd.toFixed(1)
                             : (videoDuration || 10).toFixed(1)}
@@ -11770,7 +11816,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = val;
                         }}
-                        className="w-full accent-amber-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                        className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                       />
                       <button
                         type="button"
@@ -11784,7 +11830,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                             }
                           }
                         }}
-                        className="text-[10px] text-amber-400/90 hover:text-amber-300 transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
+                        className="text-[11px] text-neutral-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer pt-0.5"
                       >
                         ⏱️ Fijar fin en segundo actual
                       </button>
@@ -11794,7 +11840,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   {/* Duración efectiva del clip, tras recorte y velocidad */}
                   <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[11px]">
                     <span className="text-neutral-300 font-medium">
-                      ✂️ Clip:{" "}
+                      Clip:{" "}
                       <strong className="text-white">
                         {Math.max(
                           0,
@@ -11836,7 +11882,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = 0;
                         }}
-                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
+                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[11px] transition-colors"
                       >
                         5s
                       </button>
@@ -11848,7 +11894,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = 0;
                         }}
-                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
+                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[11px] transition-colors"
                       >
                         10s
                       </button>
@@ -11860,7 +11906,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = 0;
                         }}
-                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
+                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[11px] transition-colors"
                       >
                         30s
                       </button>
@@ -11872,7 +11918,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           const el = activeMediaEl();
                           if (el) el.currentTime = 0;
                         }}
-                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[10px] transition-colors"
+                        className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-[11px] transition-colors"
                       >
                         Completo
                       </button>
@@ -11899,7 +11945,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         onClick={() => setMaxVideoDuration(dur)}
                         className={`py-1.5 text-[11px] font-mono rounded-lg transition-colors cursor-pointer border ${
                           maxVideoDuration === dur
-                            ? "bg-white text-black font-bold border-white"
+                            ? "bg-white text-black font-semibold border-white"
                             : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
                         }`}
                       >
@@ -11908,7 +11954,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     ))}
                   </div>
                   <p className="text-[10.5px] text-neutral-400 font-light pt-0.5">
-                    💡 <strong>Tip para X e Instagram:</strong> Los clips de 10
+                    <strong className="text-neutral-200">Tip para X e Instagram:</strong> Los clips de 10
                     segundos en bucle consiguen alta retención y evitan que el
                     algoritmo de compresión de Meta destruya la calidad del
                     video.
@@ -11943,7 +11989,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       <span
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
                           videoOutro
-                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/50"
+                            ? "bg-white/10 text-white border-white/30"
                             : "bg-neutral-950 text-neutral-400 border-white/10"
                         }`}
                       >
@@ -11954,7 +12000,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         aria-hidden="true"
                         className={`relative inline-block w-9 h-5 rounded-full border transition-colors ${
                           videoOutro
-                            ? "bg-emerald-500/80 border-emerald-400"
+                            ? "bg-white border-white"
                             : "bg-neutral-950 border-white/20"
                         }`}
                       >
@@ -12048,7 +12094,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           key={v}
                           type="button"
                           onClick={() => setWarningFrameOrigin(v)}
-                          className={`min-h-[36px] px-3 py-2 rounded-lg text-[10px] font-mono border transition-colors cursor-pointer ${
+                          className={`min-h-[36px] px-3 py-2 rounded-lg text-[11px] font-mono border transition-colors cursor-pointer ${
                             warningFrameOrigin === v
                               ? "bg-amber-500/15 text-amber-400 border-amber-500/50"
                               : "bg-neutral-950 text-neutral-400 border-white/10 hover:text-white"
@@ -12137,9 +12183,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             En móvil es lo PRIMERO que se ve (order-1). Sin sticky: la columna
             (tarjeta + transporte + exportación) es más alta que el viewport y,
             al pegarse, dejaría los botones de exportar fuera de pantalla. */}
-        <div className="lg:col-span-5 space-y-4 order-1 lg:order-2">
+        <div
+          className={`space-y-4 order-1 lg:order-2 ${
+            controlsOpen ? "lg:col-span-5" : "lg:col-span-12"
+          }`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-neutral-400 flex items-center gap-1.5">
               <Eye className="w-3.5 h-3.5 text-white" />
               <span>Vista Previa en Vivo {postFormat}</span>
             </span>
@@ -12160,7 +12210,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 onChange={(e) => setTvIntro(e.target.checked)}
                 className="w-3.5 h-3.5 accent-white cursor-pointer"
               />
-              <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+              <span className="text-[11px] text-neutral-500">
                 Intro
               </span>
             </label>
@@ -12178,11 +12228,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             )}
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Marca de agua opcional">
               <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
-              <span className="text-[11px] uppercase tracking-wider text-neutral-500">Marca agua</span>
+              <span className="text-[11px] text-neutral-500">Marca agua</span>
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Tema de fondo (BlackNewsPress-Background.mp3) solo en video">
               <input type="checkbox" checked={bgAudio} onChange={(e) => setBgAudio(e.target.checked)} className="w-3.5 h-3.5 accent-white cursor-pointer" />
-              <span className="text-[11px] uppercase tracking-wider text-neutral-500">Tema fondo</span>
+              <span className="text-[11px] text-neutral-500">Tema fondo</span>
             </label>
             {/* Tweet pegado (texto o URL) sin API */}
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Pega un tweet (texto o URL de Twitter/X) para mostrarlo en el post">
@@ -12191,14 +12241,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 type="text"
                 value={tweetText}
                 onChange={(e) => setTweetText(e.target.value)}
-                placeholder="Pega tweet o URL..."
+                placeholder="Tweet o URL"
                 className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-200 rounded-md px-1.5 py-0.5 w-36 focus:outline-none focus:border-white/30 transition-colors"
               />
             </label>
             {/* Campos de la tarjeta «tweet embebido»: sólo al haber contenido. */}
             {tweetText && (
               <div className="w-full flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 pt-1.5 border-t border-white/5">
-                <span className="text-[10px] uppercase tracking-wider text-neutral-600">Tarjeta tweet</span>
+                <span className="text-[11px] text-neutral-600">Tarjeta tweet</span>
                 <label
                   className="flex items-center gap-1.5 cursor-pointer select-none"
                   title="Muestra el cuerpo del tweet traducido al español (Google Translate, sin API key)"
@@ -12294,7 +12344,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                           onChange={(e) => setTweetShowSecs(Number(e.target.value))}
                           className="w-16 h-1 accent-white"
                         />
-                        <span className="text-[10px] font-mono text-neutral-400 tabular-nums w-6">
+                        <span className="text-[11px] font-mono text-neutral-400 tabular-nums w-6">
                           {tweetShowSecs}s
                         </span>
                       </label>
@@ -12315,7 +12365,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       tweetAvatarManualRef.current = true;
                       setTweetAvatar(URL.createObjectURL(f));
                     }}
-                    className="text-[10px] text-neutral-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded file:border-0 file:bg-white/10 file:text-neutral-300 file:cursor-pointer file:text-[10px]"
+                    className="text-[11px] text-neutral-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded file:border-0 file:bg-white/10 file:text-neutral-300 file:cursor-pointer file:text-[11px]"
                   />
                 </label>
                 {tweetAvatar && (
@@ -12325,17 +12375,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       tweetAvatarManualRef.current = false;
                       setTweetAvatar("");
                     }}
-                    className="text-[10px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
+                    className="text-[11px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
                     title="Quitar avatar propio y volver al del @usuario"
                   >
                     Quitar
                   </button>
                 )}
                 {tweetLoading && (
-                  <span className="text-[10px] text-amber-400 animate-pulse">Cargando…</span>
+                  <span className="text-[11px] text-neutral-400">Cargando…</span>
                 )}
                 {tweetTranslating && !tweetLoading && (
-                  <span className="text-[10px] text-sky-400 animate-pulse">Traduciendo…</span>
+                  <span className="text-[11px] text-neutral-400">Traduciendo…</span>
                 )}
               </div>
             )}
@@ -12346,12 +12396,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Reposición horizontal del video (izquierda/derecha)">
               <span className="text-[11px] text-neutral-500">X</span>
               <input type="range" min={-150} max={150} step={2} value={mediaOffsetX} onChange={(e) => setMediaOffsetX(Number(e.target.value))} className="w-16 h-1 accent-white" />
-              <span className="text-[10px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetX}</span>
+              <span className="text-[11px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetX}</span>
             </label>
             <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Reposición vertical del video (arriba/abajo)">
               <span className="text-[11px] text-neutral-500">Y</span>
               <input type="range" min={-150} max={150} step={2} value={mediaOffsetY} onChange={(e) => setMediaOffsetY(Number(e.target.value))} className="w-16 h-1 accent-white" />
-              <span className="text-[10px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetY}</span>
+              <span className="text-[11px] font-mono text-neutral-500 tabular-nums w-7 text-right">{mediaOffsetY}</span>
             </label>
             {(mediaOffsetX !== 0 || mediaOffsetY !== 0 || mediaZoom !== 1) && (
               <button
@@ -12361,7 +12411,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   setMediaOffsetX(0);
                   setMediaOffsetY(0);
                 }}
-                className="text-[10px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
+                className="text-[11px] text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
                 title="Volver a la posición y escala originales"
               >
                 Reset
@@ -12379,7 +12429,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   onChange={(e) => setTextFadeOut(e.target.checked)}
                   className="w-3.5 h-3.5 accent-white cursor-pointer"
                 />
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                <span className="text-[11px] text-neutral-500">
                   Texto → vídeo
                 </span>
               </label>
@@ -12414,8 +12464,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   className="w-3.5 h-3.5 accent-white cursor-pointer"
                 />
                 <span
-                  className={`text-[11px] uppercase tracking-wider ${
-                    videoOutro ? "text-emerald-400" : "text-neutral-500"
+                  className={`text-[11px] ${
+                    videoOutro ? "text-white" : "text-neutral-500"
                   }`}
                 >
                   Outro{videoOutro ? ` · ${outroDuration.toFixed(1)} s` : ""}
@@ -12433,7 +12483,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   onChange={(e) => setTvShowClock(e.target.checked)}
                   className="w-3.5 h-3.5 accent-white cursor-pointer"
                 />
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                <span className="text-[11px] text-neutral-500">
                   Hora
                 </span>
               </label>
@@ -12449,12 +12499,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   onChange={(e) => setTvShowLive(e.target.checked)}
                   className="w-3.5 h-3.5 accent-white cursor-pointer"
                 />
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                <span className="text-[11px] text-neutral-500">
                   En directo
                 </span>
               </label>
             )}
-            <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+            <span className="text-[11px] text-neutral-500">
               Formato
             </span>
             <div className="flex items-center gap-1 bg-neutral-950 border border-white/10 p-1 rounded-xl">
@@ -12463,7 +12513,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   key={f}
                   type="button"
                   onClick={() => setPostFormat(f)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     postFormat === f
                       ? "bg-white text-black"
                       : "text-neutral-400 hover:text-white hover:bg-white/5"
@@ -13439,7 +13489,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 step={0.1}
                 disabled={isRecordingVideo || videoDuration <= 0}
                 aria-label="Posición del video en la vista previa"
-                className="flex-1 min-w-0 accent-emerald-500 h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
+                className="flex-1 min-w-0 accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer disabled:opacity-40"
                 onPointerDown={startScrub}
                 onPointerUp={endScrub}
                 onPointerCancel={endScrub}
@@ -13470,7 +13520,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
               <span
                 ref={previewTimeRef}
-                className="font-mono text-[10px] text-neutral-400 tabular-nums shrink-0 w-[94px] text-right"
+                className="font-mono text-[11px] text-neutral-400 tabular-nums shrink-0 w-[94px] text-right"
               >
                 00:00.0 / 00:00.0
               </span>
@@ -13482,10 +13532,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               previa que lo muestra. */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between px-0.5">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+              <span className="text-[11px] font-semibold text-neutral-400">
                 Miniatura · Portada 16:9
               </span>
-              <span className="text-[10px] font-mono text-neutral-500">
+              <span className="text-[11px] font-mono text-neutral-500">
                 1920×1080
               </span>
             </div>
@@ -13504,7 +13554,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               type="button"
               disabled={isExporting || isRecordingVideo}
               onClick={handleExportPortada}
-              className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider rounded-xl border border-emerald-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold rounded-xl border border-white/15 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               title="Descarga una portada 1920×1080 con el fotograma actual del video, el titular y el logo. Pausa el video en el instante que quieras antes de descargar."
             >
               <ImageIcon className="w-4 h-4" />
@@ -13522,7 +13572,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 type="button"
                 disabled={isRecordingVideo}
                 onClick={handleExportVideo}
-                className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+                className="w-full py-4 bg-white hover:bg-neutral-200 text-black font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
                 title="Se procesa en tu navegador: el video no se sube a ningún servidor"
               >
                 <Film className="w-4 h-4" />
@@ -13537,7 +13587,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 type="button"
                 disabled={isExporting}
                 onClick={handleExportPng}
-                className="w-full py-3.5 bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
+                className="w-full py-4 bg-white hover:bg-neutral-200 text-black font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xl disabled:opacity-50"
               >
                 <Download className="w-4 h-4" />
                 <span>
@@ -13556,7 +13606,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     type="button"
                     disabled={isExporting}
                     onClick={handleExportPng}
-                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <Download className="w-3.5 h-3.5 text-neutral-300" />
                     <span>Capturar PNG</span>
@@ -13564,14 +13614,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <button
                     type="button"
                     onClick={handleCopyToClipboard}
-                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {copySuccess ? (
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span>{copySuccess ? "¡Copiado!" : "Copiar PNG"}</span>
+                    <span>{copySuccess ? "Copiado" : "Copiar PNG"}</span>
                   </button>
                 </>
               ) : (
@@ -13579,14 +13629,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <button
                     type="button"
                     onClick={handleCopyToClipboard}
-                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-white text-xs font-semibold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     {copySuccess ? (
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span>{copySuccess ? "¡Copiado!" : "Copiar PNG"}</span>
+                    <span>{copySuccess ? "Copiado" : "Copiar PNG"}</span>
                   </button>
                   <button
                     type="button"
@@ -13609,7 +13659,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         "Diseño restablecido al ejemplo oficial de referencia",
                       );
                     }}
-                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-neutral-400 hover:text-white text-xs font-semibold uppercase tracking-wider rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="py-2.5 bg-neutral-900 hover:bg-neutral-850 text-neutral-400 hover:text-white text-xs font-semibold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Plantilla Ref.</span>
@@ -13652,12 +13702,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       {isRecordingVideo && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-neutral-950 border border-white/20 rounded-2xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Film className="w-6 h-6 animate-pulse" />
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-neutral-300">
+              <Film className="w-6 h-6" />
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+              <h3 className="text-sm font-semibold text-white">
                 Exportando Video BlackNews {postFormat}
               </h3>
               <p className="text-xs text-neutral-400">
@@ -13689,7 +13739,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <div className="w-full bg-neutral-900 rounded-full h-2.5 overflow-hidden border border-white/10">
                 <div
                   ref={recBarRef}
-                  className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-300 rounded-full"
+                  className="bg-white h-full transition-[width] duration-300 rounded-full"
                   style={{ width: `${Math.max(5, recordingProgress)}%` }}
                 />
               </div>
@@ -13701,7 +13751,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     : ""}{" "}
                   · grabación local
                 </span>
-                <span ref={recPctRef} className="font-bold text-white">
+                <span ref={recPctRef} className="font-semibold text-white">
                   {recordingProgress}%
                 </span>
               </div>
@@ -13715,7 +13765,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <button
               type="button"
               onClick={handleCancelVideoExport}
-              className="w-full py-2.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all border border-red-500/30 cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-semibold text-xs rounded-xl transition-colors border border-red-500/30 cursor-pointer flex items-center justify-center gap-2"
             >
               <X className="w-4 h-4" />
               <span>Cancelar Exportación</span>
@@ -13734,22 +13784,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <Check className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                  <h3 className="text-xs font-semibold text-white">
                     {exportedVideoUrl
-                      ? `¡Video ${postFormat} Optimizado!`
+                      ? `Video ${postFormat} optimizado`
                       : exportedPortada
-                        ? "¡Portada 16:9 Exportada!"
-                        : `¡Post ${postFormat} Exportado!`}
+                        ? "Portada 16:9 exportada"
+                        : `Post ${postFormat} exportado`}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-neutral-400 font-mono">
+                    <span className="text-[11px] text-neutral-400 font-mono">
                       {exportedPortada
                         ? "1920 × 1080"
                         : `${POST_W} × ${POST_H}`}{" "}
                       px
                     </span>
                     {exportedVideoSize && (
-                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
+                      <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-semibold">
                         Peso: {exportedVideoSize}
                       </span>
                     )}
@@ -13811,7 +13861,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     `Descargando ${exportedVideoUrl ? "video" : exportedPortada ? "portada" : "imagen"}...`,
                   )
                 }
-                className="py-2.5 px-4 bg-white text-black text-xs font-bold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                className="py-2.5 px-4 bg-white text-black text-xs font-semibold rounded-xl text-center hover:bg-neutral-200 transition-colors shadow-lg flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>
@@ -13827,7 +13877,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={handleExportPng}
-                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-neutral-300" />
                   <span>Capturar PNG</span>
@@ -13836,7 +13886,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyPortada}
-                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   {copySuccess ? (
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -13849,7 +13899,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyToClipboard}
-                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold uppercase tracking-wider rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="py-2.5 px-4 bg-neutral-900 border border-white/15 text-white text-xs font-semibold rounded-xl text-center hover:bg-neutral-850 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   {copySuccess ? (
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -13886,14 +13936,14 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           <div className="bg-neutral-950 border border-white/20 rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center">
                   <FileCode className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h3 className="text-sm font-semibold text-white">
                     Copia de Seguridad & Restauración JSON
                   </h3>
-                  <span className="text-[10px] text-neutral-400 font-mono">
+                  <span className="text-[11px] text-neutral-400 font-mono">
                     Guarda o restaura todo el diseño y textos del post
                   </span>
                 </div>
@@ -13913,7 +13963,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
             <p className="text-xs text-neutral-300 font-light leading-relaxed">
               Pega aquí el código JSON de un post previamente copiado, o sube un
-              archivo <code className="text-cyan-400 font-mono">.json</code>{" "}
+              archivo <code className="text-neutral-300 font-mono">.json</code>{" "}
               para restaurar al instante todos los campos, textos, selecciones
               geográficas, filtros y configuraciones.
             </p>
@@ -13935,13 +13985,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                       if (text) {
                         setJsonInputText(text);
                         setJsonError(null);
-                        showToast("✓ Texto pegado desde el portapapeles");
+                        showToast("Texto pegado desde el portapapeles");
                       }
                     } catch {
                       showToast("Usa Ctrl+V para pegar en el cuadro");
                     }
                   }}
-                  className="text-cyan-400 hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
+                  className="text-neutral-400 hover:text-white underline cursor-pointer flex items-center gap-1 text-[11px]"
                 >
                   <Copy className="w-3 h-3" />
                   <span>Pegar desde Portapapeles</span>
@@ -13956,7 +14006,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   setJsonError(null);
                 }}
                 placeholder='{\n  "version": 1,\n  "content": {\n    "title": "...",\n    "description": "..."\n  }\n}'
-                className="w-full bg-neutral-900 border border-white/15 rounded-xl p-3 font-mono text-xs text-neutral-200 focus:outline-none focus:border-cyan-400 resize-none leading-relaxed"
+                className="w-full bg-neutral-900 border border-white/15 rounded-xl p-3 font-mono text-xs text-neutral-200 focus:outline-none focus:border-white/40 resize-none leading-relaxed"
               />
             </div>
 
@@ -13996,7 +14046,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               <button
                 type="button"
                 onClick={() => handleApplyJson(jsonInputText)}
-                className="px-4 py-2 bg-white hover:bg-neutral-200 text-black font-bold rounded-xl text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg"
+                className="px-4 py-2 bg-white hover:bg-neutral-200 text-black font-semibold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Restaurar Post</span>
