@@ -42,6 +42,7 @@ import {
   Music,
   PanelLeftClose,
   PanelLeftOpen,
+  Clock,
 } from "lucide-react";
 import { Report } from "../types/news";
 import type { OsintPostImport } from "../types/osint";
@@ -209,6 +210,13 @@ const OUTRO_DUR_FALLBACK = 11.3;
  *  previa) y, si el archivo se cierra en ese primer compás, el MP4 sale con la
  *  longitud exacta del clip pero SIN el sello. */
 const OUTRO_START_GRACE_MS = 2000;
+
+/** Tope TOTAL de la salida cuando está activo el corte para Facebook: aviso
+ *  de contenido sensible + intro de texto + clip + cierre no pasan de estos
+ *  segundos, así la plataforma no recorta lo que subimos. El sobrante se
+ *  descuenta del clip (es el único tramo flexible de la línea de tiempo). */
+const MAX_EXPORT_TOTAL_SECONDS = 60;
+
 /** Altura por defecto del panel de contexto del asistente flotante. */
 const AI_COMPOSER_H_DEFAULT = 170;
 
@@ -1781,6 +1789,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   );
   const [videoFormat, setVideoFormat] = useState<"mp4" | "webm">("mp4");
   const [maxVideoDuration, setMaxVideoDuration] = useState<number>(0); // 5s, 10s, 15s, 30s, 60s or 0 (full)
+  // Tope TOTAL de la salida (para subir a Facebook sin que recorte): cuenta
+  // aviso + intro de texto + clip + cierre y recorta el clip para que la suma
+  // no pase de MAX_EXPORT_TOTAL_SECONDS s. «Duración máxima del clip» de
+  // arriba sigue aplicándose si es más restrictivo.
+  const [capTotal60, setCapTotal60] = useState(false);
   const [exportedVideoSize, setExportedVideoSize] = useState<string | null>(
     null,
   );
@@ -2148,9 +2161,26 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     showToast("Exportación de video cancelada.");
   };
 
+  // Segundos que ocupan los pads fijos de la salida (todo lo que no es
+  // «clip»): el aviso de contenido sensible, la intro de texto (pasada previa
+  // que se muestra mientras el texto asoma) y el cierre BlackNews. Con el
+  // tope total activo, esos segundos se descuentan del clip.
+  const warningPadSeconds = contentWarning
+    ? warningFrameDur +
+      (warningDuration > 0 ? warningDuration : warningDurFallback)
+    : 0;
+  const outroPadSeconds = videoOutro ? outroDuration : 0;
+  const introPadSeconds = tvIntro ? tvIntroDur : 0;
+  const fixedPadSeconds =
+    warningPadSeconds + outroPadSeconds + introPadSeconds;
+  // Presupuesto de clip que deja el tope total; null = sin tope.
+  const clipBudgetSeconds = capTotal60
+    ? MAX_EXPORT_TOTAL_SECONDS - fixedPadSeconds
+    : null;
+
   // Segundos reales que saldrán en la exportación de video (trim + duración
-  // máxima + velocidad). Se muestra antes y durante la grabación para que
-  // nunca sorprenda un clip más corto que el original.
+  // máxima + tope total + velocidad). Se muestra antes y durante la grabación
+  // para que nunca sorprenda un clip más corto que el original.
   const exportClipSeconds = (() => {
     if (!exportsVideo || !(videoDuration > 0)) return null;
     const duration = videoDuration;
@@ -2159,25 +2189,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       trimEnd > s && duration > 0 ? Math.min(trimEnd, duration) : duration;
     if (maxVideoDuration > 0)
       e = Math.min(e, s + maxVideoDuration * videoSpeed);
+    if (clipBudgetSeconds !== null)
+      e = Math.min(e, s + Math.max(0, clipBudgetSeconds) * videoSpeed);
     if (!(e > s)) return null;
     return Math.round(((e - s) / videoSpeed) * 10) / 10;
   })();
-  // Total con el aviso de contenido sensible y el cierre BlackNews
-  // encendidos: lo que de verdad durará el archivo. La intro TV 16:9 no se
-  // suma aquí porque sólo alarga la salida.
-  const warningPadSeconds = contentWarning
-    ? warningFrameDur +
-      (warningDuration > 0 ? warningDuration : warningDurFallback)
-    : 0;
+  // Total con aviso, intro y cierre encendidos: lo que de verdad durará el
+  // archivo y lo que la plataforma va a medir al subirlo.
   const exportTotalSeconds =
     exportClipSeconds === null
       ? null
-      : Math.round(
-          (exportClipSeconds +
-            (videoOutro ? outroDuration : 0) +
-            warningPadSeconds) *
-            10,
-        ) / 10;
+      : Math.round((exportClipSeconds + fixedPadSeconds) * 10) / 10;
 
   // Toggle country selection — la identidad es el nombre: dos países
   // distintos pueden compartir código ISO (p. ej. un personalizado con el
@@ -2453,6 +2475,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         videoQuality,
         videoFormat,
         maxVideoDuration,
+        // Tope TOTAL de la salida (aviso + intro + clip + cierre ≤ 60 s).
+        capTotal60,
         // Cierre de marca (Blacknews.mp4) al final del vídeo. Por defecto false.
         videoOutro,
         // Aviso de contenido sensible antes del clip (portada + cartel).
@@ -2653,6 +2677,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           setVideoFormat(data.mediaSettings.videoFormat);
         if (typeof data.mediaSettings.maxVideoDuration === "number")
           setMaxVideoDuration(data.mediaSettings.maxVideoDuration);
+        if (typeof data.mediaSettings.capTotal60 === "boolean")
+          setCapTotal60(data.mediaSettings.capTotal60);
         if (typeof data.mediaSettings.videoOutro === "boolean")
           setVideoOutro(data.mediaSettings.videoOutro);
         // Aviso de contenido sensible: se restaura con su frame de portada.
@@ -3564,6 +3590,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     videoQuality,
     videoFormat,
     maxVideoDuration,
+    capTotal60,
     videoOutro,
     postFormat,
     postDesign,
@@ -6563,6 +6590,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           : duration;
       if (maxVideoDuration > 0)
         end = Math.min(end, start + maxVideoDuration * videoSpeed);
+      // Tope TOTAL de la salida (Facebook): sólo cabe el clip que dejaron
+      // libres el aviso, la intro de texto y el cierre. Es el mismo
+      // `clipBudgetSeconds` que calcula y enseña la UI, así que lo que ve el
+      // usuario antes de exportar es lo que sale en el archivo.
+      if (clipBudgetSeconds !== null) {
+        if (clipBudgetSeconds <= 0)
+          throw new Error(
+            `El aviso, la intro y el cierre ya suman ${MAX_EXPORT_TOTAL_SECONDS} s o más: apaga alguno de los tres para poder exportar.`,
+          );
+        end = Math.min(end, start + clipBudgetSeconds * videoSpeed);
+      }
       if (!(end > start)) {
         throw new Error(
           "El recorte de video no es válido: revisa inicio y fin.",
@@ -7612,6 +7650,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           : duration;
       if (maxVideoDuration > 0)
         end = Math.min(end, start + maxVideoDuration * videoSpeed);
+      // Tope TOTAL de la salida (Facebook): el clip se ajusta al presupuesto
+      // que dejaron libres el aviso, la intro de texto y el cierre — el mismo
+      // `clipBudgetSeconds` que calcula la UI —, así la suma no pasa de
+      // MAX_EXPORT_TOTAL_SECONDS s y la plataforma no recorta el vídeo.
+      if (clipBudgetSeconds !== null) {
+        if (clipBudgetSeconds <= 0) {
+          showToast(
+            `El aviso, la intro y el cierre ya suman ${MAX_EXPORT_TOTAL_SECONDS} s o más: apaga alguno de los tres para exportar.`,
+          );
+          return;
+        }
+        end = Math.min(end, start + clipBudgetSeconds * videoSpeed);
+      }
       if (!(end > start)) {
         showToast("El recorte de video no es válido: revisa inicio y fin.");
         return;
@@ -11961,6 +12012,65 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   </p>
                 </CollapseSection>
 
+                {/* Tope TOTAL de la salida (Facebook): 60 s contando aviso,
+                    intro de texto, clip y cierre. Los pads fijos se descuentan
+                    del clip, que es lo único flexible de la línea de tiempo. */}
+                <div className="pt-3 border-t border-white/5">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={capTotal60}
+                    aria-label="Máximo 60 s de salida (Facebook)"
+                    onClick={() => setCapTotal60((v) => !v)}
+                    className="w-full flex items-center justify-between gap-3 py-2.5 rounded-lg text-left cursor-pointer transition-colors hover:bg-white/5"
+                    title={`Corta el clip para que aviso + intro + clip + cierre sumen como mucho ${MAX_EXPORT_TOTAL_SECONDS} s`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-neutral-200 block">
+                        Máx. {MAX_EXPORT_TOTAL_SECONDS} s de salida (Facebook)
+                      </span>
+                      <span className="text-[11px] text-neutral-400 font-light">
+                        El aviso, la intro de texto, el clip y el cierre se
+                        cuentan juntos y el clip se recorta para que la suma no
+                        pase de {MAX_EXPORT_TOTAL_SECONDS} s, así la plataforma
+                        no corta el vídeo al subirlo. Ahora esos elementos
+                        fijos ocupan {fixedPadSeconds.toFixed(1)} s: quedarían{" "}
+                        {Math.max(
+                          0,
+                          MAX_EXPORT_TOTAL_SECONDS - fixedPadSeconds,
+                        ).toFixed(1)}{" "}
+                        s de clip.
+                      </span>
+                    </span>
+                    <span className="shrink-0 flex items-center gap-2">
+                      <span
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                          capTotal60
+                            ? "bg-white/10 text-white border-white/30"
+                            : "bg-neutral-950 text-neutral-400 border-white/10"
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        {capTotal60 ? "Activado" : "Apagado"}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`relative inline-block w-9 h-5 rounded-full border transition-colors ${
+                          capTotal60
+                            ? "bg-white border-white"
+                            : "bg-neutral-950 border-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+                            capTotal60 ? "translate-x-4" : ""
+                          }`}
+                        />
+                      </span>
+                    </span>
+                  </button>
+                </div>
+
                 {/* Cierre de marca opcional: Blacknews.mp4 al final.
                     La fila entera es el interruptor: en táctil el blanco tiene
                     que ser toda la zona, no la píldora minúscula del final. */}
@@ -13670,12 +13780,19 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                   <strong className="text-white font-semibold">
                     {exportTotalSeconds} s
                   </strong>{" "}
-                  de video
+                  de video (clip de {exportClipSeconds} s
+                  {fixedPadSeconds > 0
+                    ? ` + ${fixedPadSeconds.toFixed(1)} s de aviso, intro y cierre`
+                    : ""}
+                  )
                   {videoOutro
-                    ? ` (clip + ${outroDuration.toFixed(1)} s de cierre BlackNews)`
+                    ? ` (cierre BlackNews ${outroDuration.toFixed(1)} s)`
                     : ""}
                   {maxVideoDuration > 0
-                    ? ` (duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»)`
+                    ? ` · duración máxima: ${maxVideoDuration} s en «Duración máxima del clip»`
+                    : ""}
+                  {capTotal60
+                    ? ` · tope total de ${MAX_EXPORT_TOTAL_SECONDS} s activo para Facebook`
                     : ""}
                   .
                   <br />
