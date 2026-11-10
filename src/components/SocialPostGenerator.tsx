@@ -768,27 +768,28 @@ const fitTextEllipsis = (
   return `${t}…`;
 };
 
-/** Dibuja la tarjeta «tweet embebido» sobre el lienzo: degradado de apoyo,
- *  caja redondeada, avatar, nombre con check, cuerpo (máx. 5 líneas) y pie
- *  con fecha + métricas. `bottom` es la Y de la base de la tarjeta. */
+/** Dibuja la tarjeta «tweet embebido» sobre el lienzo: caja redondeada,
+ *  avatar, nombre con check, cuerpo (`bodyLines` líneas) y pie con fecha +
+ *  métricas. `bottom` es la Y de la base de la tarjeta. No lleva degradado
+ *  de apoyo: su caja ya lleva fondo y, fuera, manda el velo del lienzo. */
 const drawTweetCard = (
   ctx: CanvasRenderingContext2D,
   d: {
     W: number;
-    /** Alto del lienzo: el degradado de apoyo baja hasta el borde. */
-    H: number;
     k: number;
     bottom: number;
     name: string;
     handle: string;
     body: string;
+    /** Líneas del cuerpo que se muestran (mismo tope que la vista previa). */
+    bodyLines: number;
     date: string;
     showEs: boolean;
     avatar: HTMLImageElement | null;
     letter: string;
   },
 ) => {
-  const { W, H, k } = d;
+  const { W, k } = d;
   const inset = 12 * k; // px-3 del contenedor con degradado
   const padX = 12 * k; // px-3 de la tarjeta
   const padY = 10 * k; // py-2.5
@@ -814,29 +815,19 @@ const drawTweetCard = (
   const nameRowH = 14 * k;
   const footH = 13 * k;
 
-  // Cuerpo: envuelto y recortado a 5 líneas con «…» (line-clamp-5).
+  // Cuerpo: envuelto y recortado a «bodyLines» líneas con «…», el mismo
+  // tope que el `line-clamp` de la vista previa.
   ctx.font = `400 ${bodyFs}px 'Lexend', sans-serif`;
   const raw = wrapText(ctx, d.body || "", colW);
-  const lines = raw.slice(0, 5);
-  if (raw.length > 5 && lines.length > 0) {
+  const maxLines = Math.max(1, Math.round(d.bodyLines));
+  const lines = raw.slice(0, maxLines);
+  if (raw.length > maxLines && lines.length > 0) {
     lines[lines.length - 1] = fitTextEllipsis(ctx, lines[lines.length - 1], colW);
   }
   const bodyH = lines.length * bodyLh;
   const cardH = padY * 2 + nameRowH + 4 * k + bodyH + 6 * k + footH;
   const cardTop = d.bottom - cardH;
   if (cardTop < 0) return; // no cabe: mejor no pintar una tarjeta cortada
-
-  // Degradado del contenedor (pt-6 · pb-3 · from-black/90 via-black/70):
-  // en el archivo llega hasta el borde inferior (el velo y el sello se
-  // pintan después y quedan encima), así no queda costura sobre el pie.
-  const gTop = cardTop - 24 * k;
-  const gBot = H;
-  const grad = ctx.createLinearGradient(0, gBot, 0, gTop);
-  grad.addColorStop(0, "rgba(0,0,0,0.9)");
-  grad.addColorStop(0.5, "rgba(0,0,0,0.7)");
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, gTop, W, gBot - gTop);
 
   // Caja de la tarjeta (fondo neutral-950 al 85 % + borde blanco al 15 %).
   ctx.beginPath();
@@ -1433,6 +1424,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tweetAvatarManualRef = useRef(false);
   // Subida opcional de la tarjeta del tweet sobre el sello inferior (px).
   const [tweetLift, setTweetLift] = useState(0);
+  // Líneas del cuerpo del tweet que se muestran (1–8). El archivo recorta en
+  // el mismo punto, así que la tarjeta de pantalla y la exportada coinciden.
+  const [tweetBodyLines, setTweetBodyLines] = useState(5);
   // Cuándo se ve la tarjeta en vídeo: todo el clip, sólo los primeros N s o
   // sólo los últimos N s (en PNG sale siempre). `tweetOn` es el estado ya
   // resuelto del reloj: sólo cambia al cruzar el umbral, para no repintar
@@ -5592,37 +5586,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       ctx.restore();
     }
 
-    // 7. Tarjeta «tweet embebido» sobre el sello: la MISMA composición que la
-    //    vista previa, con todas las medidas en px de tarjeta × `k` (ancho del
-    //    lienzo / ancho nominal de la tarjeta). La base se apoya en el sello
-    //    medido (`previewFooterH`) + «Altura» + el padding inferior del
-    //    contenedor, igual que en pantalla. Se pinta ANTES del velo y del
-    //    sello: su degradado baja hasta el borde inferior (sin costura) y el
-    //    sello se dibuja después, por encima, siempre nítido. El save/restore
-    //    aísla el estado de texto que deja la tarjeta.
-    if (tweetHere) {
-      const k = W / previewCardWidthFor(postFormat);
-      const footerPx = previewFooterH > 0 ? previewFooterH : 95 / k;
-      ctx.save();
-      drawTweetCard(ctx, {
-        W,
-        H,
-        k,
-        bottom: H - (footerPx + tweetLift + 12) * k,
-        name: tweetName,
-        handle: tweetHandle,
-        body: tweetBodyEs || tweetBody || tweetText,
-        date: tweetDate,
-        showEs: !!tweetBodyEs,
-        avatar: tweetAvatarImg,
-        letter:
-          (tweetName || tweetHandle || "B").replace(/^@/, "").charAt(0).toUpperCase() ||
-          "B",
-      });
-      ctx.restore();
-    }
-
-    // Subtle bottom shadow vignette behind logo and caption
+    // 6. Velo inferior del lienzo: la MISMA caída de la vista previa
+    //    («Subtle bottom vignette»), recortada al media.
     ctx.save();
     clipMediaRect(ctx);
     mediaZoomed(ctx);
@@ -5633,7 +5598,37 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.fillRect(0, H - 160, W, 160);
     ctx.restore();
 
-    // 6. Watermark Logo at Bottom-Left: "■ BlackNews"
+    // 7. Tarjeta «tweet embebido» sobre el sello: la MISMA composición que la
+    //    vista previa, con todas las medidas en px de tarjeta × `k` (ancho del
+    //    lienzo / ancho nominal de la tarjeta). La base se apoya en el sello
+    //    medido (`previewFooterH`) + «Altura» + el padding inferior del
+    //    contenedor, igual que en pantalla. Se pinta DESPUÉS del velo y ANTES
+    //    del sello, como en el DOM (vignette → tarjeta → footer): así la caja
+    //    no la oscurece el velo y el sello sigue nítido por encima. Sin
+    //    degradado propio: manda su fondo (neutral-950) y, alrededor, el velo.
+    if (tweetHere) {
+      const k = W / previewCardWidthFor(postFormat);
+      const footerPx = previewFooterH > 0 ? previewFooterH : 95 / k;
+      ctx.save();
+      drawTweetCard(ctx, {
+        W,
+        k,
+        bottom: H - (footerPx + tweetLift + 12) * k,
+        name: tweetName,
+        handle: tweetHandle,
+        body: tweetBodyEs || tweetBody || tweetText,
+        bodyLines: tweetBodyLines,
+        date: tweetDate,
+        showEs: !!tweetBodyEs,
+        avatar: tweetAvatarImg,
+        letter:
+          (tweetName || tweetHandle || "B").replace(/^@/, "").charAt(0).toUpperCase() ||
+          "B",
+      });
+      ctx.restore();
+    }
+
+    // 8. Watermark Logo at Bottom-Left: "■ BlackNews"
     ctx.save();
     const logoY = H - 65;
     const logoBoxSize = 34;
@@ -5647,7 +5642,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     ctx.shadowBlur = 6;
     ctx.fillText("BlackNews", padX + logoBoxSize + 16, logoY);
 
-    // 6.1 Compact Photo Caption / Personaje at Bottom-Right. Hasta 3 líneas
+    // 8.1 Compact Photo Caption / Personaje at Bottom-Right. Hasta 3 líneas
     //     ancladas por la base en `logoY` (la última), así el bloque crece
     //     HACIA ARRIBA — igual que la vista previa (line-clamp-3 + items-end).
     if (photoCaption && photoCaption.trim()) {
@@ -12305,6 +12300,25 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     className="w-16 h-1 accent-white"
                   />
                 </label>
+                {/* Cuánto cuerpo del tweet se muestra: mismos límites en la
+                    vista previa (line-clamp) y en el archivo (slice). */}
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer select-none"
+                  title="Líneas del cuerpo del tweet que se muestran en la tarjeta"
+                >
+                  <span className="text-[11px] text-neutral-500">Líneas</span>
+                  <select
+                    value={tweetBodyLines}
+                    onChange={(e) => setTweetBodyLines(Number(e.target.value))}
+                    className="bg-neutral-950 border border-white/10 text-[11px] text-neutral-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:border-white/30 transition-colors cursor-pointer"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {/* Cuándo se ve en vídeo: todo el clip o sólo unos segundos.
                     En el PNG la tarjeta sale siempre. */}
                 {mediaType === "video" && (
@@ -13239,7 +13253,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     `tweetOn` la limita a los segundos elegidos en vídeo. */}
                 {tweetOn && (tweetText || tweetHtml) && (
                   <div
-                    className="absolute inset-x-0 px-3 pb-3 pt-6 bg-gradient-to-t from-black/90 via-black/70 to-transparent"
+                    className="absolute inset-x-0 px-3 pb-3 pt-6"
                     style={{
                       pointerEvents: "none",
                       // Por encima del video (z-30 durante el fundido texto->video) y por
@@ -13289,6 +13303,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                               activa; el original queda en el tooltip. */}
                           <p
                             className="mt-1 text-[11.5px] leading-[1.35] text-neutral-100 whitespace-pre-wrap break-words line-clamp-5"
+                            // El tope de líneas lo manda «Líneas»: la clase
+                            // line-clamp-5 sólo aporta display:-webkit-box /
+                            // box-orient / overflow (Tailwind sólo genera los
+                            // números usados en estático, no se puede construir
+                            // la clase con template) y el recorte va en style.
+                            style={{ WebkitLineClamp: tweetBodyLines }}
                             title={tweetBodyEs ? tweetBody : undefined}
                           >
                             {tweetBodyEs || tweetBody || tweetText}
@@ -13347,7 +13367,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     que siempre pinta por encima — nunca se oculta. */}
                 <div
                   ref={previewFooterRef}
-                  className="p-6 sm:p-7 flex items-end justify-between gap-3 relative mt-auto border-t border-white/5 bg-gradient-to-t from-black via-black/80 to-transparent"
+                  className="p-6 sm:p-7 flex items-end justify-between gap-3 relative mt-auto border-t border-white/5"
                   style={{ zIndex: textFadeP > 0 ? 30 : 20 }}
                 >
                   <div className="flex items-center gap-2 shrink-0">
