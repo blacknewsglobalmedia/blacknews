@@ -565,7 +565,12 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
             title="Sube tu creatividad"
             hint={`Ideal exportar en ${placementInfo.exportSizes[0]} (proporción ${placementInfo.ratio.replace("/", ":")}). JPG, PNG o WEBP.`}
           />
-          <div className="grid gap-5 lg:grid-cols-2">
+          {/* Los controles y la vista previa van apilados y a ancho completo:
+              en 2 columnas la caja del preview salía ~374 px mientras el slot
+              real mide 848–1232 px, y al ser mucho más cuadrada el `contain`
+              dejaba franjas donde en el sitio el creativo rellena la altura
+              (se veía «descolocada» sin parecer cover). */}
+          <div className="space-y-5">
             {/* Controles */}
             <div className="space-y-4">
               <div
@@ -679,8 +684,11 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
               </p>
               <div
                 className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black ${
-                  placementInfo.containerClass || ""
-                }`}
+                  /* La card 4:5 vive en una columna de la parrilla real
+                     (~389 px): sin este tope, a ancho completo mediría
+                     768×960 y no se parecería a la card del sitio. */
+                  placementInfo.aspect ? "max-w-[390px]" : ""
+                } ${placementInfo.containerClass || ""}`}
                 style={
                   placementInfo.aspect
                     ? { aspectRatio: placementInfo.aspect }
