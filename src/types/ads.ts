@@ -3,9 +3,14 @@ import { CategoryId } from './news';
 export type AdPlacement = 
   | 'TOP_BILLBOARD'       // Horizontal 970x250 o 728x90 (Portada superior)
   | 'IN_FEED_LEADERBOARD' // Horizontal 1200x180 o 800x120 (Entre bloques de portada)
-  | 'ARTICLE_SIDEBAR'     // Vertical 300x600 o 300x250 (Barra lateral de lectura)
+  | 'ARTICLE_SIDEBAR'     // Rectangle 300x250 dentro del cuerpo del artículo
+  | 'IN_ARTICLE_PARAGRAPHS' // Horizontal 728x90 cada N párrafos del cuerpo
   | 'ARTICLE_FOOTER'      // Horizontal 728x90 (Al pie de artículos)
   | 'GRID_CARD';          // Vertical 4:5 integrado como card en la cuadrícula
+
+/** Cuerpo cada cuántos párrafos entra el banner in-article (misma cifra en
+ *  la maqueta del paso «Dónde» y en la inserción del artículo). */
+export const IN_ARTICLE_AD_EVERY = 8;
 
 export type AdStatus = 
   | 'ACTIVE' 
@@ -178,7 +183,8 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
   ARTICLE_SIDEBAR: {
     id: 'ARTICLE_SIDEBAR',
     name: 'Rectangle In-Article',
-    description: 'Banner dentro del cuerpo del artículo, tras la entradilla. Altura contenida para no interrumpir la lectura.',
+    description:
+      'Rectangle dentro del cuerpo del artículo, tras las claves del informe. Altura contenida para no interrumpir la lectura.',
     recommendedSize: '300 × 250 px / 300 × 600 px',
     suggestedRate: '$950 USD / mes',
     orientation: 'vertical',
@@ -189,10 +195,25 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     ratio: '300 / 250',
     estimatedDailyViews: 500,
   },
+  IN_ARTICLE_PARAGRAPHS: {
+    id: 'IN_ARTICLE_PARAGRAPHS',
+    name: `In-Article cada ${IN_ARTICLE_AD_EVERY} párrafos`,
+    description: `Banner horizontal dentro del cuerpo del artículo que reaparece tras cada ${IN_ARTICLE_AD_EVERY} párrafos: presencia repetida en lecturas largas.`,
+    recommendedSize: '728 × 90 px / 800 × 120 px',
+    suggestedRate: '$850 USD / mes',
+    orientation: 'horizontal',
+    sizing: 'fixed-height',
+    containerClass: 'h-[56px] sm:h-[72px] md:h-[90px]',
+    fit: 'contain',
+    exportSizes: ['728 × 90', '800 × 120'],
+    ratio: '728 / 90',
+    estimatedDailyViews: 650,
+  },
   ARTICLE_FOOTER: {
     id: 'ARTICLE_FOOTER',
     name: 'Banner Pie de Artículo',
-    description: 'Visible al concluir la lectura de despachos completos y antes de las claves ejecutivas.',
+    description:
+      'Visible al concluir la lectura de despachos completos, tras los subrayados del lector.',
     recommendedSize: '728 × 90 px / 800 × 120 px',
     suggestedRate: '$650 USD / mes',
     orientation: 'horizontal',

@@ -1,4 +1,5 @@
 import {
+  AlignLeft,
   LayoutGrid,
   Monitor,
   MoveHorizontal,
@@ -16,6 +17,7 @@ export const PLACEMENT_ICONS: Record<AdPlacement, LucideIcon> = {
   TOP_BILLBOARD: Monitor,
   IN_FEED_LEADERBOARD: MoveHorizontal,
   ARTICLE_SIDEBAR: PanelRight,
+  IN_ARTICLE_PARAGRAPHS: AlignLeft,
   ARTICLE_FOOTER: PanelBottom,
   GRID_CARD: LayoutGrid,
 };

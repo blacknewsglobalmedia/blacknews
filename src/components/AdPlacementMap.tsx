@@ -1,9 +1,13 @@
 import React from "react";
-import { AD_PLACEMENTS_INFO, AdPlacement } from "../types/ads";
+import {
+  AD_PLACEMENTS_INFO,
+  AdPlacement,
+  IN_ARTICLE_AD_EVERY,
+} from "../types/ads";
 
 /**
  * Maqueta en miniatura de BlackNews para el paso «Dónde» del asistente de
- * publicidad: los 5 espacios dibujados en su contexto real (portada y
+ * publicidad: los 6 espacios dibujados en su contexto real (portada y
  * artículo), con el seleccionado encendido en esmeralda. Tocar un hueco
  * cambia la ubicación; tocar una card de la lista enciende su hueco aquí.
  * Es un esqueleto dibujado, no una captura: no se rompe si cambia el
@@ -19,6 +23,7 @@ const SLOT_LABEL: Record<AdPlacement, string> = {
   TOP_BILLBOARD: "Billboard superior",
   IN_FEED_LEADERBOARD: "Entre secciones",
   ARTICLE_SIDEBAR: "En el artículo",
+  IN_ARTICLE_PARAGRAPHS: `Cada ${IN_ARTICLE_AD_EVERY} párrafos`,
   ARTICLE_FOOTER: "Pie del artículo",
   GRID_CARD: "Card 4:5",
 };
@@ -151,23 +156,47 @@ export const AdPlacementMap: React.FC<AdPlacementMapProps> = ({
           Al abrir un artículo
         </p>
 
-        <div className="flex gap-2.5">
-          {/* Cuerpo del despacho */}
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        {/* Cuerpo del despacho: el rectangle va DENTRO del texto (tras las
+            claves del informe) y el in-feed se repite tras cada N párrafos */}
+        <div className="space-y-2">
+          <div className="space-y-1.5">
             <Line className="w-11/12" />
             <Line className="w-full" />
             <Line className="w-10/12" />
+          </div>
+
+          {/* Hueco 3 · Rectangle dentro del cuerpo del artículo */}
+          <div className="mx-auto w-[58%]">
+            <Slot id="ARTICLE_SIDEBAR" selected={selected} onSelect={onSelect} />
+          </div>
+
+          <div className="space-y-1.5">
             <Line className="w-full" />
             <Line className="w-9/12" />
             <Line className="w-full" />
           </div>
-          {/* Hueco 3 · Rectángulo en el cuerpo del artículo */}
-          <div className="w-[84px] shrink-0">
-            <Slot id="ARTICLE_SIDEBAR" selected={selected} onSelect={onSelect} />
+
+          {/* Hueco 4 · In-feed dentro del cuerpo: cada N párrafos */}
+          <Slot
+            id="IN_ARTICLE_PARAGRAPHS"
+            selected={selected}
+            onSelect={onSelect}
+          />
+
+          <div className="space-y-1.5">
+            <Line className="w-11/12" />
+            <Line className="w-full" />
           </div>
+
+          {/* Y otra vez más abajo en los artículos largos */}
+          <Slot
+            id="IN_ARTICLE_PARAGRAPHS"
+            selected={selected}
+            onSelect={onSelect}
+          />
         </div>
 
-        {/* Hueco 4 · Pie del artículo (antes de las claves ejecutivas) */}
+        {/* Hueco 5 · Pie del artículo (al final de la lectura) */}
         <Slot id="ARTICLE_FOOTER" selected={selected} onSelect={onSelect} />
       </div>
     </div>

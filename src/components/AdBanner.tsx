@@ -20,6 +20,7 @@ const SLOT_WRAPPER: Record<AdPlacement, string> = {
   TOP_BILLBOARD: "w-full max-w-7xl mx-auto px-4 sm:px-6 my-4",
   IN_FEED_LEADERBOARD: "w-full max-w-7xl mx-auto px-4 sm:px-6 my-6 sm:my-8",
   ARTICLE_SIDEBAR: "w-full",
+  IN_ARTICLE_PARAGRAPHS: "w-full",
   ARTICLE_FOOTER: "w-full my-6",
   GRID_CARD: "w-full",
 };

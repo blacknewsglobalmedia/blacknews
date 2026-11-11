@@ -457,7 +457,10 @@ export const AdsManager: React.FC<AdsManagerProps> = ({
               <option value="TODAS">Todos los espacios</option>
               <option value="TOP_BILLBOARD">Top Billboard Portada</option>
               <option value="IN_FEED_LEADERBOARD">Leaderboard In-Feed</option>
-              <option value="ARTICLE_SIDEBAR">Skyscraper Lateral</option>
+              <option value="ARTICLE_SIDEBAR">Rectangle en el Artículo</option>
+              <option value="IN_ARTICLE_PARAGRAPHS">
+                In-Article cada 8 párrafos
+              </option>
               <option value="ARTICLE_FOOTER">Banner Pie Artículo</option>
               <option value="GRID_CARD">Card Patrocinada 4:5</option>
             </select>
@@ -985,7 +988,10 @@ export const AdsManager: React.FC<AdsManagerProps> = ({
                       Leaderboard In-Feed (1200×180 / 970×120)
                     </option>
                     <option value="ARTICLE_SIDEBAR">
-                      Skyscraper Lateral en Lector (300×600)
+                      Rectangle en el Artículo (300×250 / 300×600)
+                    </option>
+                    <option value="IN_ARTICLE_PARAGRAPHS">
+                      In-Article cada 8 párrafos (728×90)
                     </option>
                     <option value="ARTICLE_FOOTER">
                       Banner Pie de Artículo (728×90)

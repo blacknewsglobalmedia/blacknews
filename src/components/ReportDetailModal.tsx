@@ -15,7 +15,7 @@ import {
   Lock
 } from 'lucide-react';
 import { Report } from '../types/news';
-import { AdCampaign } from '../types/ads';
+import { AdCampaign, IN_ARTICLE_AD_EVERY } from '../types/ads';
 import { RedactorProfile } from '../types/auth';
 import { AdBanner } from './AdBanner';
 import { OptimizedPicture } from './OptimizedPicture';
@@ -307,6 +307,19 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
       s.type === 'heading' && s.text ? { idx, text: s.text } : null,
     )
     .filter((x): x is { idx: number; text: string } => x !== null);
+
+  // Índices de secciones tras los que entra el banner in-article: sólo se
+  // cuentan los párrafos del cuerpo (títulos, citas y datos no), uno cada
+  // IN_ARTICLE_AD_EVERY. Misma cifra que enseña la maqueta del paso «Dónde».
+  const inArticleAfterIdx = new Set<number>();
+  {
+    let bodyParagraphs = 0;
+    report.sections.forEach((s, idx) => {
+      if (s.type === 'heading' || s.type === 'quote' || s.type === 'stat') return;
+      bodyParagraphs += 1;
+      if (bodyParagraphs % IN_ARTICLE_AD_EVERY === 0) inArticleAfterIdx.add(idx);
+    });
+  }
 
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="fixed inset-0 z-50 overflow-y-auto bg-black flex flex-col justify-start font-['Lexend',sans-serif]">
@@ -687,7 +700,7 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
                 </div>
               );
             }
-            return (
+            const paragraph = (
               <p key={idx} className={`${fontSizeClass} font-light text-neutral-200`}>
                 <RichText
                   text={sec.text || ''}
@@ -695,6 +708,20 @@ export const ReportDetailModal: React.FC<ReportDetailModalProps> = ({
                   highlights={highlights}
                 />
               </p>
+            );
+            // Tras cada N párrafos del cuerpo, el banner in-article
+            if (!inArticleAfterIdx.has(idx)) return paragraph;
+            return (
+              <React.Fragment key={idx}>
+                {paragraph}
+                <AdBanner
+                  placement="IN_ARTICLE_PARAGRAPHS"
+                  campaigns={adCampaigns}
+                  selectedCategory={report.category}
+                  onTrackImpression={onTrackImpression}
+                  onTrackClick={onTrackClick}
+                />
+              </React.Fragment>
             );
           })}
         </div>

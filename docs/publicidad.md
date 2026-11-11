@@ -33,7 +33,8 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 |---|---|---|---|---|---|
 | `TOP_BILLBOARD` — portada, bajo el teletipo | horizontal | altura fija | 90 px · 120 px (≥640) · 160 px (≥768) | contain | **970×250**, 728×90, 320×100 |
 | `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | altura fija | 72 px · 96 px (≥640) · 120 px (≥768) | contain | **1200×180**, 970×120, 728×90 |
-| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo | vertical | altura fija | 200 px · 250 px (≥640) | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
+| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo, tras las claves del informe | vertical | altura fija | 200 px · 250 px (≥640) | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
+| `IN_ARTICLE_PARAGRAPHS` — dentro del cuerpo del artículo, **cada 8 párrafos** (`IN_ARTICLE_AD_EVERY`) | horizontal | altura fija | 56 px · 72 px (≥640) · 90 px (≥768) | contain | **728×90**, 800×120 |
 | `ARTICLE_FOOTER` — cierre del artículo | horizontal | altura fija | 56 px · 72 px (≥640) · 90 px (≥768) | contain | **728×90**, 800×120 |
 | `GRID_CARD` — card patrocinada en la parrilla «Edición Visual», tras las 2 primeras tarjetas | card | aspect `4/5` | — | cover | 800×1000 |
 
