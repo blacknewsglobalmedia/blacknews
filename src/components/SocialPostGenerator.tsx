@@ -3928,6 +3928,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       text: string;
     }> = [],
     outTime?: number,
+    // Opacidad del chyron (1 = visible, 0 = fuera): es el `textAlpha` del
+    // fundido «Texto → vídeo». La intro TV, si está activa, conserva su
+    // propia animación de entrada y salida; este fade es para cuando no la
+    // hay (o para el tramo posterior a ella, en el que ya no se pinta).
+    chyronFade = 1,
   ) => {
     const W = TV_W;
     const H = TV_H;
@@ -3938,6 +3943,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const introT = introOn ? outTime : 0;
     const inIntro = introOn && introT < tvIntroDur;
     const revealed = introOn && !inIntro;
+    // El chyron se va con la intro o con el fundido «Texto → vídeo»; en
+    // ambos casos queda el mismo vídeo limpio (bug de canal, hora y ticker;
+    // el titular, sólo en la cinta inferior).
+    const chyronGone = revealed || chyronFade >= 1;
 
     // 1) Fondo: foto o fotograma de vídeo a sangre (cover) — en la pasada de
     //    overlay tipográfico se queda fondo negro pleno.
@@ -4027,20 +4036,24 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
     // 2) Velos de legibilidad: el superior respalda el bug de canal, que
     //    siempre está en pantalla; el inferior existe sólo para el chyron,
-    //    así que cuando la intro termina y queda vídeo limpio tampoco se
-    //    pinta (el ticker lleva su propia barra opaca).
+    //    así que cuando la intro termina —o el fundido «Texto → vídeo» llega
+    //    a su fin— tampoco se pinta (el ticker lleva su propia barra opaca)
+    //    y, mientras baja, lo hace con el mismo progreso que el bloque.
     ctx.save();
     const topScrim = ctx.createLinearGradient(0, 0, 0, 260);
     topScrim.addColorStop(0, "rgba(0,0,0,0.92)");
     topScrim.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = topScrim;
     ctx.fillRect(0, 0, W, 260);
-    if (!revealed) {
+    if (!chyronGone) {
       const botScrim = ctx.createLinearGradient(0, H - 640, 0, H);
       botScrim.addColorStop(0, "rgba(0,0,0,0)");
       botScrim.addColorStop(1, "rgba(0,0,0,0.94)");
       ctx.fillStyle = botScrim;
+      ctx.save();
+      ctx.globalAlpha = chyronFade;
       ctx.fillRect(0, H - 640, W, 640);
+      ctx.restore();
     }
     if (blendFade) {
       const fade = ctx.createLinearGradient(0, 0, 0, 220);
@@ -4115,8 +4128,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     //    Con la intro activa se anima la entrada escalonada (la caja crece
     //    desde la izquierda) y el bloque sale desvaneciéndose al final de la
     //    intro; cuando la intro termina no se dibuja (vídeo limpio) y el
-    //    titular queda sólo en el ticker inferior.
-    if (!revealed) {
+    //    titular queda sólo en el ticker inferior. Sin intro, lo que lo
+    //    desvanece es el fundido «Texto → vídeo» (`chyronFade`), que apaga
+    //    también su velo de legibilidad.
+    if (!chyronGone) {
       const boxIn = inIntro ? tvIntroBoxIn(introT) : 1;
       const exitQ = inIntro ? tvIntroExit(introT, tvIntroDur) : 0;
       const gAlpha = 1 - exitQ * exitQ;
@@ -4125,7 +4140,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       const boxW = TV_STACK_W * boxIn;
       const stackX = TV_PAD;
       ctx.save();
-      ctx.globalAlpha = gAlpha;
+      ctx.globalAlpha = gAlpha * chyronFade;
       ctx.translate(0, gDy);
       ctx.fillStyle = "rgba(0,0,0,0.92)";
       ctx.fillRect(stackX, tvStackY, boxW, tvStackH);
@@ -4147,7 +4162,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
 
       // Etiqueta de sección (bloque emerald con texto negro)
       ctx.save();
-      ctx.globalAlpha = gAlpha * tagP;
+      ctx.globalAlpha = gAlpha * tagP * chyronFade;
       ctx.translate(0, (1 - tagP) * TV_TAG_DY);
       const cat = (category || "GEOPOLÍTICA").trim().toUpperCase();
       ctx.font = `700 ${TV_TAG_FS}px 'Lexend', sans-serif`;
@@ -4204,7 +4219,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       for (let i = 0; i < tvTitleLines.length; i++) {
         const p = inIntro ? tvIntroLineIn(introT, i) : 1;
         ctx.save();
-        ctx.globalAlpha = gAlpha * p;
+        ctx.globalAlpha = gAlpha * p * chyronFade;
         ctx.translate(0, (1 - p) * TV_LINE_DY);
         if (tvTitleLines[i]) {
           ctx.fillText(tvTitleLines[i], chX, chY);
@@ -4221,7 +4236,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             ? tvIntroLineIn(introT, tvTitleLines.length + j)
             : 1;
           ctx.save();
-          ctx.globalAlpha = gAlpha * p;
+          ctx.globalAlpha = gAlpha * p * chyronFade;
           ctx.translate(0, (1 - p) * TV_LINE_DY);
           if (tvDescLines[j]) {
             ctx.fillText(tvDescLines[j], chX, chY);
@@ -5095,8 +5110,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     outTime?: number,
     // Segundo de CONTENIDO (desde el inicio del clip, sin el desfase de la
     // pasada de intro ni el del cierre): gobierna la transición «texto →
-    // vídeo» del 4:5 y el 9:16, que así se mantiene sincronizada con la
-    // vista previa.
+    // vídeo» de los tres formatos (4:5 y 9:16 mueven la foto; 16:9 desvanece
+    // el chyron), que así se mantiene sincronizada con la vista previa.
     contentTime?: number,
     // true = dibujar la tarjeta del tweet pase lo que pase (PNG y copia al
     // portapapeles: la portada siempre la muestra, aunque en el vídeo esté
@@ -5106,14 +5121,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     const W = POST_W;
     const H = POST_H;
 
-    // Transición «texto → vídeo» (4:5 y 9:16): pasado `textFadeOutDur` s de
-    // contenido el bloque de texto se desvanece y la foto sube hasta sangrar
-    // la tarjeta. El sello BlackNews de abajo a la izquierda se pinta
-    // SIEMPRE, al final.
+    // Transición «texto → vídeo»: pasado `textFadeOutDur` s de contenido el
+    // bloque de texto se desvanece (en 4:5 y 9:16 sube la foto hasta sangrar
+    // la tarjeta; en 16:9 sale el chyron con su velo) y deja el clip limpio.
+    // El sello BlackNews de abajo a la izquierda se pinta SIEMPRE, al final.
     const fadeP =
-      textFadeOut &&
-      (postFormat === "4:5" || postFormat === "9:16") &&
-      typeof contentTime === "number"
+      textFadeOut && typeof contentTime === "number"
         ? clamp01((contentTime - textFadeOutDur) / TEXT_FADE_MOVE)
         : 0;
     const textAlpha = 1 - fadeP;
@@ -5230,6 +5243,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         isOverlayOnly,
         flagsData,
         outTime,
+        textAlpha,
       );
       return;
     }
@@ -8911,6 +8925,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
   const tvTagP = tvInIntro ? tvIntroTagIn(tvPhaseT as number) : 1;
   // El chyron sólo existe durante la intro: al terminar queda vídeo limpio.
   const tvShowChyron = !tvIntro || tvInIntro;
+  // Opacidad del chyron y de su velo de legibilidad: con intro manda la
+  // animación de salida de la propia intro; sin intro, el fundido
+  // «Texto → vídeo» (mismo `textFadeP` que el bloque de 4:5 y 9:16, que en
+  // el lienzo exportado es el `chyronFade` de drawTvFrame).
+  const tvChyronFade = tvIntro ? 1 : 1 - textFadeP;
+  const tvChyronOn = tvShowChyron && tvChyronFade > 0;
   // Filtro del media: intro = sin color; tras la intro = color original
   // (sólo ajuste tonal), como pidió el usuario. Sólo la señal de TV se
   // desatura: el export 4:5/9:16 pinta su pasada de intro en color.
@@ -9492,19 +9512,22 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     exportClipSeconds,
   ]);
 
-  // Reloj de la transición «texto → vídeo» (4:5 y 9:16): mientras el vídeo
-  // corre, el bloque de texto se desvanece pasado `textFadeOutDur` s y la foto
-  // sube hasta ocupar la tarjeta entera; al dar la vuelta del lazo el titular
-  // vuelve. Durante la pasada de intro el bloque NO se desvanece (el export
-  // cuenta ese tramo como contenido en 0). Con imagen (sin reloj) el texto
-  // queda fijo, igual que en el PNG exportado.
+  // Reloj de la transición «texto → vídeo»: mientras el vídeo corre, el
+  // bloque de texto se desvanece pasado `textFadeOutDur` s (en 4:5 y 9:16
+  // además la foto sube hasta ocupar la tarjeta entera) y, al dar la vuelta
+  // del lazo, el titular vuelve. En 16:9 el que se desvanece es el chyron,
+  // sin tocar el clip. Durante la pasada de intro el bloque NO se desvanece
+  // (el export cuenta ese tramo como contenido en 0) y, si hay intro TV, es
+  // ella la que se lleva el chyron al terminar. Con imagen (sin reloj) el
+  // texto queda fijo, igual que en el PNG exportado.
   useEffect(() => {
-    if (
-      (postFormat !== "4:5" && postFormat !== "9:16") ||
-      !textFadeOut ||
-      mediaType !== "video" ||
-      postDesign === "podcast"
-    ) {
+    if (!textFadeOut || mediaType !== "video" || postDesign === "podcast") {
+      setTextFadeP(0);
+      return;
+    }
+    // 16:9 con intro: manda la intro (entrada y salida animadas del chyron);
+    // el fundido queda a cero para no apagarlo antes de tiempo.
+    if (postFormat === "16:9" && tvIntro) {
       setTextFadeP(0);
       return;
     }
@@ -9547,8 +9570,15 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // Al cruzar el umbral (texto empieza a irse): reiniciar video y arrancar
       // el reloj de pared con la continuidad exacta del momento. Sólo en
       // reproducción: con el clip en pausa el cruce se resuelve con la
-      // posición (no se reinicia ni se arranca nada solo).
-      if (p > 0 && fadeStartWallRef.current === 0 && !v.paused) {
+      // posición (no se reinicia ni se arranca nada solo). En 16:9 no se
+      // reinicia nada: el clip sigue corriendo y sólo se desvanece el chyron
+      // encima (un reinicio haría saltar el vídeo justo al irse el texto).
+      if (
+        postFormat !== "16:9" &&
+        p > 0 &&
+        fadeStartWallRef.current === 0 &&
+        !v.paused
+      ) {
         fadeStartWallRef.current = now - textFadeOutDur * 1000;
         if (Math.abs(v.currentTime - trimStart) > 0.05) v.currentTime = trimStart;
         // El propio reinicio es un salto hacia atrás: se anota para que el
@@ -9576,7 +9606,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postFormat, textFadeOut, mediaType, trimStart, textFadeOutDur, postDesign]);
+  }, [postFormat, textFadeOut, mediaType, trimStart, textFadeOutDur, postDesign, tvIntro]);
 
   // Cargar otro medio suelta el reloj del fundido «texto → vídeo»: el pase
   // vuelve a medirse desde la posición del clip nuevo y el titular arranca
@@ -12620,11 +12650,13 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 Reset
               </button>
             )}
-            {(postFormat === "4:5" || postFormat === "9:16") &&
+            {(postFormat === "4:5" ||
+              postFormat === "9:16" ||
+              postFormat === "16:9") &&
               mediaType === "video" && (
               <label
                 className="flex items-center gap-1.5 cursor-pointer select-none"
-                title="Pasados unos segundos el texto (categoría, titular y bajada) se oculta para mostrar el vídeo de fondo a sangre; el sello BlackNews de abajo a la izquierda se mantiene siempre"
+                title="Pasados unos segundos el texto (categoría, titular y bajada) se desvanece y queda el vídeo limpio (en 16:9 sale el chyron con su velo); el sello BlackNews de abajo a la izquierda se mantiene siempre"
               >
                 <input
                   type="checkbox"
@@ -12637,7 +12669,9 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </span>
               </label>
             )}
-            {(postFormat === "4:5" || postFormat === "9:16") &&
+            {(postFormat === "4:5" ||
+              postFormat === "9:16" ||
+              postFormat === "16:9") &&
               mediaType === "video" &&
               textFadeOut && (
               <select
@@ -12812,8 +12846,11 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                         {previewMediaEl}
                       </div>
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-[260px] bg-gradient-to-b from-black/95 via-black/60 to-transparent" />
-                      {tvShowChyron && (
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent" />
+                      {tvChyronOn && (
+                        <div
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-[640px] bg-gradient-to-t from-black/95 via-black/70 to-transparent"
+                          style={{ opacity: tvChyronFade }}
+                        />
                       )}
                       {blendFade && (
                         <div className="pointer-events-none absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black via-black/55 to-transparent" />
@@ -12888,15 +12925,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                     {/* Chyron: etiqueta de sección + titular + bajada.
                         Con la intro activa sólo existe durante la intro
                         (entrada animada y salida al final); después el
-                        vídeo queda limpio y el titular sigue en el ticker. */}
-                    {tvShowChyron && (
+                        vídeo queda limpio y el titular sigue en el ticker.
+                        Sin intro lo apaga «Texto → vídeo», igual que en el
+                        lienzo exportado. */}
+                    {tvChyronOn && (
                       <div
                         className="absolute flex overflow-hidden border-t border-white/15 bg-black/90"
                         style={{
                           left: TV_PAD,
                           bottom: TV_TICKER_H,
                           width: TV_STACK_W * tvBoxIn,
-                          opacity: 1 - tvExitQ * tvExitQ,
+                          opacity: (1 - tvExitQ * tvExitQ) * tvChyronFade,
                           transform: `translateY(${tvExitQ * tvExitQ * TV_EXIT_DY}px)`,
                         }}
                       >
