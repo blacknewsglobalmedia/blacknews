@@ -125,12 +125,21 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   // Sin campaña activa: invitación patrocinada discreta (solo si hay gestor).
   // Usa el mismo SLOT_WRAPPER que el estado con anuncio: sin él, la invitación
   // se iría de borde a borde (ocupa el ancho del márgen, como el resto).
+  // En slots por relación de aspecto (la card 4:5) la invitación respeta la
+  // misma proporción que la creatividad, para no romper la parrilla.
   if (eligibleCampaigns.length === 0) {
     return (
       <div className={`${SLOT_WRAPPER[placement]} ${className}`}>
         <div
           onClick={() => onOpenInquiry?.(placement)}
-          className="w-full border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group"
+          className={`w-full border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group ${
+            placementInfo.sizing === "aspect" ? "flex items-center" : ""
+          }`}
+          style={
+            placementInfo.sizing === "aspect" && placementInfo.aspect
+              ? { aspectRatio: placementInfo.aspect }
+              : undefined
+          }
         >
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 max-w-4xl mx-auto">
             <div className="flex items-center gap-2.5 text-left">

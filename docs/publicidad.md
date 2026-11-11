@@ -35,7 +35,7 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 | `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | altura fija | 72 px · 96 px (≥640) · 120 px (≥768) | contain | **1200×180**, 970×120, 728×90 |
 | `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo | vertical | altura fija | 200 px · 250 px (≥640) | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
 | `ARTICLE_FOOTER` — cierre del artículo | horizontal | altura fija | 56 px · 72 px (≥640) · 90 px (≥768) | contain | **728×90**, 800×120 |
-| `GRID_CARD` — card patrocinada en la cuadrícula | card | aspect `4/5` | — | cover | 800×1000 |
+| `GRID_CARD` — card patrocinada en la parrilla «Edición Visual», tras las 2 primeras tarjetas | card | aspect `4/5` | — | cover | 800×1000 |
 
 - **Ancho**: fluido. Horizontales van dentro de `max-w-7xl` (portada) o del
   ancho de columna del artículo.
@@ -51,7 +51,9 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 - Con `prefers-reduced-motion: reduce`: **sin autoplay** ni fade; solo
   manual con dots/flechas.
 - Si hay **1 sola** campaña: no hay controles, queda estática.
-- Si **no hay campañas activas**: no se pinta nada (cero huecos muertos).
+- Si **no hay campañas activas**: sin gestor de consulta no se pinta nada
+  (cero huecos muertos); con «Anúnciate aquí» disponible se muestra una
+  invitación punteada discreta ocupando el mismo hueco.
 
 ### Impresiones y clics
 
@@ -78,7 +80,8 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 1. **Panel de redacción → AdsManager**: crear/editar campaña (título,
    anunciante, URL, imagen, placement, fechas, estado `ACTIVE`).
 2. **"Anúnciate aquí"** (página de carga en el panel, `AdSubmissionPage`):
-   ubicación con proporción y tamaños, creatividad con vista previa real,
+   ubicación con maqueta del sitio (dónde vive cada espacio) y proporción,
+   creatividad con vista previa real,
    plan con vistas estimadas y pago; la solicitud queda `PENDIENTE_PAGO`
    hasta la confirmación y la aprobación en AdsManager.
 3. Mientras una campaña tenga otro estado (`PAUSED`, `PENDIENTE_PAGO`,

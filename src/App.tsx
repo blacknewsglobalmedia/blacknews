@@ -1727,6 +1727,10 @@ export default function App() {
                     }
                   : undefined
               }
+              adCampaigns={isSubscribed ? undefined : adsList}
+              onAdImpression={isSubscribed ? undefined : handleTrackImpression}
+              onAdClick={isSubscribed ? undefined : handleTrackClick}
+              onAdInquiry={isSubscribed ? undefined : openAdSubmission}
             />
             {/* Bloque fijo de portada: sección FENÓMENOS & ANOMALÍAS */}
             <FenomenosSection

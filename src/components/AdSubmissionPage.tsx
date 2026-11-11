@@ -32,6 +32,7 @@ import {
 import { RedactorProfile } from "../types/auth";
 import { PLACEMENT_ICONS } from "../utils/adIcons";
 import { createAdOrder } from "../utils/paypalAds";
+import { AdPlacementMap } from "./AdPlacementMap";
 
 /**
  * Carga de publicidad como ASISTENTE de 4 pantallas dentro del panel:
@@ -143,6 +144,10 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   const [advertiserUrl, setAdvertiserUrl] = useState("");
   const [badgeText, setBadgeText] = useState("PATROCINADO");
 
+  /** Maqueta del paso 1: ancla para llevarla a la vista en pantallas
+   *  estrechas, donde queda debajo de las cards. */
+  const mapRef = useRef<HTMLDivElement>(null);
+
   const [paymentMethod, setPaymentMethod] = useState<AdPaymentMethod>("PAYPAL");
   const [receiptNote, setReceiptNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -168,6 +173,18 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   const goToStep = (n: 1 | 2 | 3 | 4) => {
     setStep(n);
     scrollTop();
+  };
+
+  /** Al tocar una card en pantallas estrechas (la maqueta queda debajo),
+   *  se lleva a la vista para que el hueco encendido se vea. En escritorio
+   *  el panel ya está al costado y no hace falta mover nada. */
+  const revealMap = () => {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      mapRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }
   };
 
   // ── Creatividad: subida al Worker (Cloudinary, original a máxima calidad)
@@ -356,7 +373,12 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+    <form
+      onSubmit={handleSubmit}
+      // El paso 1 se ensancha para dejar sitio a la maqueta del sitio al
+      // costado; el resto de pantallas conserva la columna estrecha.
+      className={`mx-auto ${step === 1 ? "max-w-6xl" : "max-w-3xl"}`}
+    >
       {/* Cabecera */}
       <div className="mb-6">
         <button
@@ -371,8 +393,10 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
         </h1>
       </div>
 
-      {/* Stepper: 4 pasos con icono; los completados se pueden revisar */}
-      <nav aria-label="Pasos" className="mb-8 flex items-center">
+      {/* Stepper: 4 pasos con icono; los completados se pueden revisar.
+          Ancho fijo para que las conexiones no se estiren cuando el paso 1
+          ensancha el formulario. */}
+      <nav aria-label="Pasos" className="mb-8 flex max-w-3xl items-center">
         {STEPS.map((s, i) => {
           const n = (i + 1) as 1 | 2 | 3 | 4;
           const isCurrent = n === step;
@@ -431,74 +455,103 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
           <StepHeader
             icon={MapPin}
             title="¿Dónde se ve tu anuncio?"
-            hint="Toca la ubicación que prefieras. Las 5 opciones son espacios reales de BlackNews."
+            hint="Toca la ubicación que prefieras: las 5 son espacios reales de BlackNews y la maqueta muestra dónde vive cada uno."
           />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {PLACEMENT_ORDER.map((id) => {
-              const info = AD_PLACEMENTS_INFO[id];
-              const Icon = PLACEMENT_ICONS[id];
-              const selected = id === placement;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPlacement(id)}
-                  aria-pressed={selected}
-                  className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition-colors ${
-                    selected
-                      ? "border-emerald-500/70 bg-emerald-500/5"
-                      : "border-white/10 bg-neutral-950/60 hover:border-white/30"
-                  }`}
-                >
-                  <span
-                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
+            {/* Cards de ubicación */}
+            <div className="grid content-start gap-3 sm:grid-cols-2">
+              {PLACEMENT_ORDER.map((id) => {
+                const info = AD_PLACEMENTS_INFO[id];
+                const Icon = PLACEMENT_ICONS[id];
+                const selected = id === placement;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setPlacement(id);
+                      revealMap();
+                    }}
+                    aria-pressed={selected}
+                    className={`flex items-center gap-4 rounded-2xl border p-4 text-left transition-colors ${
                       selected
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                        : "border-white/10 bg-white/5 text-neutral-300"
+                        ? "border-emerald-500/70 bg-emerald-500/5"
+                        : "border-white/10 bg-neutral-950/60 hover:border-white/30"
                     }`}
                   >
-                    <Icon className="h-6 w-6" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-[15px] font-semibold text-white">
-                        {info.name}
-                      </span>
-                      {id === DEFAULT_PLACEMENT && (
-                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-                          Recomendado
+                    <span
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+                        selected
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                          : "border-white/10 bg-white/5 text-neutral-300"
+                      }`}
+                    >
+                      <Icon className="h-6 w-6" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-[15px] font-semibold text-white">
+                          {info.name}
                         </span>
-                      )}
+                        {id === DEFAULT_PLACEMENT && (
+                          <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                            Recomendado
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-[13px] leading-snug text-neutral-400">
+                        {info.description}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] text-neutral-300">
+                        <span>{info.exportSizes[0]}</span>
+                        <span className="text-neutral-500">·</span>
+                        <span>≈ {formatAdViews(info.estimatedDailyViews)} vistas/día</span>
+                      </span>
                     </span>
-                    <span className="mt-0.5 block text-[13px] leading-snug text-neutral-400">
-                      {info.description}
-                    </span>
-                    <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[12px] text-neutral-300">
-                      <span>{info.exportSizes[0]}</span>
-                      <span className="text-neutral-500">·</span>
-                      <span>≈ {formatAdViews(info.estimatedDailyViews)} vistas/día</span>
-                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Maqueta del sitio + ficha de la ubicación elegida: el costado
+                que explica en qué parte de BlackNews acaba tu anuncio */}
+            <aside className="space-y-3 self-start lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+              <div ref={mapRef}>
+                <p className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-neutral-400">
+                  Así se ve en BlackNews
+                </p>
+                <AdPlacementMap selected={placement} onSelect={setPlacement} />
+              </div>
+
+              {/* Ficha: proporción real + cómo se muestra la creatividad */}
+              <div className="rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3.5">
+                <div className="flex items-center gap-2">
+                  <PlacementIcon className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white">
+                    {placementInfo.name}
                   </span>
-                </button>
-              );
-            })}
-          </div>
-          {/* Vista ilustrativa de la proporción elegida */}
-          <div className="mt-6 flex items-center justify-center gap-4 rounded-2xl border border-white/10 bg-neutral-950/60 px-5 py-4">
-            <div
-              className="shrink-0 rounded-lg border border-white/20 bg-black"
-              style={{ width: 96, aspectRatio: placementInfo.ratio, maxHeight: 64 }}
-              aria-hidden
-            />
-            <p className="text-[13px] leading-relaxed text-neutral-400">
-              <span className="font-semibold text-white">
-                {placementInfo.name}
-              </span>
-              <br />
-              Así de ancho es el espacio; tu imagen se muestra{" "}
-              {placementInfo.fit === "cover" ? "a sangre" : "entera, sin recortes"}
-              .
-            </p>
+                  <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+                    {placementInfo.exportSizes[0]}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center gap-3.5">
+                  <span
+                    aria-hidden
+                    className="shrink-0 rounded-md border border-white/20 bg-black"
+                    style={{ width: 72, aspectRatio: placementInfo.ratio }}
+                  />
+                  <p className="text-[12px] leading-snug text-neutral-400">
+                    Tu creatividad se muestra{" "}
+                    <span className="font-semibold text-neutral-200">
+                      {placementInfo.fit === "cover"
+                        ? "a sangre (recortada al centro si hace falta)"
+                        : "entera, sin recortes"}
+                    </span>
+                    . Toca un hueco de la maqueta para cambiar de ubicación.
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
         </section>
       )}

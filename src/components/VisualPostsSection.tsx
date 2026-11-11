@@ -13,6 +13,8 @@ import { findCountryByName, matchCountryInText } from '../data/countries';
 import { isFenomenos } from '../data/newsData';
 import { OptimizedPicture } from './OptimizedPicture';
 import { MiniWorldMap } from './MiniWorldMap';
+import { AdBanner } from './AdBanner';
+import { AdCampaign, AdPlacement } from '../types/ads';
 
 interface VisualPostsSectionProps {
   reports: Report[];
@@ -22,6 +24,12 @@ interface VisualPostsSectionProps {
   bookmarkedIds: Set<string>;
   onToggleBookmark: (report: Report) => void;
   onOpenInStudio?: (report: Report) => void;
+  /** Card patrocinada 4:5 de la parrilla. Sin lista (suscriptores) no se
+   *  pinta: los suscriptores no ven publicidad en ninguna parte. */
+  adCampaigns?: AdCampaign[];
+  onAdImpression?: (campaignId: string) => void;
+  onAdClick?: (campaignId: string) => void;
+  onAdInquiry?: (placement: AdPlacement) => void;
 }
 
 // País que se muestra en las tarjetas de portada, por orden de prioridad:
@@ -90,6 +98,10 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
   onShareReport,
   bookmarkedIds,
   onToggleBookmark,
+  adCampaigns,
+  onAdImpression,
+  onAdClick,
+  onAdInquiry,
 }) => {
   const [filterCategory, setFilterCategory] = useState<CategoryId>('TODAS');
   const [currentPage, setCurrentPage] = useState(0);
@@ -115,6 +127,24 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
 
   // Sin despachos publicados la sección no aporta nada: se omite por completo.
   if (reports.length === 0) return null;
+
+  // Card patrocinada 4:5: entra en la parrilla como un post más, tras las
+  // dos primeras tarjetas (misma proporción que los despachos, así que la
+  // fila no cambia de altura). Sin campañas ni gestor de consulta no pinta
+  // nada (AdBanner ya lo decide) y, si no llega lista, es que el usuario
+  // está suscrito y no debe ver publicidad.
+  const gridAd =
+    adCampaigns !== undefined ? (
+      <AdBanner
+        placement="GRID_CARD"
+        campaigns={adCampaigns}
+        selectedCategory={filterCategory}
+        onTrackImpression={onAdImpression}
+        onTrackClick={onAdClick}
+        onOpenInquiry={onAdInquiry}
+      />
+    ) : null;
+  const adSlotAt = Math.min(2, displayedReports.length);
 
   return (
     <section className="w-full bg-black py-10 sm:py-14 border-b border-white/10 relative overflow-hidden">
@@ -195,11 +225,11 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
         {/* Cards Grid: Pure 4:5 Vertical Aspect Ratio */}
         {displayedReports.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-stretch">
-            {displayedReports.map((report) => {
+            {displayedReports.map((report, idx) => {
               const country = resolveReportCountry(report);
               const isBookmarked = bookmarkedIds.has(report.id);
 
-              return (
+              const card = (
                 <article
                   key={report.id}
                   data-assemble="card"
@@ -324,6 +354,12 @@ export const VisualPostsSection: React.FC<VisualPostsSectionProps> = ({
                     ) : null}
                   </div>
                 </article>
+              );
+              return (
+                <React.Fragment key={report.id}>
+                  {idx === adSlotAt && gridAd}
+                  {card}
+                </React.Fragment>
               );
             })}
           </div>
