@@ -213,7 +213,9 @@ export default function App() {
   } | null>(null);
   const [liveTickerActive, setLiveTickerActive] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastLeaving, setToastLeaving] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Persistent reports list
   const [reportsList, setReportsList] = useState<Report[]>(() => {
@@ -910,7 +912,14 @@ export default function App() {
 
   const showToast = (msg: string, ms = 3000) => {
     setToastMessage(msg);
+    setToastLeaving(false);
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (toastLeaveTimer.current) clearTimeout(toastLeaveTimer.current);
+    // El toast empieza a salir (fade corto) 200 ms antes de desmontarse
+    toastLeaveTimer.current = setTimeout(
+      () => setToastLeaving(true),
+      Math.max(ms - 200, 0),
+    );
     toastTimer.current = setTimeout(() => setToastMessage(null), ms);
   };
 
@@ -933,9 +942,10 @@ export default function App() {
     } catch (err) {
       console.warn("[BLACKNEWS] Local storage backup saved for layout config");
     }
-    showToast(
-      `Distribución de portada: [${finalizedConfig.automationPreset.toUpperCase()}]`,
-    );
+    // Sin toast: la rotación automática pasa por aquí en cada recarga y al
+    // lector no le importa (decisión: silencio total en portada). El
+    // feedback de la acción manual vive en FrontPageManager (showFeedback)
+    // y el estado del ciclo, en su sello «Ciclo Cumplido».
   };
 
   // Apply automation preset with 1 click
@@ -983,9 +993,8 @@ export default function App() {
             ? { intelligence: layoutConfig.intelligence }
             : {}),
         });
-        showToast(
-          `Portada rotada automáticamente con nuevas publicaciones (Ciclo de ${intervalHours}h cumplido)`,
-        );
+        // Silencio: la portada rota sin toasts para nadie; la redacción
+        // ve el ciclo cumplido en FrontPageManager al abrir el panel.
       }
     };
 
@@ -1556,10 +1565,28 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-black text-[#EDEDED] font-['Lexend',sans-serif] selection:bg-white selection:text-black flex flex-col justify-between">
       {/* Toast notification banner */}
+      {/* Toast: estilo dark + armado. Al montarse, el MutationObserver del
+          sistema de construcción lo registra y se arma solo (contornos
+          punteados con medidas + piezas escalonadas); con el armado
+          apagado o con reduced-motion se ve al instante, sin fantasmas. */}
       {toastMessage && (
-        <div className="fixed left-4 right-4 sm:left-auto sm:right-6 bottom-[calc(var(--bn-nav-h)_+_93px)] sm:bottom-[calc(var(--bn-nav-h)_+_81px)] lg:bottom-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium tracking-normal rounded-lg border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
-          <span className="w-1.5 h-1.5 rounded-full bg-black inline-block"></span>
-          <span>{toastMessage}</span>
+        <div
+          role="status"
+          aria-live="polite"
+          data-assemble
+          data-step="70"
+          className={`fixed left-4 right-4 sm:left-auto sm:right-6 bottom-[calc(var(--bn-nav-h)_+_93px)] sm:bottom-[calc(var(--bn-nav-h)_+_81px)] lg:bottom-6 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-lg border border-white/10 bg-neutral-950/90 px-4 py-2.5 shadow-2xl shadow-black/60 backdrop-blur-md transition-[opacity,transform] duration-200 sm:max-w-sm ${
+            toastLeaving ? "translate-y-1 opacity-0" : ""
+          }`}
+        >
+          <span
+            data-piece
+            aria-hidden
+            className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.9)]"
+          />
+          <span data-piece className="min-w-0 font-mono text-[11px] leading-snug text-neutral-300">
+            {toastMessage}
+          </span>
         </div>
       )}
 
