@@ -6,12 +6,14 @@ import {
   Check,
   CircleAlert,
   CreditCard,
+  Download,
   Eye,
   FileImage,
   Landmark,
   Link2,
   Loader2,
   MapPin,
+  Package,
   Send,
   ShieldCheck,
   Timer,
@@ -31,6 +33,11 @@ import {
 } from "../types/ads";
 import { RedactorProfile } from "../types/auth";
 import { PLACEMENT_ICONS } from "../utils/adIcons";
+import {
+  AD_TEMPLATES,
+  downloadAdKit,
+  downloadAdTemplate,
+} from "../lib/adTemplates";
 import { createAdOrder } from "../utils/paypalAds";
 import { AdPlacementMap } from "./AdPlacementMap";
 
@@ -710,6 +717,65 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Plantillas: una por proporción única (SVG editable) + kit */}
+          <div className="rounded-2xl border border-white/10 bg-neutral-950/60 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wider text-neutral-400">
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  Plantillas para tu diseñador
+                </p>
+                <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-neutral-500">
+                  SVG editable con la proporción exacta del hueco, fondo
+                  negro, zona segura y la marca BLACKNEWS. Una por
+                  proporción distinta — sólo la que te toque o el kit
+                  completo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={downloadAdKit}
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-white/20 px-4 py-2.5 text-sm font-semibold text-neutral-200 transition-colors hover:border-white/45 hover:text-white"
+              >
+                <Package className="h-4 w-4" aria-hidden />
+                Kit completo (.zip)
+              </button>
+            </div>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {AD_TEMPLATES.map((t) => {
+                const mine = t.placements.some((p) => p.id === placement);
+                return (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      onClick={() => downloadAdTemplate(t)}
+                      title={t.placements.map((p) => p.name).join(" + ")}
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                        mine
+                          ? "border-emerald-500/50 bg-emerald-500/5 hover:border-emerald-400"
+                          : "border-white/10 bg-black/40 hover:border-white/30"
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-mono text-[13px] font-semibold text-white">
+                          {t.label}
+                          <span className="text-neutral-500"> px</span>
+                        </span>
+                        <span className="block truncate text-[11px] text-neutral-500">
+                          {t.placements.map((p) => p.name).join(" + ")}
+                        </span>
+                      </span>
+                      <Download
+                        className="h-4 w-4 shrink-0 text-neutral-500"
+                        aria-hidden
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         </section>
       )}
