@@ -285,7 +285,9 @@ export const AdPlacementMap: React.FC<AdPlacementMapProps> = ({
   }, [selected]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-neutral-950">
+    // select-none: es un dibujo decorativo — al arrastrar o doble-clic
+    // sobre los rótulos no debe seleccionarse texto.
+    <div className="select-none overflow-hidden rounded-xl border border-white/10 bg-neutral-950">
       <BrowserChrome />
 
       {/* Pestañas: una maqueta por vista, sin amontonar todo en una */}
