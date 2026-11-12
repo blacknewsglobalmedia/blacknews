@@ -100,7 +100,9 @@ contenida» cuando la creatividad no tiene la proporción nominal.
 1. **Panel de redacción → AdsManager**: crear/editar campaña (título,
    anunciante, URL, imagen, placement, fechas, estado `ACTIVE`).
 2. **"Anúnciate aquí"** (página de carga en el panel, `AdSubmissionPage`):
-   ubicación con maqueta del sitio (dónde vive cada espacio) y proporción,
+   ubicación con maqueta del sitio en dos pestañas —«Portada» (el orden
+   real de la página principal) y «Publicación» (el despacho abierto)—
+   con la pestaña que sigue a la ubicación elegida, y proporción,
    creatividad con vista previa real,
    plan con vistas estimadas y pago; la solicitud queda `PENDIENTE_PAGO`
    hasta la confirmación y la aprobación en AdsManager.

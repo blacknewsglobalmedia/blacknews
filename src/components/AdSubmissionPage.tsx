@@ -395,9 +395,9 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
       </div>
 
       {/* Stepper: 4 pasos con icono; los completados se pueden revisar.
-          Ancho fijo para que las conexiones no se estiren cuando el paso 1
-          ensancha el formulario. */}
-      <nav aria-label="Pasos" className="mb-8 flex max-w-3xl items-center">
+          Ancho fijo + mx-auto para que las conexiones no se estiren cuando
+          el paso 1 ensancha el formulario, pero quede centrado en ese ancho. */}
+      <nav aria-label="Pasos" className="mx-auto mb-8 flex max-w-3xl items-center">
         {STEPS.map((s, i) => {
           const n = (i + 1) as 1 | 2 | 3 | 4;
           const isCurrent = n === step;
@@ -456,7 +456,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
           <StepHeader
             icon={MapPin}
             title="¿Dónde se ve tu anuncio?"
-            hint="Toca la ubicación que prefieras: las 5 son espacios reales de BlackNews y la maqueta muestra dónde vive cada uno."
+            hint="Toca la ubicación que prefieras: las 6 son espacios reales de BlackNews y la maqueta muestra dónde vive cada uno."
           />
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
             {/* Cards de ubicación */}
