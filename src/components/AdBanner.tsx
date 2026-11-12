@@ -180,7 +180,6 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   }
 
   const showControls = eligibleCampaigns.length > 1;
-  const isContain = placementInfo.fit !== "cover";
 
   return (
     <aside
@@ -242,9 +241,10 @@ export const AdBanner: React.FC<AdBannerProps> = ({
                 onError={() =>
                   setBrokenImages((prev) => ({ ...prev, [c.id]: true }))
                 }
-                className={`h-full w-full select-none ${
-                  isContain ? "object-contain" : "object-cover"
-                } ${brokenImages[c.id] ? "hidden" : ""}`}
+                /* Cover: el creativo llena el hueco siempre y, si su
+                   proporción no es la nominal, se recorta por el centro
+                   (decisión unslop). */
+                className={`h-full w-full select-none object-cover ${brokenImages[c.id] ? "hidden" : ""}`}
               />
               {brokenImages[c.id] && (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-gradient-to-r from-neutral-950 to-black px-4 text-center">

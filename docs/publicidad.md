@@ -12,10 +12,11 @@ El flujo end-to-end de envío y aprobación está en
    de layout. Los suscriptores nunca ven anuncios.
 2. **Visibles**: siempre dentro del flujo de lectura, con etiqueta
    «PUBLICIDAD» y nombre del anunciante en micro-tipo.
-3. **Nunca se recortan**: todos los slots usan `object-contain` (la card
-   de la parrilla es la excepción: `cover`, para mantener la retícula
-   4:5); la creatividad se escala entera y el sobrante queda en negro
-   (invisible sobre el fondo AMOLED).
+3. **Siempre llenan el hueco**: todos los slots usan `object-cover`; si la
+   creatividad no tiene la proporción nominal se **recorta por el centro**
+   y nunca quedan bandas (en proporción exacta cover y contain son
+   idénticos). Decisión de diseño: el anunciante nunca ve su anuncio a
+   media caja.
 4. **CLS = 0**: el contenedor tiene tamaño antes de que la imagen cargue:
    relación de aspecto (= la del tamaño nominal) + tope de ancho.
 
@@ -26,30 +27,30 @@ nominal** (`ratio` en `AD_PLACEMENTS_INFO`, p. ej. `970 / 250`) y un
 **tope de ancho** (`containerClass` = `max-w-[…]`, igual al ancho nominal).
 Por qué:
 
-- La creatividad nominal **llena el hueco al 100%** (contain sin bandas)
-  y la **vista previa del asistente replica el slot exacto**: usa el
-  mismo `ratio` y el mismo tope, así que proporción y tamaño coinciden
-  por construcción con el sitio.
+- La creatividad nominal **llena el hueco al 100%** y la **vista previa
+  del asistente replica el slot exacto**: usa el mismo `ratio` y el mismo
+  tope, así que proporción y tamaño coinciden por construcción con el
+  sitio.
 - El hueco **nunca supera el tamaño de exportación**: no se escala la
   creatividad hacia arriba y un vertical como `ARTICLE_SIDEBAR` no se
   dispara a ~700 px de alto en la columna del artículo.
 - En pantallas estrechas baja el ancho y la altura sigue la proporción:
   el mismo aspecto en todos los viewports.
 
-Tamaños de exportación secundarios (728×90 en el billboard, etc.) siguen
-cabiendo con `object-contain`: se centran con banda negra, invisible sobre
-AMOLED salvo el borde del hueco. El asistente avisa «se mostrará
-contenida» cuando la creatividad no tiene la proporción nominal.
+Tamaños de exportación secundarios (728×90 en el billboard, etc.) se
+muestren igual a sangre: al no tener la proporción nominal se **recortan
+por el centro** hasta llenar el hueco. El asistente avisa «se recortará
+al centro» cuando la creatividad no tiene la proporción nominal.
 
 ## Inventario de slots
 
 | Slot (ubicación) | Orient. | Proporción del hueco | Ancho máx. | Ajuste | Tamaños de exportación |
 |---|---|---|---|---|---|
-| `TOP_BILLBOARD` — portada, bajo el teletipo | horizontal | `970 / 250` | 970 px | contain | **970×250**, 728×90, 320×100 |
-| `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | `1200 / 180` | 1200 px | contain | **1200×180**, 970×120, 728×90 |
-| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo, tras las claves del informe | vertical | `300 / 250` | 300 px | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
-| `IN_ARTICLE_PARAGRAPHS` — dentro del cuerpo del artículo, **cada 8 párrafos** (`IN_ARTICLE_AD_EVERY`) | horizontal | `728 / 90` | 728 px | contain | **728×90**, 800×120 |
-| `ARTICLE_FOOTER` — cierre del artículo | horizontal | `728 / 90` | 728 px | contain | **728×90**, 800×120 |
+| `TOP_BILLBOARD` — portada, bajo el teletipo | horizontal | `970 / 250` | 970 px | cover | **970×250**, 728×90, 320×100 |
+| `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | `1200 / 180` | 1200 px | cover | **1200×180**, 970×120, 728×90 |
+| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo, tras las claves del informe | vertical | `300 / 250` | 300 px | cover | **300×250** (recomendado); 300×600 recorta los laterales |
+| `IN_ARTICLE_PARAGRAPHS` — dentro del cuerpo del artículo, **cada 8 párrafos** (`IN_ARTICLE_AD_EVERY`) | horizontal | `728 / 90` | 728 px | cover | **728×90**, 800×120 |
+| `ARTICLE_FOOTER` — cierre del artículo | horizontal | `728 / 90` | 728 px | cover | **728×90**, 800×120 |
 | `GRID_CARD` — card patrocinada en la parrilla «Edición Visual», tras las 2 primeras tarjetas | card | `4 / 5` | 390 px (columna) | cover | 800×1000 |
 
 - **Ancho**: hasta el tope por slot (`containerClass`), dentro de la
@@ -114,7 +115,7 @@ contenida» cuando la creatividad no tiene la proporción nominal.
 1. Agregar la entrada en `AdPlacement` y `AD_PLACEMENTS_INFO`
    (`src/types/ads.ts`) con `ratio` (proporción de la creatividad nominal
    y del hueco), `containerClass` (tope de ancho `max-w-[…]` = ancho
-   nominal), `fit`, `exportSizes` y `estimatedDailyViews` (vistas/día
+   nominal), `exportSizes` y `estimatedDailyViews` (vistas/día
    estimadas que usa la página de carga).
 2. Agregar su contenedor en `SLOT_WRAPPER` (`src/components/AdBanner.tsx`).
 3. Renderizar `<AdBanner placement="..." campaigns={adsList} … />` donde

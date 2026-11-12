@@ -544,9 +544,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                   <p className="text-[12px] leading-snug text-neutral-400">
                     Tu creatividad se muestra{" "}
                     <span className="font-semibold text-neutral-200">
-                      {placementInfo.fit === "cover"
-                        ? "a sangre (recortada al centro si hace falta)"
-                        : "entera, sin recortes"}
+                      a sangre (recortada al centro si hace falta)
                     </span>
                     . Toca un hueco de la maqueta para cambiar de ubicación.
                   </p>
@@ -666,10 +664,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                     ) : (
                       <span className="text-amber-300">
                         {" "}
-                        · se mostrará{" "}
-                        {placementInfo.fit === "cover"
-                          ? "recortada al centro"
-                          : "contenida, sin recorte"}
+                        · se recortará al centro
                       </span>
                     );
                   })()}
@@ -695,11 +690,7 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                   <img
                     src={imageUrl}
                     alt="Vista previa de la creatividad"
-                    className={`h-full w-full select-none ${
-                      placementInfo.fit === "cover"
-                        ? "object-cover"
-                        : "object-contain"
-                    }`}
+                    className="h-full w-full select-none object-cover"
                   />
                 ) : (
                   /* En fila y compacto: en móvil el hueco del in-article

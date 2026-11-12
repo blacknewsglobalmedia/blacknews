@@ -136,17 +136,15 @@ export interface AdPlacementInfo {
    * columna y la altura sigue la proporción (`ratio`).
    */
   containerClass?: string;
-  /** Ajuste de la creatividad dentro del contenedor */
-  fit: 'contain' | 'cover';
   /** Tamaños nominales recomendados para exportar la creatividad (px) */
   exportSizes: string[];
   /**
    * Relación de aspecto de la creatividad nominal (anchura / altura) Y
    * del contenedor del slot: el hueco se dibuja con la proporción del
    * tamaño recomendado, así una creatividad bien exportada lo llena al
-   * 100% (`object-contain` sin bandas) y la vista previa del asistente —
-   * que usa este mismo dato — replica el slot real por construcción.
-   * Formato CSS, ej. '970 / 250'.
+   * 100% y la vista previa del asistente — que usa este mismo dato —
+   * replica el slot real por construcción. Fuera de proporción se
+   * recorta por el centro (`object-cover`). Formato CSS, ej. '970 / 250'.
    */
   ratio: string;
   /** Vistas diarias ESTIMADAS de la ubicación (tabla editorial ajustable,
@@ -163,7 +161,6 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     suggestedRate: '$1,800 USD / mes',
     orientation: 'horizontal',
     containerClass: 'max-w-[970px]',
-    fit: 'contain',
     exportSizes: ['970 × 250', '728 × 90', '320 × 100'],
     ratio: '970 / 250',
     estimatedDailyViews: 1200,
@@ -176,7 +173,6 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     suggestedRate: '$1,200 USD / mes',
     orientation: 'horizontal',
     containerClass: 'max-w-[1200px]',
-    fit: 'contain',
     exportSizes: ['1200 × 180', '970 × 120', '728 × 90'],
     ratio: '1200 / 180',
     estimatedDailyViews: 900,
@@ -190,8 +186,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     suggestedRate: '$950 USD / mes',
     orientation: 'vertical',
     containerClass: 'max-w-[300px]',
-    fit: 'contain',
-    exportSizes: ['300 × 250 (recomendado)', '300 × 600 (vertical, se muestra completo)'],
+    exportSizes: ['300 × 250 (recomendado)', '300 × 600 (vertical, se recorta a los lados)'],
     ratio: '300 / 250',
     estimatedDailyViews: 500,
   },
@@ -203,7 +198,6 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     suggestedRate: '$850 USD / mes',
     orientation: 'horizontal',
     containerClass: 'max-w-[728px]',
-    fit: 'contain',
     exportSizes: ['728 × 90', '800 × 120'],
     ratio: '728 / 90',
     estimatedDailyViews: 650,
@@ -217,7 +211,6 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     suggestedRate: '$650 USD / mes',
     orientation: 'horizontal',
     containerClass: 'max-w-[728px]',
-    fit: 'contain',
     exportSizes: ['728 × 90', '800 × 120'],
     ratio: '728 / 90',
     estimatedDailyViews: 600,
@@ -233,7 +226,6 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     // (max-w-7xl + lg:grid-cols-3 gap-8 ≈ 389 px): en el sitio no llega
     // a aplicarse y la vista previa replica el ancho del slot real.
     containerClass: 'max-w-[390px]',
-    fit: 'cover',
     exportSizes: ['800 × 1000 (4:5)'],
     ratio: '4 / 5',
     estimatedDailyViews: 400,
