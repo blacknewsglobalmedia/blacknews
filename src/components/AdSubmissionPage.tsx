@@ -683,17 +683,13 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                 Así se verá en el sitio
               </p>
               <div
-                className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-black ${
-                  /* La card 4:5 vive en una columna de la parrilla real
-                     (~389 px): sin este tope, a ancho completo mediría
-                     768×960 y no se parecería a la card del sitio. */
-                  placementInfo.aspect ? "max-w-[390px]" : ""
-                } ${placementInfo.containerClass || ""}`}
-                style={
-                  placementInfo.aspect
-                    ? { aspectRatio: placementInfo.aspect }
-                    : undefined
-                }
+                className={`relative w-full mx-auto overflow-hidden rounded-xl border border-white/10 bg-black ${
+                  /* Mismo tope de ancho que el slot real (p. ej. la card usa
+                     el ancho de su columna de la parrilla): la vista previa
+                     replica proporción y tamaño del hueco publicitario. */
+                  placementInfo.containerClass || ""
+                }`}
+                style={{ aspectRatio: placementInfo.ratio }}
               >
                 {imageUrl ? (
                   <img
@@ -706,9 +702,11 @@ export const AdSubmissionPage: React.FC<AdSubmissionPageProps> = ({
                     }`}
                   />
                 ) : (
-                  <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
-                    <FileImage className="h-8 w-8 text-neutral-700" />
-                    <span className="text-sm text-neutral-500">
+                  /* En fila y compacto: en móvil el hueco del in-article
+                     mide ~42 px de alto y una pila no cabría. */
+                  <div className="flex h-full w-full flex-row items-center justify-center gap-2 px-4 text-center">
+                    <FileImage className="h-4 w-4 shrink-0 text-neutral-700" />
+                    <span className="min-w-0 truncate text-[11px] text-neutral-500">
                       Tu imagen aparecerá aquí
                     </span>
                   </div>

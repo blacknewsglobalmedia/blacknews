@@ -127,24 +127,27 @@ export interface AdPlacementInfo {
   suggestedRate: string;
   orientation: 'horizontal' | 'vertical' | 'card';
   /**
-   * Cómo dimensiona el front el contenedor del slot:
-   * - 'fixed-height': ALTURA FIJA por breakpoint + ancho fluido (los
-   *   contenedores horizontales). La creatividad se escala con
-   *   `object-contain` y NUNCA se recorta; el sobrante en negro es
-   *   invisible sobre el fondo AMOLED. Cero saltos de layout (CLS = 0).
-   * - 'aspect': el contenedor se define por RELACIÓN DE ASPECTO (las
-   *   cards verticales/cuadradas); la altura deriva del ancho.
+   * Clases Tailwind del contenedor: TOPE DE ANCHO del hueco en px
+   * (`max-w-[…]`), igual al ancho nominal de exportación. El hueco nunca
+   * se pinta por encima del tamaño de la creatividad (sin escalados hacia
+   * arriba) y la vista previa del asistente aplica el mismo tope. Sin
+   * tope, un vertical como ARTICLE_SIDEBAR mediría ~700 px de alto en la
+   * columna del artículo. Por debajo del tope el ancho es el de la
+   * columna y la altura sigue la proporción (`ratio`).
    */
-  sizing: 'fixed-height' | 'aspect';
-  /** Clases Tailwind del contenedor: alturas del slot por breakpoint (sizing='fixed-height') */
   containerClass?: string;
-  /** Relación de aspecto CSS del contenedor, ej. '4 / 5' (sizing='aspect') */
-  aspect?: string;
   /** Ajuste de la creatividad dentro del contenedor */
   fit: 'contain' | 'cover';
   /** Tamaños nominales recomendados para exportar la creatividad (px) */
   exportSizes: string[];
-  /** Relación de aspecto de la CREATIVIDAD a subir (anchura / altura) */
+  /**
+   * Relación de aspecto de la creatividad nominal (anchura / altura) Y
+   * del contenedor del slot: el hueco se dibuja con la proporción del
+   * tamaño recomendado, así una creatividad bien exportada lo llena al
+   * 100% (`object-contain` sin bandas) y la vista previa del asistente —
+   * que usa este mismo dato — replica el slot real por construcción.
+   * Formato CSS, ej. '970 / 250'.
+   */
   ratio: string;
   /** Vistas diarias ESTIMADAS de la ubicación (tabla editorial ajustable,
    *  no analítica en vivo): base para proyectar el alcance de un plan. */
@@ -159,8 +162,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '970 × 250 px / 728 × 90 px / 320 × 100 px',
     suggestedRate: '$1,800 USD / mes',
     orientation: 'horizontal',
-    sizing: 'fixed-height',
-    containerClass: 'h-[90px] sm:h-[120px] md:h-[160px]',
+    containerClass: 'max-w-[970px]',
     fit: 'contain',
     exportSizes: ['970 × 250', '728 × 90', '320 × 100'],
     ratio: '970 / 250',
@@ -173,8 +175,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '1200 × 180 px / 970 × 120 px / 728 × 90 px',
     suggestedRate: '$1,200 USD / mes',
     orientation: 'horizontal',
-    sizing: 'fixed-height',
-    containerClass: 'h-[72px] sm:h-[96px] md:h-[120px]',
+    containerClass: 'max-w-[1200px]',
     fit: 'contain',
     exportSizes: ['1200 × 180', '970 × 120', '728 × 90'],
     ratio: '1200 / 180',
@@ -188,8 +189,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '300 × 250 px / 300 × 600 px',
     suggestedRate: '$950 USD / mes',
     orientation: 'vertical',
-    sizing: 'fixed-height',
-    containerClass: 'h-[200px] sm:h-[250px]',
+    containerClass: 'max-w-[300px]',
     fit: 'contain',
     exportSizes: ['300 × 250 (recomendado)', '300 × 600 (vertical, se muestra completo)'],
     ratio: '300 / 250',
@@ -202,8 +202,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '728 × 90 px / 800 × 120 px',
     suggestedRate: '$850 USD / mes',
     orientation: 'horizontal',
-    sizing: 'fixed-height',
-    containerClass: 'h-[56px] sm:h-[72px] md:h-[90px]',
+    containerClass: 'max-w-[728px]',
     fit: 'contain',
     exportSizes: ['728 × 90', '800 × 120'],
     ratio: '728 / 90',
@@ -217,8 +216,7 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: '728 × 90 px / 800 × 120 px',
     suggestedRate: '$650 USD / mes',
     orientation: 'horizontal',
-    sizing: 'fixed-height',
-    containerClass: 'h-[56px] sm:h-[72px] md:h-[90px]',
+    containerClass: 'max-w-[728px]',
     fit: 'contain',
     exportSizes: ['728 × 90', '800 × 120'],
     ratio: '728 / 90',
@@ -231,8 +229,10 @@ export const AD_PLACEMENTS_INFO: Record<AdPlacement, AdPlacementInfo> = {
     recommendedSize: 'Proporción 4:5 (800 × 1000 px)',
     suggestedRate: '$1,400 USD / mes',
     orientation: 'card',
-    sizing: 'aspect',
-    aspect: '4 / 5',
+    // Tope = ancho de la columna real de la parrilla «Edición Visual»
+    // (max-w-7xl + lg:grid-cols-3 gap-8 ≈ 389 px): en el sitio no llega
+    // a aplicarse y la vista previa replica el ancho del slot real.
+    containerClass: 'max-w-[390px]',
     fit: 'cover',
     exportSizes: ['800 × 1000 (4:5)'],
     ratio: '4 / 5',

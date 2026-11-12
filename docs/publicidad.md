@@ -12,35 +12,51 @@ El flujo end-to-end de envío y aprobación está en
    de layout. Los suscriptores nunca ven anuncios.
 2. **Visibles**: siempre dentro del flujo de lectura, con etiqueta
    «PUBLICIDAD» y nombre del anunciante en micro-tipo.
-3. **Nunca se recortan**: los slots horizontales usan `object-contain`; la
-   creatividad se escala entera y el sobrante queda en negro (invisible
-   sobre el fondo AMOLED).
-4. **CLS = 0**: el contenedor tiene tamaño fijo (altura o aspect ratio)
-   antes de que la imagen cargue.
+3. **Nunca se recortan**: todos los slots usan `object-contain` (la card
+   de la parrilla es la excepción: `cover`, para mantener la retícula
+   4:5); la creatividad se escala entera y el sobrante queda en negro
+   (invisible sobre el fondo AMOLED).
+4. **CLS = 0**: el contenedor tiene tamaño antes de que la imagen cargue:
+   relación de aspecto (= la del tamaño nominal) + tope de ancho.
 
-## Decisiones: tamaño fijo vs aspect ratio
+## Dimensionado: proporción nominal + tope de ancho
 
-| Tipo de slot | Decisión | Motivo |
-|---|---|---|
-| Horizontales (billboard, leaderboard, footer) | **Altura fija por breakpoint + ancho fluido** | Un banner de 728×90 y uno de 970×250 comparten ancho pero no altura; la altura fija evita que la página "bailen" al rotar el carrusel. El ancho libre + `contain` admite cualquier tamaño nominal. |
-| Verticales / cards | **Aspect ratio** (`4/5` para GRID_CARD) | Se integran en la grilla junto a las noticias, que ya usan 4:5. |
+Todos los slots se dibujan con **relación de aspecto = la del tamaño
+nominal** (`ratio` en `AD_PLACEMENTS_INFO`, p. ej. `970 / 250`) y un
+**tope de ancho** (`containerClass` = `max-w-[…]`, igual al ancho nominal).
+Por qué:
 
-Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
+- La creatividad nominal **llena el hueco al 100%** (contain sin bandas)
+  y la **vista previa del asistente replica el slot exacto**: usa el
+  mismo `ratio` y el mismo tope, así que proporción y tamaño coinciden
+  por construcción con el sitio.
+- El hueco **nunca supera el tamaño de exportación**: no se escala la
+  creatividad hacia arriba y un vertical como `ARTICLE_SIDEBAR` no se
+  dispara a ~700 px de alto en la columna del artículo.
+- En pantallas estrechas baja el ancho y la altura sigue la proporción:
+  el mismo aspecto en todos los viewports.
+
+Tamaños de exportación secundarios (728×90 en el billboard, etc.) siguen
+cabiendo con `object-contain`: se centran con banda negra, invisible sobre
+AMOLED salvo el borde del hueco. El asistente avisa «se mostrará
+contenida» cuando la creatividad no tiene la proporción nominal.
 
 ## Inventario de slots
 
-| Slot (ubicación) | Orient. | Dimensionado | Alturas contenedor | Ajuste | Tamaños de exportación |
+| Slot (ubicación) | Orient. | Proporción del hueco | Ancho máx. | Ajuste | Tamaños de exportación |
 |---|---|---|---|---|---|
-| `TOP_BILLBOARD` — portada, bajo el teletipo | horizontal | altura fija | 90 px · 120 px (≥640) · 160 px (≥768) | contain | **970×250**, 728×90, 320×100 |
-| `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | altura fija | 72 px · 96 px (≥640) · 120 px (≥768) | contain | **1200×180**, 970×120, 728×90 |
-| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo, tras las claves del informe | vertical | altura fija | 200 px · 250 px (≥640) | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
-| `IN_ARTICLE_PARAGRAPHS` — dentro del cuerpo del artículo, **cada 8 párrafos** (`IN_ARTICLE_AD_EVERY`) | horizontal | altura fija | 56 px · 72 px (≥640) · 90 px (≥768) | contain | **728×90**, 800×120 |
-| `ARTICLE_FOOTER` — cierre del artículo | horizontal | altura fija | 56 px · 72 px (≥640) · 90 px (≥768) | contain | **728×90**, 800×120 |
-| `GRID_CARD` — card patrocinada en la parrilla «Edición Visual», tras las 2 primeras tarjetas | card | aspect `4/5` | — | cover | 800×1000 |
+| `TOP_BILLBOARD` — portada, bajo el teletipo | horizontal | `970 / 250` | 970 px | contain | **970×250**, 728×90, 320×100 |
+| `IN_FEED_LEADERBOARD` — entre Edición Visual y cuadernos | horizontal | `1200 / 180` | 1200 px | contain | **1200×180**, 970×120, 728×90 |
+| `ARTICLE_SIDEBAR` — dentro del cuerpo del artículo, tras las claves del informe | vertical | `300 / 250` | 300 px | contain | **300×250** (recomendado); 300×600 se muestra completo y centrado |
+| `IN_ARTICLE_PARAGRAPHS` — dentro del cuerpo del artículo, **cada 8 párrafos** (`IN_ARTICLE_AD_EVERY`) | horizontal | `728 / 90` | 728 px | contain | **728×90**, 800×120 |
+| `ARTICLE_FOOTER` — cierre del artículo | horizontal | `728 / 90` | 728 px | contain | **728×90**, 800×120 |
+| `GRID_CARD` — card patrocinada en la parrilla «Edición Visual», tras las 2 primeras tarjetas | card | `4 / 5` | 390 px (columna) | cover | 800×1000 |
 
-- **Ancho**: fluido. Horizontales van dentro de `max-w-7xl` (portada) o del
-  ancho de columna del artículo.
-- El tamaño en **negrita** es el nominal recomendado de cada slot.
+- **Ancho**: hasta el tope por slot (`containerClass`), dentro de la
+  columna del sitio (portada `max-w-7xl`, artículo `max-w-4xl`); por
+  debajo del tope el ancho es el de la columna y la altura sigue `ratio`.
+- El tamaño en **negrita** es el nominal recomendado de cada slot; el
+  tope de ancho es su ancho nominal (la card usa el de su columna).
 
 ## Carrusel (varios anuncios en el mismo slot)
 
@@ -54,7 +70,10 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 - Si hay **1 sola** campaña: no hay controles, queda estática.
 - Si **no hay campañas activas**: sin gestor de consulta no se pinta nada
   (cero huecos muertos); con «Anúnciate aquí» disponible se muestra una
-  invitación punteada discreta ocupando el mismo hueco.
+  invitación punteada discreta ocupando el mismo hueco: mismo tope de
+  ancho que la creatividad; la card 4:5 mantiene la proporción y los
+  huecos horizontales su alto natural (una caja de 250 px vacíos en la
+  portada molestaría más que el anuncio).
 
 ### Impresiones y clics
 
@@ -91,9 +110,10 @@ Breakpoints Tailwind: `sm` = 640 px, `md` = 768 px.
 ## Alta de un slot nuevo
 
 1. Agregar la entrada en `AdPlacement` y `AD_PLACEMENTS_INFO`
-   (`src/types/ads.ts`) con `sizing`, `containerClass`/`aspect`, `fit`,
-   `exportSizes`, `ratio` (proporción de la creatividad) y
-   `estimatedDailyViews` (vistas/día estimadas que usa la página de carga).
+   (`src/types/ads.ts`) con `ratio` (proporción de la creatividad nominal
+   y del hueco), `containerClass` (tope de ancho `max-w-[…]` = ancho
+   nominal), `fit`, `exportSizes` y `estimatedDailyViews` (vistas/día
+   estimadas que usa la página de carga).
 2. Agregar su contenedor en `SLOT_WRAPPER` (`src/components/AdBanner.tsx`).
 3. Renderizar `<AdBanner placement="..." campaigns={adsList} … />` donde
    corresponda.

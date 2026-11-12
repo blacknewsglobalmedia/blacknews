@@ -124,21 +124,25 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   }
 
   // Sin campaña activa: invitación patrocinada discreta (solo si hay gestor).
-  // Usa el mismo SLOT_WRAPPER que el estado con anuncio: sin él, la invitación
-  // se iría de borde a borde (ocupa el ancho del márgen, como el resto).
-  // En slots por relación de aspecto (la card 4:5) la invitación respeta la
-  // misma proporción que la creatividad, para no romper la parrilla.
+  // Usa el mismo SLOT_WRAPPER y el mismo tope de ancho que el estado con
+  // anuncio: sin él, la invitación se iría de borde a borde (ocupa el ancho
+  // del márgen, como el resto). La card 4:5, además, respeta la proporción
+  // de la creatividad para no romper la parrilla; los huecos horizontales
+  // se quedan con su alto natural (una caja punteada de 250 px vacíos en la
+  // portada molestaría más que el propio anuncio).
   if (eligibleCampaigns.length === 0) {
     return (
       <div className={`${SLOT_WRAPPER[placement]} ${className}`}>
         <div
           onClick={() => onOpenInquiry?.(placement)}
-          className={`w-full border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group ${
-            placementInfo.sizing === "aspect" ? "flex items-center" : ""
+          className={`w-full mx-auto border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group ${
+            placementInfo.containerClass || ""
+          } ${
+            placementInfo.orientation === "card" ? "flex items-center" : ""
           }`}
           style={
-            placementInfo.sizing === "aspect" && placementInfo.aspect
-              ? { aspectRatio: placementInfo.aspect }
+            placementInfo.orientation === "card"
+              ? { aspectRatio: placementInfo.ratio }
               : undefined
           }
         >
@@ -185,15 +189,14 @@ export const AdBanner: React.FC<AdBannerProps> = ({
         .join(", ")}`}
       className={`${SLOT_WRAPPER[placement]} ${className}`}
     >
+      {/* Contenedor del slot: proporción nominal (`ratio`) + tope de ancho
+          (`containerClass`). La creatividad nominal llena la caja al 100%
+          y la vista previa del asistente usa estos mismos datos. */}
       <div
-        className={`group relative w-full overflow-hidden rounded-xl border border-white/10 bg-black transition-colors hover:border-white/25 ${
+        className={`group relative w-full mx-auto overflow-hidden rounded-xl border border-white/10 bg-black transition-colors hover:border-white/25 ${
           placementInfo.containerClass || ""
         }`}
-        style={
-          placementInfo.aspect
-            ? { aspectRatio: placementInfo.aspect }
-            : undefined
-        }
+        style={{ aspectRatio: placementInfo.ratio }}
         {...pauseProps}
       >
         {eligibleCampaigns.map((c, i) => {
