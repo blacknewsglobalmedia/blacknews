@@ -123,55 +123,105 @@ export const AdBanner: React.FC<AdBannerProps> = ({
     return null;
   }
 
-  // Sin campaña activa: invitación patrocinada discreta (solo si hay gestor).
-  // Usa el mismo SLOT_WRAPPER y el mismo tope de ancho que el estado con
-  // anuncio: sin él, la invitación se iría de borde a borde (ocupa el ancho
-  // del márgen, como el resto). La card 4:5, además, respeta la proporción
-  // de la creatividad para no romper la parrilla; los huecos horizontales
-  // se quedan con su alto natural (una caja punteada de 250 px vacíos en la
-  // portada molestaría más que el propio anuncio).
+  // Sin campaña activa: invitación patrocinada que REPLICA EL HUECO REAL
+  // (mismo `ratio` + tope `containerClass` que el slot con anuncio y que la
+  // vista previa del asistente): el anunciante ve exactamente dónde irá su
+  // creatividad. El contenido se acomoda a la proporción — fila compacta en
+  // los panorámicos (728×90, 1200×180), fila con subtítulo en el billboard
+  // y columna centrada en la card 4:5 / rectángulo vertical.
   if (eligibleCampaigns.length === 0) {
+    const ratioNum = (() => {
+      const [w, h] = placementInfo.ratio
+        .split("/")
+        .map((part) => parseFloat(part.trim()));
+      return w && h ? w / h : 1;
+    })();
+    const panoramic = ratioNum >= 4; // 1200×180, 728×90
+    const vertical = ratioNum < 1.6; // 300×250, 4:5
+
     return (
       <div className={`${SLOT_WRAPPER[placement]} ${className}`}>
         <div
           onClick={() => onOpenInquiry?.(placement)}
-          className={`w-full mx-auto border border-dashed border-white/15 hover:border-white/40 rounded-xl bg-neutral-950/40 p-4 transition-all duration-300 cursor-pointer text-center group ${
-            placementInfo.containerClass || ""
-          } ${
-            placementInfo.orientation === "card" ? "flex items-center" : ""
-          }`}
-          style={
-            placementInfo.orientation === "card"
-              ? { aspectRatio: placementInfo.ratio }
-              : undefined
-          }
+          className={`group relative w-full mx-auto cursor-pointer overflow-hidden rounded-xl border border-dashed border-white/15 bg-neutral-950/60 transition-colors hover:border-white/40 ${placementInfo.containerClass || ""}`}
+          style={{ aspectRatio: placementInfo.ratio }}
         >
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 max-w-4xl mx-auto">
-            <div className="flex items-center gap-2.5 text-left">
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 group-hover:text-white group-hover:border-white/30 transition-colors shrink-0">
-                <Megaphone className="w-3.5 h-3.5" />
+          {/* Etiqueta de transparencia: arriba-izquierda en los verticales
+              (replica el slot con anuncio); en los horizontales va en la
+              propia línea — en un hueco de 42–97 px la absolute choca con
+              el contenido centrado (y en móvil no cabe todo de otra forma). */}
+          {vertical && (
+            <span className="pointer-events-none absolute left-2 top-1.5 z-10 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              Publicidad
+            </span>
+          )}
+
+          <div
+            className={`flex h-full w-full items-center justify-center gap-2 sm:gap-3.5 ${
+              vertical
+                ? "flex-col gap-2 px-3 text-center sm:px-4"
+                : panoramic
+                  ? "px-2 sm:px-4"
+                  : "px-3 sm:px-4"
+            }`}
+          >
+            {!vertical && (
+              <span className="hidden shrink-0 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-neutral-500 sm:inline-block">
+                Publicidad
+              </span>
+            )}
+            <div
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-400 transition-colors group-hover:border-white/30 group-hover:text-white ${
+                panoramic ? "hidden sm:flex" : ""
+              }`}
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+            </div>
+
+            <div
+              className={`min-w-0 ${vertical ? "w-full text-center" : "text-left"}`}
+            >
+              <div
+                className={`flex flex-wrap items-center gap-x-2 ${
+                  vertical ? "justify-center" : ""
+                }`}
+              >
+                <span
+                  className={`font-mono font-semibold uppercase tracking-wider text-neutral-400 ${
+                    panoramic
+                      ? "truncate text-[9px] sm:text-[10px]"
+                      : "text-[10px]"
+                  }`}
+                >
+                  Espacio patrocinado disponible
+                </span>
+                <span className="hidden font-mono text-[9px] text-neutral-600 sm:inline">
+                  · {placementInfo.name}
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-                    ESPACIO PATROCINADO DISPONIBLE
-                  </span>
-                  <span className="text-[9px] font-mono text-neutral-500">
-                    [{placementInfo?.name || placement}]
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-300 mt-0.5">
-                  Posicione su marca frente a una audiencia global de inversores,
-                  juristas y líderes de opinión.
+              {!panoramic && (
+                <p
+                  className={`mt-0.5 text-[11px] text-neutral-500 ${
+                    vertical
+                      ? "line-clamp-2"
+                      : "hidden truncate sm:block sm:max-w-[46ch]"
+                  }`}
+                >
+                  Posicione su marca frente a una audiencia global de
+                  inversores, juristas y líderes de opinión.
                 </p>
-              </div>
+              )}
             </div>
 
             <button
               type="button"
-              className="px-3.5 py-1.5 bg-white/10 group-hover:bg-white group-hover:text-black text-white text-xs font-semibold uppercase tracking-wider rounded-lg transition-all shrink-0 border border-white/15"
+              className={`shrink-0 rounded-lg border border-white/15 bg-white/10 font-semibold uppercase tracking-wider text-white transition-all group-hover:bg-white group-hover:text-black ${
+                panoramic
+                  ? "px-2.5 py-1 text-[9px] sm:px-3 sm:text-[10px]"
+                  : "px-3.5 py-1.5 text-[10px] sm:text-xs"
+              }`}
             >
-              Anúnciate Aquí
+              Anúnciate aquí
             </button>
           </div>
         </div>
