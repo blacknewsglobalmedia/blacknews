@@ -2000,6 +2000,10 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       localStorage.setItem("blacknews_controls_open", controlsOpen ? "1" : "0");
     } catch {}
   }, [controlsOpen]);
+  /** Ajustes avanzados de la vista previa (Intro, Tweet, Escala, X/Y…):
+   *  en móvil van plegados tras «Más ajustes» para no empastar la primera
+   *  pantalla; en escritorio se muestran siempre. */
+  const [previewAdvancedOpen, setPreviewAdvancedOpen] = useState(false);
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
   const [groqKeySaved, setGroqKeySaved] = useState(false);
   const [openRouterKeySaved, setOpenRouterKeySaved] = useState(false);
@@ -7817,6 +7821,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       // necesita para programar sus fundidos antes de arrancar la grabación.
       const introPad = tvIntro ? tvIntroDur : 0;
       const clipOutDur = (end - start) / Math.max(videoSpeed, 0.01);
+
       let audioTrack: MediaStreamTrack | null = null;
       // Cama de la ruta clásica: BufferSource en bucle dentro del mismo grafo
       // que la voz. Se corta en `finish` y justo cuando entra el cierre.
@@ -9826,8 +9831,8 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       className="font-['Lexend',sans-serif] space-y-8"
       style={{
         paddingBottom: aiComposerOpen
-          ? `calc(var(--bn-nav-h) + ${aiComposerH + 76}px)`
-          : "calc(var(--bn-nav-h) + 4.5rem)",
+          ? `calc(var(--bn-nav-h) + ${aiComposerH + 76}px + var(--bn-export-h))`
+          : "calc(var(--bn-nav-h) + 4.5rem + var(--bn-export-h))",
       }}
     >
       {/* Franja de procedencia OSINT: conserva el enlace del hallazgo
@@ -9963,16 +9968,16 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
       )}
 
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-6 border-b border-white/10 gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 sm:pb-6 border-b border-white/10 gap-3 sm:gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-sans text-neutral-500 mb-1">
+          <div className="hidden sm:flex items-center gap-2 text-[11px] sm:text-xs font-sans text-neutral-500 mb-1">
             <Smartphone className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
             <span>Editor de posts {postFormat}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
             Generador de Posts {postFormat}
           </h2>
-          <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-light max-w-2xl leading-relaxed">
+          <p className="hidden sm:block text-xs sm:text-sm text-neutral-400 mt-1 font-light max-w-2xl leading-relaxed">
             Imagen, vídeo o audio con países, filtros fotográficos y controles
             de audio, listos para exportar.
           </p>
@@ -10006,11 +10011,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             <button
               type="button"
               onClick={handleCopyJson}
+              aria-label="Copiar JSON"
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
               title="Copiar configuración completa del post como JSON"
             >
               <Copy className="w-3.5 h-3.5 text-neutral-300" />
-              <span>Copiar JSON</span>
+              <span className="hidden sm:inline">Copiar JSON</span>
             </button>
 
             <button
@@ -10020,11 +10026,12 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 setJsonInputText("");
                 setIsJsonModalOpen(true);
               }}
+              aria-label="Pegar JSON"
               className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-neutral-200 hover:text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-white/5"
               title="Pegar o restaurar configuración desde JSON"
             >
               <FileCode className="w-3.5 h-3.5 text-neutral-400" />
-              <span>Pegar JSON</span>
+              <span className="hidden sm:inline">Pegar JSON</span>
             </button>
           </div>
 
@@ -10066,7 +10073,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           style={{
             bottom: `calc(var(--bn-nav-h) + ${
               aiComposerOpen ? aiComposerH + 84 : 76
-            }px)`,
+            }px + var(--bn-export-h))`,
           }}
           className="fixed left-4 sm:left-auto right-6 z-50 bg-white text-black px-4 py-2.5 text-xs font-sans font-medium rounded-xl border border-neutral-200 shadow-2xl flex items-center gap-2 animate-in fade-in"
         >
@@ -10075,6 +10082,52 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
         </div>
       )}
 
+      {/* Barra fija de exportación · sólo móvil/tablet (< lg). La acción de
+          guardar queda siempre al alcance del pulgar, con el formato activo
+          a la vista; en escritorio no aparece porque los botones de la
+          columna de vista previa bastan. Su altura se reserva fuera con
+          --bn-export-h (padding del contenedor, barra IA y toasts). */}
+      <div className="fixed left-0 right-0 z-40 lg:hidden px-3 bottom-[calc(var(--bn-nav-h)_+_0.75rem)]">
+        <div className="flex items-center gap-2 rounded-2xl bg-black/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/80 p-2">
+          <span
+            title={`Formato activo: ${postFormat}`}
+            className="shrink-0 h-10 px-2.5 flex items-center text-[11px] font-mono font-semibold text-neutral-200 bg-white/10 border border-white/10 rounded-lg tabular-nums"
+          >
+            {postFormat}
+          </span>
+          {exportsVideo ? (
+            <button
+              type="button"
+              disabled={isRecordingVideo}
+              onClick={handleExportVideo}
+              title="Se procesa en tu navegador: el vídeo no se sube a ningún servidor"
+              className="flex-1 min-w-0 h-10 px-3 bg-white hover:bg-neutral-200 text-black font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Film className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                {isRecordingVideo
+                  ? `Exportando vídeo… ${recordingProgress}%`
+                  : "Exportar vídeo"}
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isExporting}
+              onClick={handleExportPng}
+              className="flex-1 min-w-0 h-10 px-3 bg-white hover:bg-neutral-200 text-black font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                {isExporting
+                  ? `Procesando ${postFormat}…`
+                  : "Descargar PNG"}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Barra flotante del asistente IA.
           Dos piezas negras flotantes y despegadas: una píldora con la acción
           principal, y encima (con un hueco de 12 px) el panel del contexto,
@@ -10082,7 +10135,7 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           no estorbar; los toasts se sitúan sobre la altura real de la barra. */}
       <aside
         aria-label="Asistente IA de redacción"
-        className="fixed left-1/2 -translate-x-1/2 z-40 w-[94vw] max-w-xl flex flex-col items-center gap-3 bottom-[calc(var(--bn-nav-h)_+_1.25rem)] sm:bottom-[calc(var(--bn-nav-h)_+_1rem)] lg:bottom-4 animate-in slide-in-from-bottom-4 duration-300"
+        className="fixed left-1/2 -translate-x-1/2 z-40 w-[94vw] max-w-xl flex flex-col items-center gap-3 bottom-[calc(var(--bn-nav-h)_+_1.25rem_+_var(--bn-export-h))] sm:bottom-[calc(var(--bn-nav-h)_+_1rem_+_var(--bn-export-h))] lg:bottom-4 animate-in slide-in-from-bottom-4 duration-300"
       >
         {/* Panel del contexto: suelto respecto de la píldora */}
         {aiComposerOpen && (
@@ -10199,14 +10252,18 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           {aiComposerOpen && <button type="button" onClick={() => setAiComposerOpen(false)} title="Cerrar" className="h-8 w-8 rounded-lg grid place-items-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors border border-white/10 cursor-pointer"><X className="w-3.5 h-3.5" /></button>}
         </aside>
 
-      {/* Main Grid: Controls (Left) vs Live Preview (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-        {/* LEFT COLUMN: Controls & Settings (7 cols).
-            En móvil va DESPUÉS de la vista previa (order-2) para que el
-            resultado sea lo primero que se ve al abrir la pestaña. Plegada
-            en escritorio, desaparece y la vista previa toma las 12 cols. */}
+      {/* Main Grid: vista previa + columna de controles, con colocación
+          explícita en escritorio (12 cols):
+          · leftA (toggle + Card 1, contenido): col 1 / fila 1.
+          · vista previa: col 2 / fila 1 (las dos filas).
+          · leftB (resto de tarjetas): col 1 / fila 2.
+          En móvil el orden es vista previa → contenido → ajustes (order-1/2/3)
+          para que editar el titular no exija pasar la vista previa. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-x-8 lg:gap-y-6 items-start">
+        {/* CONTENIDO: toggle + tarjeta de titular/bajada. En móvil, justo
+            después de la vista previa (order-2). */}
         <div
-          className={`lg:col-span-7 space-y-6 order-2 lg:order-1 ${
+          className={`space-y-6 order-2 lg:col-span-7 lg:col-start-1 lg:row-start-1 ${
             controlsOpen ? "" : "lg:hidden"
           }`}
         >
@@ -10227,6 +10284,325 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               {allSectionsOpen ? "Plegar todo" : "Abrir todo"}
             </button>
           </div>
+
+          {/* Card 1: Text Content & Typography */}
+          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-white" />
+                <span>1. Contenido Editorial & Tipografía</span>
+              </h3>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                Lexend Bold & Medium
+              </span>
+            </div>
+
+            {/* Headline / Titular */}
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+                  <Type className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>Titular (Lexend Bold)</span>
+                </label>
+
+                {/* Real-time size control & presets */}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
+                    {fontSizeTitle}px
+                  </span>
+                  <input
+                    type="range"
+                    min={42}
+                    max={82}
+                    value={fontSizeTitle}
+                    onChange={(e) => setFontSizeTitle(Number(e.target.value))}
+                    className="w-24 accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                    title="Ajustar tamaño en tiempo real"
+                  />
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: "XS", size: 42 },
+                      { label: "S", size: 48 },
+                      { label: "M", size: 62 },
+                      { label: "L", size: 74 },
+                      { label: "XL", size: 82 },
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setFontSizeTitle(p.size)}
+                        title={`Titular de ${p.size}px`}
+                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
+                          fontSizeTitle === p.size
+                            ? "bg-white text-black font-semibold"
+                            : "bg-neutral-900 text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <textarea
+                rows={3}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Titular en impacto directo..."
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-sm sm:text-base font-semibold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
+              />
+              <div className="flex items-center justify-between gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTitle((t) => toSentenceCase(t))}
+                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  title="Sentence Case — primera letra de cada oración en mayúscula"
+                >
+                  Sc
+                </button>
+                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400 font-semibold" : title.length > 90 ? "text-amber-200" : "text-neutral-400"} font-light`}>
+                  {title.length}/120
+                </span>
+                <div className="h-1 bg-neutral-800 rounded-full w-12 overflow-hidden">
+                  <div className={`h-full rounded-full ${title.length > 120 ? "bg-amber-400" : title.length > 90 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (title.length / 120) * 100)}%` }} />
+                </div>
+                <span className="text-[11px] text-neutral-500">Tono:</span>
+                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
+                  <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                ))}
+              </div>
+              <span className="text-[11px] text-neutral-500 font-light block mt-1">
+                Presiona Enter para romper la línea exactamente donde quieras
+                equilibrar el texto.
+              </span>
+            </div>
+
+            {/* Description / Bajada */}
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>Descripción / Bajada (Lexend Normal)</span>
+                </label>
+
+                {/* Real-time size control */}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
+                    {fontSizeDesc}px
+                  </span>
+                  <input
+                    type="range"
+                    min={20}
+                    max={42}
+                    value={fontSizeDesc}
+                    onChange={(e) => setFontSizeDesc(Number(e.target.value))}
+                    className="w-24 accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                    title="Ajustar tamaño en tiempo real"
+                  />
+                  <div className="flex items-center gap-1">
+                    {[
+                      { label: "XS", size: 20 },
+                      { label: "S", size: 24 },
+                      { label: "M", size: 30 },
+                      { label: "L", size: 38 },
+                      { label: "XL", size: 42 },
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setFontSizeDesc(p.size)}
+                        title={`Bajada de ${p.size}px`}
+                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
+                          fontSizeDesc === p.size
+                            ? "bg-white text-black font-semibold"
+                            : "bg-neutral-900 text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setDescription((d) => toSentenceCase(d))}
+                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
+                  title="Sentence Case — primera letra de cada oración en mayúscula"
+                >
+                  Sc
+                </button>
+                <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400 font-semibold" : description.length > 120 ? "text-amber-200" : description.length > 100 ? "text-amber-100" : "text-neutral-400"} font-light`}>
+                  {description.length}/150
+                </span>
+                <div className="h-1 bg-neutral-800 rounded-full w-16 overflow-hidden">
+                  <div className={`h-full rounded-full ${description.length > 150 ? "bg-amber-400" : description.length > 120 ? "bg-amber-300" : description.length > 100 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (description.length / 150) * 100)}%` }} />
+                </div>
+                <span className="text-[11px] text-neutral-500">Tono:</span>
+                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
+                  <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
+                ))}
+              </div>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Detalle o contexto clave que complementa el titular..."
+                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
+              />
+            </div>
+
+            {/* Espaciado e interlineado · plegado por defecto: es la parte
+                más densa de la tarjeta y sólo hace falta al ajustar maquetación. */}
+            <CollapseSection
+              title="Espaciado e interlineado"
+              open={openSections.espaciado}
+              onToggle={() => toggleSection("espaciado")}
+              icon={<Sliders className="h-3.5 w-3.5 text-neutral-400" />}
+              value={`Sep ${gapTitleToDesc}px · Interl ${titleLineHeightRatio}x`}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-900/60 p-3 rounded-xl border border-white/5">
+                {/* Gap Title to Desc */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">
+                      Separación Titular ↔ Bajada
+                    </span>
+                    <span className="font-mono text-white font-semibold">
+                      {gapTitleToDesc}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={12}
+                    max={56}
+                    value={gapTitleToDesc}
+                    onChange={(e) => setGapTitleToDesc(Number(e.target.value))}
+                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1">
+                    {[16, 26, 38].map((gap) => (
+                      <button
+                        key={gap}
+                        type="button"
+                        onClick={() => setGapTitleToDesc(gap)}
+                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                          gapTitleToDesc === gap
+                            ? "bg-white text-black font-semibold"
+                            : "bg-neutral-800 text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {gap === 16
+                          ? "Compacto"
+                          : gap === 26
+                            ? "Equilibrado"
+                            : "Amplio"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Gap Category to Title */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neutral-400">
+                      Separación Cabecera ↔ Titular
+                    </span>
+                    <span className="font-mono text-white font-semibold">
+                      {gapCategoryToTitle}px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={16}
+                    max={48}
+                    value={gapCategoryToTitle}
+                    onChange={(e) =>
+                      setGapCategoryToTitle(Number(e.target.value))
+                    }
+                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1">
+                    {[22, 30, 40].map((gap) => (
+                      <button
+                        key={gap}
+                        type="button"
+                        onClick={() => setGapCategoryToTitle(gap)}
+                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                          gapCategoryToTitle === gap
+                            ? "bg-white text-black font-semibold"
+                            : "bg-neutral-800 text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {gap === 22
+                          ? "Pegado"
+                          : gap === 30
+                            ? "Estándar"
+                            : "Holgado"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Line height presets */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-400">
+                    Interlineado Titular:
+                  </span>
+                  <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
+                    {[1.12, 1.18, 1.25].map((ratio) => (
+                      <button
+                        key={ratio}
+                        type="button"
+                        onClick={() => setTitleLineHeightRatio(ratio)}
+                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
+                          titleLineHeightRatio === ratio
+                            ? "bg-white text-black font-semibold"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {ratio}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-400">Interlineado Bajada:</span>
+                  <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
+                    {[1.32, 1.42, 1.54].map((ratio) => (
+                      <button
+                        key={ratio}
+                        type="button"
+                        onClick={() => setDescLineHeightRatio(ratio)}
+                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
+                          descLineHeightRatio === ratio
+                            ? "bg-white text-black font-semibold"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        {ratio}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CollapseSection>
+          </div>
+        </div>
+
+        {/* RESTO DE CONTROLES (resultados IA + tarjetas 2…). En móvil, al
+            final (order-3); en escritorio, columna izquierda fila 2. */}
+        <div
+          className={`space-y-6 order-3 lg:col-span-7 lg:col-start-1 lg:row-start-2 ${
+            controlsOpen ? "" : "lg:hidden"
+          }`}
+        >
 
           {/* Card 0: resultados del asistente. Sólo aparece cuando hay algo
               que enseñar: el acceso a la IA vive en la barra flotante de
@@ -10554,316 +10930,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
               )}
             </div>
           )}
-
-          {/* Card 1: Text Content & Typography */}
-          <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <h3 className="text-xs font-semibold text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-white" />
-                <span>1. Contenido Editorial & Tipografía</span>
-              </h3>
-              <span className="text-[11px] text-neutral-400 font-mono">
-                Lexend Bold & Medium
-              </span>
-            </div>
-
-            {/* Headline / Titular */}
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-                  <Type className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Titular (Lexend Bold)</span>
-                </label>
-
-                {/* Real-time size control & presets */}
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
-                    {fontSizeTitle}px
-                  </span>
-                  <input
-                    type="range"
-                    min={42}
-                    max={82}
-                    value={fontSizeTitle}
-                    onChange={(e) => setFontSizeTitle(Number(e.target.value))}
-                    className="w-24 accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                    title="Ajustar tamaño en tiempo real"
-                  />
-                  <div className="flex items-center gap-1">
-                    {[
-                      { label: "XS", size: 42 },
-                      { label: "S", size: 48 },
-                      { label: "M", size: 62 },
-                      { label: "L", size: 74 },
-                      { label: "XL", size: 82 },
-                    ].map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => setFontSizeTitle(p.size)}
-                        title={`Titular de ${p.size}px`}
-                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
-                          fontSizeTitle === p.size
-                            ? "bg-white text-black font-semibold"
-                            : "bg-neutral-900 text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <textarea
-                rows={3}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Titular en impacto directo..."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-sm sm:text-base font-semibold text-white leading-snug focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
-              />
-              <div className="flex items-center justify-between gap-2 mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => setTitle((t) => toSentenceCase(t))}
-                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
-                  title="Sentence Case — primera letra de cada oración en mayúscula"
-                >
-                  Sc
-                </button>
-                <span className={`text-[11px] font-mono ${title.length > 120 ? "text-amber-400 font-semibold" : title.length > 90 ? "text-amber-200" : "text-neutral-400"} font-light`}>
-                  {title.length}/120
-                </span>
-                <div className="h-1 bg-neutral-800 rounded-full w-12 overflow-hidden">
-                  <div className={`h-full rounded-full ${title.length > 120 ? "bg-amber-400" : title.length > 90 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (title.length / 120) * 100)}%` }} />
-                </div>
-                <span className="text-[11px] text-neutral-500">Tono:</span>
-                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
-                  <button key={t} type="button" onClick={() => rewriteTone(title, t, setTitle)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
-                ))}
-              </div>
-              <span className="text-[11px] text-neutral-500 font-light block mt-1">
-                Presiona Enter para romper la línea exactamente donde quieras
-                equilibrar el texto.
-              </span>
-            </div>
-
-            {/* Description / Bajada */}
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Descripción / Bajada (Lexend Normal)</span>
-                </label>
-
-                {/* Real-time size control */}
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs font-mono font-semibold text-white bg-neutral-900 px-2 py-0.5 rounded-lg border border-white/10">
-                    {fontSizeDesc}px
-                  </span>
-                  <input
-                    type="range"
-                    min={20}
-                    max={42}
-                    value={fontSizeDesc}
-                    onChange={(e) => setFontSizeDesc(Number(e.target.value))}
-                    className="w-24 accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                    title="Ajustar tamaño en tiempo real"
-                  />
-                  <div className="flex items-center gap-1">
-                    {[
-                      { label: "XS", size: 20 },
-                      { label: "S", size: 24 },
-                      { label: "M", size: 30 },
-                      { label: "L", size: 38 },
-                      { label: "XL", size: 42 },
-                    ].map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => setFontSizeDesc(p.size)}
-                        title={`Bajada de ${p.size}px`}
-                        className={`px-1.5 py-0.5 text-[11px] font-mono rounded transition-colors ${
-                          fontSizeDesc === p.size
-                            ? "bg-white text-black font-semibold"
-                            : "bg-neutral-900 text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick={() => setDescription((d) => toSentenceCase(d))}
-                  className="text-[11px] font-mono bg-neutral-800 text-neutral-300 hover:text-white border border-white/10 hover:border-white/30 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
-                  title="Sentence Case — primera letra de cada oración en mayúscula"
-                >
-                  Sc
-                </button>
-                <span className={`text-[11px] font-mono ${description.length > 150 ? "text-amber-400 font-semibold" : description.length > 120 ? "text-amber-200" : description.length > 100 ? "text-amber-100" : "text-neutral-400"} font-light`}>
-                  {description.length}/150
-                </span>
-                <div className="h-1 bg-neutral-800 rounded-full w-16 overflow-hidden">
-                  <div className={`h-full rounded-full ${description.length > 150 ? "bg-amber-400" : description.length > 120 ? "bg-amber-300" : description.length > 100 ? "bg-amber-300" : "bg-emerald-400"}`} style={{ width: `${Math.min(100, (description.length / 150) * 100)}%` }} />
-                </div>
-                <span className="text-[11px] text-neutral-500">Tono:</span>
-                {["Conciso","Impactante","Indignante","Serio","Urgente"].map((t) => (
-                  <button key={t} type="button" onClick={() => rewriteTone(description, t, setDescription)} disabled={aiBusy} className="text-[11px] font-mono bg-neutral-950 border border-white/10 text-neutral-300 hover:text-white hover:border-white/30 rounded px-1.5 py-0.5 transition-colors cursor-pointer disabled:opacity-40" title={`Reescribir con tono: ${t}`}>{t}</button>
-                ))}
-              </div>
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detalle o contexto clave que complementa el titular..."
-                className="w-full bg-neutral-900 border border-white/10 rounded-xl p-4 text-xs sm:text-sm font-normal text-neutral-200 leading-relaxed focus:outline-none focus:border-white/40 resize-none font-['Lexend']"
-              />
-            </div>
-
-            {/* Espaciado e interlineado · plegado por defecto: es la parte
-                más densa de la tarjeta y sólo hace falta al ajustar maquetación. */}
-            <CollapseSection
-              title="Espaciado e interlineado"
-              open={openSections.espaciado}
-              onToggle={() => toggleSection("espaciado")}
-              icon={<Sliders className="h-3.5 w-3.5 text-neutral-400" />}
-              value={`Sep ${gapTitleToDesc}px · Interl ${titleLineHeightRatio}x`}
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-900/60 p-3 rounded-xl border border-white/5">
-                {/* Gap Title to Desc */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-400">
-                      Separación Titular ↔ Bajada
-                    </span>
-                    <span className="font-mono text-white font-semibold">
-                      {gapTitleToDesc}px
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={12}
-                    max={56}
-                    value={gapTitleToDesc}
-                    onChange={(e) => setGapTitleToDesc(Number(e.target.value))}
-                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex items-center gap-1">
-                    {[16, 26, 38].map((gap) => (
-                      <button
-                        key={gap}
-                        type="button"
-                        onClick={() => setGapTitleToDesc(gap)}
-                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-                          gapTitleToDesc === gap
-                            ? "bg-white text-black font-semibold"
-                            : "bg-neutral-800 text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {gap === 16
-                          ? "Compacto"
-                          : gap === 26
-                            ? "Equilibrado"
-                            : "Amplio"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Gap Category to Title */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-400">
-                      Separación Cabecera ↔ Titular
-                    </span>
-                    <span className="font-mono text-white font-semibold">
-                      {gapCategoryToTitle}px
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={16}
-                    max={48}
-                    value={gapCategoryToTitle}
-                    onChange={(e) =>
-                      setGapCategoryToTitle(Number(e.target.value))
-                    }
-                    className="w-full accent-white h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex items-center gap-1">
-                    {[22, 30, 40].map((gap) => (
-                      <button
-                        key={gap}
-                        type="button"
-                        onClick={() => setGapCategoryToTitle(gap)}
-                        className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-                          gapCategoryToTitle === gap
-                            ? "bg-white text-black font-semibold"
-                            : "bg-neutral-800 text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {gap === 22
-                          ? "Pegado"
-                          : gap === 30
-                            ? "Estándar"
-                            : "Holgado"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Line height presets */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
-                <div className="flex items-center gap-2">
-                  <span className="text-neutral-400">
-                    Interlineado Titular:
-                  </span>
-                  <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
-                    {[1.12, 1.18, 1.25].map((ratio) => (
-                      <button
-                        key={ratio}
-                        type="button"
-                        onClick={() => setTitleLineHeightRatio(ratio)}
-                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
-                          titleLineHeightRatio === ratio
-                            ? "bg-white text-black font-semibold"
-                            : "text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {ratio}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-neutral-400">Interlineado Bajada:</span>
-                  <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
-                    {[1.32, 1.42, 1.54].map((ratio) => (
-                      <button
-                        key={ratio}
-                        type="button"
-                        onClick={() => setDescLineHeightRatio(ratio)}
-                        className={`px-2 py-0.5 text-[11px] font-mono rounded transition-colors ${
-                          descLineHeightRatio === ratio
-                            ? "bg-white text-black font-semibold"
-                            : "text-neutral-400 hover:text-white"
-                        }`}
-                      >
-                        {ratio}x
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CollapseSection>
-          </div>
 
           {/* Card 2: Categorías & Atribución de Países */}
           <div className="bg-neutral-950/80 border border-white/10 rounded-2xl p-5 sm:p-6 space-y-5">
@@ -12386,13 +12452,17 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Live Interactive Preview (5 cols).
-            En móvil es lo PRIMERO que se ve (order-1). Sin sticky: la columna
-            (tarjeta + transporte + exportación) es más alta que el viewport y,
-            al pegarse, dejaría los botones de exportar fuera de pantalla. */}
+        {/* RIGHT COLUMN: vista previa en vivo.
+            En móvil es lo PRIMERO que se ve (order-1). En escritorio ocupa
+            col 2 / filas 1-2, a la derecha del contenido y del resto de
+            controles. Sin sticky: la columna (tarjeta + transporte +
+            exportación) es más alta que el viewport y, al pegarse, dejaría
+            los botones de exportar fuera de pantalla. */}
         <div
-          className={`space-y-4 order-1 lg:order-2 ${
-            controlsOpen ? "lg:col-span-5" : "lg:col-span-12"
+          className={`space-y-4 order-1 ${
+            controlsOpen
+              ? "lg:col-span-5 lg:col-start-8 lg:row-start-1 lg:row-span-2"
+              : "lg:col-span-12 lg:col-start-1 lg:row-start-1"
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -12405,8 +12475,54 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
             </span>
           </div>
 
-          {/* Selector de formato: el mismo post en 4:5, 9:16 o 16:9 (TV) */}
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* Fila de ajustes de la vista previa. El formato (4:5 / 9:16 /
+              16:9) se ve siempre; el resto (Intro, Tweet, Escala, X/Y…) va
+              plegado tras «Más ajustes» en móvil. En escritorio el
+              envoltorio es `display: contents`, así que la fila queda
+              idéntica a antes. */}
+          <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3">
+            <div className="flex items-center gap-2 order-1 lg:order-none">
+              <span className="text-[11px] text-neutral-500">
+                Formato
+              </span>
+              <div className="flex items-center gap-1 bg-neutral-950 border border-white/10 p-1 rounded-xl">
+                {(["4:5", "9:16", "16:9"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setPostFormat(f)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      postFormat === f
+                        ? "bg-white text-black"
+                        : "text-neutral-400 hover:text-white hover:bg-white/5"
+                    }`}
+                    title={
+                      f === "4:5"
+                        ? "1080×1350 · Instagram, LinkedIn, X y estados"
+                        : f === "9:16"
+                          ? "1080×1920 · TikTok, YouTube Shorts y Reels"
+                          : "1920×1080 · Señal de TV, YouTube y pantallas"
+                    }
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreviewAdvancedOpen((v) => !v)}
+              aria-expanded={previewAdvancedOpen}
+              className="order-2 lg:hidden flex items-center gap-1.5 text-[11px] font-medium text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              {previewAdvancedOpen ? "Menos ajustes" : "Más ajustes"}
+            </button>
+            <div
+              className={`order-3 w-full flex-wrap items-center justify-end gap-3 lg:contents ${
+                previewAdvancedOpen ? "flex" : "hidden"
+              }`}
+            >
             <label
               className="flex items-center gap-1.5 cursor-pointer select-none"
               title="Intro: mientras dure se muestran los primeros segundos del vídeo en silencio (en 16:9, además en B&N con la señal de TV) y, al terminar, el vídeo vuelve a empezar desde el principio para no perderse nada"
@@ -12741,31 +12857,6 @@ export const SocialPostGenerator: React.FC<SocialPostGeneratorProps> = ({
                 </span>
               </label>
             )}
-            <span className="text-[11px] text-neutral-500">
-              Formato
-            </span>
-            <div className="flex items-center gap-1 bg-neutral-950 border border-white/10 p-1 rounded-xl">
-              {(["4:5", "9:16", "16:9"] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setPostFormat(f)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    postFormat === f
-                      ? "bg-white text-black"
-                      : "text-neutral-400 hover:text-white hover:bg-white/5"
-                  }`}
-                  title={
-                    f === "4:5"
-                      ? "1080×1350 · Instagram, LinkedIn, X y estados"
-                      : f === "9:16"
-                        ? "1080×1920 · TikTok, YouTube Shorts y Reels"
-                        : "1920×1080 · Señal de TV, YouTube y pantallas"
-                  }
-                >
-                  {f}
-                </button>
-              ))}
             </div>
           </div>
 

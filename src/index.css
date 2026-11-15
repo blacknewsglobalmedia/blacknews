@@ -11,12 +11,19 @@
     /* Altura de la navegación inferior estilo app (barra de tabs, solo <lg).
        Suma la barra home del iPhone; en ≥lg no existe → 0. */
     --bn-nav-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    /* Reserva de la barra fija de exportación del generador de posts
+       (solo <lg): 12px de margen + 58px de barra. La usan el padding del
+       contenedor, la barra flotante de IA y los toasts para no solaparse. */
+    --bn-export-h: 70px;
   }
   @media (min-width: 640px) {
     :root { --bn-header-h: calc(133px + env(safe-area-inset-top, 0px)); }
   }
   @media (min-width: 1024px) {
-    :root { --bn-nav-h: 0px; }
+    :root {
+      --bn-nav-h: 0px;
+      --bn-export-h: 0px;
+    }
   }
 
   /* Panel de redacción (el <html> lleva data-vista="redaccion"): es una app a
